@@ -2,6 +2,7 @@
 import { useEffect } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { useRouter } from "next/navigation";
+import FileUpload from "@/components/FileUpload"; // Komponentni chaqiramiz
 
 export default function DashboardPage() {
   const { user, logout } = useAuth();
@@ -13,28 +14,26 @@ export default function DashboardPage() {
     }
   }, [user, router]);
 
-  if (!user) return null; // Yuklanayotganda bo'sh sahifa ko'rsatib turadi
+  if (!user) return null;
 
   return (
-    <div className="min-h-screen bg-gray-100 p-6">
-      <header className="flex justify-between items-center bg-white p-4 rounded-xl shadow-sm mb-6">
+    <div className="min-h-screen bg-slate-50 p-6">
+      <header className="flex justify-between items-center bg-white p-4 rounded-2xl shadow-sm mb-8 border border-gray-100 max-w-5xl mx-auto">
         <div>
-          <h1 className="text-xl font-bold text-gray-800">Moliyaviy Analitika Paneli</h1>
-          <p className="text-sm text-gray-500">Xush kelibsiz, {user.email}</p>
+          <h1 className="text-xl font-bold text-gray-800">Bank Analyzer AI</h1>
+          <p className="text-xs text-gray-500">Tizim operatori: {user.email}</p>
         </div>
         <button
           onClick={logout}
-          className="bg-red-500 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-red-600 transition"
+          className="bg-rose-50 text-rose-600 px-4 py-2 rounded-xl text-sm font-semibold hover:bg-rose-100 transition"
         >
-          Chiqish
+          Tizimdan chiqish
         </button>
       </header>
 
-      {/* Bu yerga fayl yuklash va grafiklar komponentlarini joylashtiramiz */}
-      <main className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="bg-white p-6 rounded-xl shadow-sm col-span-3 text-center border-2 border-dashed border-gray-300 p-12">
-          <p className="text-gray-600">Bu yerga boyagi Excel yuklash komponentini qo'yamiz.</p>
-        </div>
+      <main className="max-w-5xl mx-auto">
+        {/* Bizning Drag-and-Drop komponentimiz shu yerda ishlaydi */}
+        <FileUpload />
       </main>
     </div>
   );
