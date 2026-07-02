@@ -1,0 +1,37 @@
+datasource db {
+  provider = "postgresql" // yoki mysql / sqlite
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-client"
+}
+
+// Firmalar jadvali
+model Company {
+  id           String        @id @default(uuid())
+  name         String
+  inn          String        @unique
+  bankFormat   String        // 'HAMKORBANK' yoki 'IPOTEKA_ASBT'
+  transactions Transaction[]
+  createdAt    DateTime      @default(now())
+}
+
+// Tranzaksiyalar jadvali
+model Transaction {
+  id               String   @id @default(uuid())
+  companyId        String
+  company          Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  txDate           DateTime // To'lov sanasi
+  counterpartyName String?  // Hamkor nomi
+  counterpartyInn  String?  // Hamkor INN raqami
+  debitAmount      Float    @default(0.0) // Chiqim
+  creditAmount     Float    @default(0.0) // Kirim
+  purpose          String   // To'lov maqsadi
+  category         String   // 'REVENUE', 'TAX', 'BANK_FEES', 'SUPPLIER'
+  periodMonth      Int      // 1-12
+  periodYear       Int      // Masalan, 2026
+  createdAt        DateTime @default(now())
+
+  @@unique([companyId, txDate, purpose, debitAmount, creditAmount]) // Dublikat yuklashni oldini olish uchun
+}
