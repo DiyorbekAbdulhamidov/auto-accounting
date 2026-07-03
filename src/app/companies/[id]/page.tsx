@@ -1,9 +1,8 @@
 "use client";
-import { useState, use, useMemo } from "react";
-// 🔥 FIREBASE IMPORTLARI (firebaseConfig.js qayerda joylashgan bo'lsa, o'sha manzilni bering)
+import React, { useState, use, useMemo } from "react";
+// 🔥 FIREBASE IMPORTLARI 
 import { collection, addDoc, serverTimestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-// import { db } from "@/lib/firebase"; // <--- BAZANI ULAGANDA SHU YERNI KOMMENTDAN CHIQARING
 
 interface AggregatedTx {
   name: string;
@@ -25,12 +24,19 @@ export default function CompanyDetailPage({ params }: PageProps) {
 
   const [files, setFiles] = useState<File[]>([]);
   const [loading, setLoading] = useState(false);
+
+  // Asosiy ma'lumotlar bazasi (tahrirlanadigan state)
   const [parsedData, setParsedData] = useState<AggregatedTx[]>([]);
   const [detectedFormats, setDetectedFormats] = useState<string[]>([]);
 
-  // 1-YANGILIK: Tanlangan firmalar INN raqamlarini saqlash uchun State
+  // Tanlangan va ochilgan qatorlar
   const [selectedInns, setSelectedInns] = useState<string[]>([]);
+  const [expandedInns, setExpandedInns] = useState<string[]>([]);
   const [isSaving, setIsSaving] = useState(false);
+
+  // 🔍 Qidiruv va Filtr state'lari
+  const [searchTerm, setSearchTerm] = useState("");
+  const [filterType, setFilterType] = useState<"ALL" | "DIFF" | "EQUAL">("DIFF");
 
   const handleFileUpload = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -54,7 +60,7 @@ export default function CompanyDetailPage({ params }: PageProps) {
         setParsedData(data.data);
         setDetectedFormats(data.detectedFormats);
 
-        // API dan ma'lumot kelganda, farqi bor firmalarni avtomat tarzda "tanlangan" qilib qo'yamiz
+        // Avtomat tarzda farqi borlarni tanlaymiz
         const diffData = data.data.filter((item: AggregatedTx) => Math.abs(item.difference) > 0.01);
         setSelectedInns(diffData.map((d: AggregatedTx) => d.inn));
       } else {
@@ -68,37 +74,71 @@ export default function CompanyDetailPage({ params }: PageProps) {
     }
   };
 
-  // 2-YANGILIK: FIRMALARNI FILTRLASH
-  // Avval farqi borlarni ajratamiz (0.01 dan katta)
-  const differenceData = useMemo(() =>
-    parsedData.filter((item) => Math.abs(item.difference) > 0.01),
-    [parsedData]);
+  // ✍️ QO'LDA O'ZGARTIRISH FUNKSIYASI (Manual Edit)
+  const handleCellEdit = (inn: string, month: number, field: "debit" | "credit", val: string) => {
+    const numVal = parseFloat(val.replace(/,/g, "")) || 0;
 
-  // Keyin faqat CHECKBOX orqali tanlanganlarini ekranga va jami summaga o'tkazamiz
-  const displayData = useMemo(() =>
-    differenceData.filter((tx) => selectedInns.includes(tx.inn)),
-    [differenceData, selectedInns]);
+    setParsedData((prev) =>
+      prev.map((row) => {
+        if (row.inn !== inn) return row;
 
-  // CHECKBOX FUNKSIYALARI
-  const toggleSelection = (inn: string) => {
-    setSelectedInns((prev) =>
-      prev.includes(inn) ? prev.filter((i) => i !== inn) : [...prev, inn]
+        const newRow = { ...row };
+        if (field === "debit") {
+          newRow.debitMonths = { ...newRow.debitMonths, [month]: numVal };
+          newRow.totalDebit = Object.values(newRow.debitMonths).reduce((a, b) => a + b, 0);
+        } else {
+          newRow.creditMonths = { ...newRow.creditMonths, [month]: numVal };
+          newRow.totalCredit = Object.values(newRow.creditMonths).reduce((a, b) => a + b, 0);
+        }
+
+        // Yangi farqni hisoblash (Debet - Kredit = Saldo)
+        newRow.difference = newRow.totalDebit - newRow.totalCredit;
+        return newRow;
+      })
     );
   };
 
+  // 🎯 FILTRLASH VA QIDIRUV LOGIKASI
+  const filteredData = useMemo(() => {
+    return parsedData.filter((item) => {
+      // 1. Qidiruv bo'yicha
+      const matchesSearch =
+        item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        item.inn.includes(searchTerm);
+      if (!matchesSearch) return false;
+
+      // 2. Filtr bo'yicha
+      if (filterType === "DIFF") return Math.abs(item.difference) > 0.01;
+      if (filterType === "EQUAL") return Math.abs(item.difference) <= 0.01;
+      return true; // ALL
+    });
+  }, [parsedData, searchTerm, filterType]);
+
+  // Faqat CHECKBOX orqali tanlanganlarini ekranga va jami summaga o'tkazamiz
+  const displayData = useMemo(() =>
+    filteredData.filter((tx) => selectedInns.includes(tx.inn)),
+    [filteredData, selectedInns]);
+
+  // CHECKBOX VA EXPAND FUNKSIYALARI
+  const toggleSelection = (inn: string) => {
+    setSelectedInns((prev) => prev.includes(inn) ? prev.filter((i) => i !== inn) : [...prev, inn]);
+  };
+
   const toggleAll = () => {
-    if (selectedInns.length === differenceData.length) {
-      setSelectedInns([]); // Hammasini o'chirish
+    if (selectedInns.length === filteredData.length && filteredData.length > 0) {
+      setSelectedInns([]);
     } else {
-      setSelectedInns(differenceData.map((d) => d.inn)); // Hammasini belgilash
+      setSelectedInns(filteredData.map((d) => d.inn));
     }
   };
 
-  // 3-YANGILIK: FIREBASE-GA SAQLASH
+  const toggleExpand = (inn: string) => {
+    setExpandedInns((prev) => prev.includes(inn) ? prev.filter((i) => i !== inn) : [...prev, inn]);
+  };
+
+  // ☁️ FIREBASE-GA SAQLASH
   const handleSaveToFirebase = async () => {
-    if (displayData.length === 0) {
-      return alert("Сақлаш учун камида битта фирмани белгиланг!");
-    }
+    if (displayData.length === 0) return alert("Сақлаш учун камида битта фирмани белгиланг!");
 
     setIsSaving(true);
     try {
@@ -106,12 +146,9 @@ export default function CompanyDetailPage({ params }: PageProps) {
         companyId: companyId,
         savedAt: serverTimestamp(),
         totals: grandTotals,
-        firmsData: displayData
+        firmsData: displayData,
       });
       alert(`Муваффақиятли сақланди! (ID: ${docRef.id})`);
-
-      // Vaqtincha xabar (db ulanmaguncha tekshirib ko'rish uchun)
-      alert("Маълумотлар Firebase'га юборишга тайёр! (Коддаги комментарийни очинг)");
     } catch (error) {
       console.error("Firebase хатолиги:", error);
       alert("Сақлашда хатолик юз берди.");
@@ -120,7 +157,7 @@ export default function CompanyDetailPage({ params }: PageProps) {
     }
   };
 
-  // ЖАМИ СУММАЛАРНИ ҲИСОБЛАШ (Grand Total) - Faqat tanlangan (displayData) bo'yicha
+  // ЖАМИ СУММАЛАРНИ ҲИСОБЛАШ (Grand Total)
   const grandTotals = displayData.reduce(
     (acc, curr) => {
       acc.debit += curr.totalDebit;
@@ -134,7 +171,7 @@ export default function CompanyDetailPage({ params }: PageProps) {
   const months = ["Январь", "Февраль", "Март", "Апрель", "Май", "Июнь", "Июль", "Август", "Сентябрь", "Октябрь", "Ноябрь", "Декабрь"];
 
   const formatNum = (num: number) => {
-    if (!num) return "-";
+    if (!num && num !== 0) return "-";
     return num.toLocaleString("ru-RU", { minimumFractionDigits: 0, maximumFractionDigits: 2 });
   };
 
@@ -144,13 +181,12 @@ export default function CompanyDetailPage({ params }: PageProps) {
       <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 max-w-4xl mx-auto">
         <h1 className="text-2xl font-black text-gray-800 mb-2">Муқояса далолатномаси (Сверка)</h1>
         <p className="text-sm text-gray-500 mb-6">
-          Бир вақтнинг ўзида <strong>Банк айланмаси (Hamkor/Ipoteka)</strong> ва <strong>Э-Фактура</strong> файлларни танлаб юкланг.
+          Банк айланмаси ва Э-Фактура файлларни юкланг, таҳрирланг ва таҳлил қилинг.
         </p>
 
         <form onSubmit={handleFileUpload} className="flex flex-col gap-4">
           <div className="flex flex-col md:flex-row gap-4 items-end">
             <div className="w-full md:w-3/4">
-              <label className="block text-sm font-semibold text-gray-600 mb-2">Excel файл(лар)ни танланг</label>
               <input
                 type="file"
                 accept=".xls,.xlsx,.csv"
@@ -159,7 +195,6 @@ export default function CompanyDetailPage({ params }: PageProps) {
                 className="w-full p-2.5 border border-gray-200 rounded-xl bg-gray-50 text-sm font-medium text-gray-700 cursor-pointer file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100"
               />
             </div>
-
             <button
               type="submit"
               disabled={loading}
@@ -168,141 +203,182 @@ export default function CompanyDetailPage({ params }: PageProps) {
               {loading ? "Ўқилмоқда..." : "🚀 Таҳлил"}
             </button>
           </div>
-
-          {files.length > 0 && (
-            <div className="text-sm text-gray-600 font-medium bg-gray-50 p-3 rounded-lg border">
-              <span className="text-indigo-600 font-bold">{files.length} та файл танланди:</span>{" "}
-              {files.map((f) => f.name).join(", ")}
-            </div>
-          )}
         </form>
       </div>
 
-      {/* 📊 EXCEL PREVIEW */}
+      {/* 📊 ASOSIY QISM */}
       {parsedData.length > 0 && (
-        <div className="bg-white rounded-2xl shadow-lg border border-gray-200 p-4 md:p-6 w-full overflow-hidden">
-          <div className="mb-4 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-            <div>
-              <h2 className="text-xl font-bold text-gray-800">Дебет (Тўловлар) ва Кредит (Счёт-Фактуралар)</h2>
-              <p className="text-sm text-gray-600 mt-1">
-                Танланган контрагентлар: <span className="font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-md">{displayData.length} та</span>
-                <span className="mx-2 text-gray-300">|</span>
-                Фарқи борлар: <span className="font-bold text-red-600 bg-red-50 px-2 py-0.5 rounded-md">{differenceData.length} та</span>
-              </p>
-            </div>
+        <div className="bg-white rounded-2xl shadow-lg border border-gray-200 p-4 md:p-6 w-full max-w-[1400px] mx-auto overflow-hidden">
 
-            <div className="flex gap-2 flex-wrap">
-              {detectedFormats.length > 0 && (
-                <div className="bg-blue-50 text-blue-800 px-4 py-2 rounded-lg text-sm font-bold border border-blue-200 flex items-center gap-2">
-                  🤖 Форматлар:
-                  {detectedFormats.map((fmt) => (
-                    <span key={fmt} className="bg-white px-2 py-1 rounded text-[11px] border border-blue-200 uppercase shadow-sm">
-                      {fmt.replace('_', ' ')}
-                    </span>
-                  ))}
-                </div>
-              )}
-
-              {/* FIREBASE SAQLASH TUGMASI */}
-              <button
-                onClick={handleSaveToFirebase}
-                disabled={isSaving || displayData.length === 0}
-                className="bg-green-600 hover:bg-green-700 disabled:bg-green-400 text-white px-5 py-2 rounded-lg text-sm font-bold shadow-md transition-all flex items-center gap-2"
+          {/* 🔍 FILTRLAR VA QIDIRUV PANELLARI */}
+          <div className="flex flex-col md:flex-row justify-between items-center gap-4 mb-6 bg-gray-50 p-4 rounded-xl border border-gray-200">
+            <div className="flex gap-4 w-full md:w-auto">
+              <input
+                type="text"
+                placeholder="Фирма номи ёки СТИР бўйича қидирув..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="px-4 py-2 w-full md:w-80 rounded-lg border border-gray-300 focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
+              />
+              <select
+                value={filterType}
+                onChange={(e) => setFilterType(e.target.value as any)}
+                className="px-4 py-2 rounded-lg border border-gray-300 bg-white focus:ring-2 focus:ring-indigo-500 font-medium text-gray-700 outline-none"
               >
-                {isSaving ? "Сақланмоқда..." : "💾 Firebase'га сақлаш"}
-              </button>
+                <option value="ALL">Барчаси ({parsedData.length})</option>
+                <option value="DIFF">Фарқи борлар</option>
+                <option value="EQUAL">Тенг бўлганлар</option>
+              </select>
             </div>
+
+            <button
+              onClick={handleSaveToFirebase}
+              disabled={isSaving || displayData.length === 0}
+              className="bg-green-600 hover:bg-green-700 disabled:bg-green-400 text-white px-6 py-2.5 rounded-lg text-sm font-bold shadow-md transition-all flex items-center gap-2 w-full md:w-auto justify-center"
+            >
+              {isSaving ? "Сақланмоқда..." : "💾 Firebase'га сақлаш"}
+            </button>
           </div>
 
-          <div className="overflow-x-auto w-full border border-gray-300 rounded-xl shadow-inner pb-4 relative custom-scrollbar">
-            <table className="w-max text-left text-[12px] whitespace-nowrap table-auto border-collapse">
+          {/* 📝 ASOSIY JADVAL */}
+          <div className="overflow-x-auto w-full border border-gray-300 rounded-xl shadow-inner pb-4 custom-scrollbar">
+            <table className="w-full text-left text-sm whitespace-nowrap table-auto border-collapse">
               <thead className="bg-gray-100 text-gray-700 font-bold uppercase tracking-wider sticky top-0 z-20 shadow-sm border-b-2 border-gray-300">
-                {/* 1-QATOR */}
                 <tr>
-                  {/* CHECKBOX USTUNI */}
-                  <th rowSpan={2} className="p-3 border-r border-gray-300 bg-gray-200 sticky left-0 z-40 w-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] text-center">
+                  <th className="p-4 border-r border-gray-300 w-12 text-center">
                     <input
                       type="checkbox"
-                      className="w-4 h-4 cursor-pointer"
-                      checked={selectedInns.length === differenceData.length && differenceData.length > 0}
+                      className="w-4 h-4 cursor-pointer accent-indigo-600"
+                      checked={selectedInns.length === filteredData.length && filteredData.length > 0}
                       onChange={toggleAll}
-                      title="Барчасини белгилаш/бекор қилиш"
                     />
                   </th>
-                  <th rowSpan={2} className="p-3 border-r border-gray-300 bg-gray-200 sticky left-10 z-30 w-72 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">Фирма номлари</th>
-                  <th rowSpan={2} className="p-3 border-r border-gray-300 bg-gray-200 sticky left-[328px] z-30 w-32 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">СТИР</th>
-
-                  {/* DEBET */}
-                  <th colSpan={12} className="p-2 border-r border-gray-300 text-center bg-red-100 text-red-800 border-b border-red-200">Чиқган пул (Дебет / Банк)</th>
-                  <th rowSpan={2} className="p-3 border-r-2 border-gray-400 text-center bg-red-200 text-red-900 shadow-sm">Чиқган пул жами</th>
-
-                  {/* KREDIT */}
-                  <th colSpan={12} className="p-2 border-r border-gray-300 text-center bg-green-100 text-green-800 border-b border-green-200">Келган счёт-фактура (Кредит)</th>
-                  <th rowSpan={2} className="p-3 border-r-2 border-gray-400 text-center bg-green-200 text-green-900 shadow-sm">Келган счёт-ф. жами</th>
-
-                  <th rowSpan={2} className="p-3 text-center bg-indigo-100 text-indigo-900 shadow-sm">Фарқи (Сальдо)</th>
-                </tr>
-                {/* 2-QATOR */}
-                <tr>
-                  {months.map((m, i) => <th key={`d-${i}`} className="p-2 border-r border-gray-300 text-center font-bold bg-red-50">{m.slice(0, 3)}</th>)}
-                  {months.map((m, i) => <th key={`c-${i}`} className="p-2 border-r border-gray-300 text-center font-bold bg-green-50">{m.slice(0, 3)}</th>)}
+                  <th className="p-4 border-r border-gray-300">Фирма номлари</th>
+                  <th className="p-4 border-r border-gray-300">СТИР</th>
+                  <th className="p-4 border-r border-gray-300 text-right bg-red-50 text-red-800">Жами Дебет</th>
+                  <th className="p-4 border-r border-gray-300 text-right bg-green-50 text-green-800">Жами Кредит</th>
+                  <th className="p-4 border-r border-gray-300 text-right bg-indigo-50 text-indigo-900">Фарқ (Сальдо)</th>
+                  <th className="p-4 text-center">Батафсил</th>
                 </tr>
               </thead>
 
               <tbody className="divide-y divide-gray-200 bg-white">
-                {differenceData.length === 0 ? (
+                {filteredData.length === 0 ? (
                   <tr>
-                    <td colSpan={31} className="text-center p-12 text-gray-500 font-medium text-base">
-                      🎉 Барча контрагентлар бўйича дебет ва кредит тенг ёки ҳеч қандай фарқ топилмади!
+                    <td colSpan={7} className="text-center p-12 text-gray-500 font-medium text-base">
+                      Маълумот топилмади... 🕵️‍♂️
                     </td>
                   </tr>
                 ) : (
-                  differenceData.map((tx, idx) => {
+                  filteredData.map((tx, idx) => {
                     const isSelected = selectedInns.includes(tx.inn);
+                    const isExpanded = expandedInns.includes(tx.inn);
+
                     return (
-                      <tr key={`${tx.inn}-${idx}`} className={`transition-colors group ${isSelected ? 'hover:bg-blue-50/50' : 'bg-gray-50 opacity-60'}`}>
-                        {/* CHECKBOX */}
-                        <td className="p-3 border-r border-gray-200 text-center sticky left-0 bg-white z-20 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)]">
-                          <input
-                            type="checkbox"
-                            className="w-4 h-4 cursor-pointer"
-                            checked={isSelected}
-                            onChange={() => toggleSelection(tx.inn)}
-                          />
-                        </td>
-
-                        <td className="p-3 border-r border-gray-200 font-bold text-gray-800 sticky left-10 bg-white z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)] truncate max-w-[280px]" title={tx.name}>
-                          {tx.name}
-                        </td>
-                        <td className="p-3 border-r border-gray-200 font-mono text-gray-600 sticky left-[328px] bg-white z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)]">
-                          {tx.inn}
-                        </td>
-
-                        {/* Debet oylari */}
-                        {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => (
-                          <td key={`dm-${m}`} className="p-2 border-r border-gray-100 text-right text-red-600/80 font-medium">
-                            {formatNum(tx.debitMonths[m])}
+                      <React.Fragment key={`${tx.inn}-${idx}`}>
+                        <tr className={`transition-all ${isSelected ? 'bg-indigo-50/30' : 'hover:bg-gray-50'}`}>
+                          <td className="p-3 border-r border-gray-200 text-center">
+                            <input
+                              type="checkbox"
+                              className="w-4 h-4 cursor-pointer accent-indigo-600"
+                              checked={isSelected}
+                              onChange={() => toggleSelection(tx.inn)}
+                            />
                           </td>
-                        ))}
-                        <td className="p-3 border-r-2 border-gray-300 text-right font-black text-red-700 bg-red-50/30">
-                          {formatNum(tx.totalDebit)}
-                        </td>
-
-                        {/* Kredit oylari */}
-                        {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => (
-                          <td key={`cm-${m}`} className="p-2 border-r border-gray-100 text-right text-green-600/80 font-medium">
-                            {formatNum(tx.creditMonths[m])}
+                          <td className="p-3 border-r border-gray-200 font-bold text-gray-800 whitespace-normal min-w-[250px]">
+                            {tx.name}
                           </td>
-                        ))}
-                        <td className="p-3 border-r-2 border-gray-300 text-right font-black text-green-700 bg-green-50/30">
-                          {formatNum(tx.totalCredit)}
-                        </td>
+                          <td className="p-3 border-r border-gray-200 font-mono text-gray-600">{tx.inn}</td>
 
-                        {/* Farqi */}
-                        <td className={`p-3 text-right font-black text-base ${tx.difference < 0 ? 'text-red-600' : 'text-green-600'} bg-indigo-50/30`}>
-                          {formatNum(tx.difference)}
-                        </td>
-                      </tr>
+                          <td className="p-3 border-r border-gray-200 text-right font-bold text-red-700 bg-red-50/20">
+                            {formatNum(tx.totalDebit)}
+                          </td>
+                          <td className="p-3 border-r border-gray-200 text-right font-bold text-green-700 bg-green-50/20">
+                            {formatNum(tx.totalCredit)}
+                          </td>
+                          <td className={`p-3 border-r border-gray-200 text-right font-black text-base ${tx.difference < 0 ? 'text-red-600' : 'text-green-600'}`}>
+                            {formatNum(tx.difference)}
+                          </td>
+                          <td className="p-3 text-center">
+                            <button
+                              onClick={() => toggleExpand(tx.inn)}
+                              className={`px-4 py-1.5 rounded-full text-xs font-bold transition-all ${isExpanded ? 'bg-indigo-600 text-white shadow-md' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}
+                            >
+                              {isExpanded ? 'Ёпиш ▴' : 'Очиш ▾'}
+                            </button>
+                          </td>
+                        </tr>
+
+                        {/* 🌟 ОЙМА-ОЙ ИЧКИ ЖАДВАЛ (EXPANDED ROW) */}
+                        {isExpanded && (
+                          <tr>
+                            <td colSpan={7} className="p-0">
+                              <div className="bg-gradient-to-br from-indigo-50 to-blue-50 p-6 border-b border-indigo-200 shadow-inner">
+                                <h4 className="font-black text-indigo-900 mb-4 flex items-center gap-2">
+                                  <span>📅 {tx.name} - Ойма-ой ҳисобот</span>
+                                </h4>
+                                <div className="overflow-hidden rounded-xl border border-indigo-200 bg-white shadow-sm">
+                                  <table className="w-full text-sm text-left">
+                                    <thead className="bg-indigo-100/60 text-indigo-900">
+                                      <tr>
+                                        <th className="p-3 font-bold border-r border-indigo-100">Ойлар</th>
+                                        <th className="p-3 font-bold border-r border-indigo-100 text-right text-red-700">Дебет (Банк/Чиққан)</th>
+                                        <th className="p-3 font-bold border-r border-indigo-100 text-right text-green-700">Кредит (Фактура)</th>
+                                        <th className="p-3 font-bold text-right text-indigo-900">Фарқ</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-indigo-50">
+                                      {months.map((mName, i) => {
+                                        const m = i + 1;
+                                        const dVal = tx.debitMonths[m] || 0;
+                                        const cVal = tx.creditMonths[m] || 0;
+                                        const diff = dVal - cVal;
+
+                                        return (
+                                          <tr key={mName} className="hover:bg-indigo-50/30 transition-colors">
+                                            <td className="p-3 font-semibold text-gray-700 border-r border-indigo-50 bg-gray-50/50">{mName}</td>
+
+                                            {/* QO'LDA O'ZGARTIRISH INPUTLARI */}
+                                            <td className="p-2 border-r border-indigo-50">
+                                              <input
+                                                type="number"
+                                                value={dVal === 0 ? '' : dVal}
+                                                placeholder="0.00"
+                                                onChange={(e) => handleCellEdit(tx.inn, m, 'debit', e.target.value)}
+                                                className="w-full text-right p-1.5 border border-gray-200 rounded text-red-700 font-medium focus:ring-2 focus:ring-red-400 outline-none transition-all hover:border-red-300"
+                                              />
+                                            </td>
+                                            <td className="p-2 border-r border-indigo-50">
+                                              <input
+                                                type="number"
+                                                value={cVal === 0 ? '' : cVal}
+                                                placeholder="0.00"
+                                                onChange={(e) => handleCellEdit(tx.inn, m, 'credit', e.target.value)}
+                                                className="w-full text-right p-1.5 border border-gray-200 rounded text-green-700 font-medium focus:ring-2 focus:ring-green-400 outline-none transition-all hover:border-green-300"
+                                              />
+                                            </td>
+                                            <td className={`p-3 text-right font-bold ${diff < 0 ? 'text-red-500' : diff > 0 ? 'text-green-500' : 'text-gray-400'}`}>
+                                              {formatNum(diff)}
+                                            </td>
+                                          </tr>
+                                        );
+                                      })}
+                                    </tbody>
+                                    <tfoot className="bg-indigo-50 font-black text-indigo-900 border-t border-indigo-200">
+                                      <tr>
+                                        <td className="p-3 border-r border-indigo-100">ЖАМИ:</td>
+                                        <td className="p-3 text-right text-red-700 border-r border-indigo-100">{formatNum(tx.totalDebit)}</td>
+                                        <td className="p-3 text-right text-green-700 border-r border-indigo-100">{formatNum(tx.totalCredit)}</td>
+                                        <td className={`p-3 text-right ${tx.difference < 0 ? 'text-red-600' : 'text-green-600'}`}>{formatNum(tx.difference)}</td>
+                                      </tr>
+                                    </tfoot>
+                                  </table>
+                                </div>
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                      </React.Fragment>
                     );
                   })
                 )}
@@ -310,18 +386,16 @@ export default function CompanyDetailPage({ params }: PageProps) {
 
               {/* 🏁 ЯКУНИЙ ЖАМИ (GRAND TOTAL) */}
               {displayData.length > 0 && (
-                <tfoot className="sticky bottom-0 z-30 bg-gray-800 text-white font-bold shadow-[0_-2px_10px_rgba(0,0,0,0.1)]">
+                <tfoot className="sticky bottom-0 z-30 bg-gray-900 text-white font-bold shadow-[0_-4px_15px_rgba(0,0,0,0.1)]">
                   <tr>
-                    <td className="p-4 border-r border-gray-600 sticky left-0 bg-gray-800 z-40 text-center">✓</td>
-                    <td className="p-4 border-r border-gray-600 sticky left-10 bg-gray-800 z-40 text-right uppercase tracking-wider">Жами қолдиқ:</td>
-                    <td className="p-4 border-r border-gray-600 sticky left-[328px] bg-gray-800 z-40"></td>
-                    <td colSpan={12} className="border-r border-gray-600"></td>
-                    <td className="p-4 border-r-2 border-gray-600 text-right text-red-300 text-sm">{formatNum(grandTotals.debit)}</td>
-                    <td colSpan={12} className="border-r border-gray-600"></td>
-                    <td className="p-4 border-r-2 border-gray-600 text-right text-green-300 text-sm">{formatNum(grandTotals.credit)}</td>
-                    <td className={`p-4 text-right text-base ${grandTotals.diff < 0 ? 'text-red-400' : 'text-green-400'}`}>
+                    <td className="p-4 border-r border-gray-700 text-center">✓</td>
+                    <td colSpan={2} className="p-4 border-r border-gray-700 text-right uppercase tracking-wider text-gray-300">Жами танланганлар:</td>
+                    <td className="p-4 border-r border-gray-700 text-right text-red-400 text-base">{formatNum(grandTotals.debit)}</td>
+                    <td className="p-4 border-r border-gray-700 text-right text-green-400 text-base">{formatNum(grandTotals.credit)}</td>
+                    <td className={`p-4 border-r border-gray-700 text-right text-lg ${grandTotals.diff < 0 ? 'text-red-400' : 'text-green-400'}`}>
                       {formatNum(grandTotals.diff)}
                     </td>
+                    <td></td>
                   </tr>
                 </tfoot>
               )}
