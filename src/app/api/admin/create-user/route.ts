@@ -2,65 +2,67 @@ import { NextResponse } from "next/server";
 import { initializeApp, getApps, cert } from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";
 import { getFirestore } from "firebase-admin/firestore";
+import dns from "dns";
 
-function getAdminServices() {
+// O'zbekiston/Windows sharoitida IPv6 dagi ulanish bloklarini chetlab o'tish
+dns.setDefaultResultOrder("ipv4first");
+
+const globalRef = global as any;
+
+if (!globalRef.firebaseAdminApp) {
   const projectId = process.env.FIREBASE_PROJECT_ID;
   const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
   let privateKey = process.env.FIREBASE_PRIVATE_KEY;
 
-  if (!projectId || !clientEmail || !privateKey) {
-    throw new Error(".env.local faylida Firebase kalitlari to'liq kiritilmagan!");
+  if (projectId && clientEmail && privateKey) {
+    // Kalitni tozalash (ortiqcha qo'shtirnoq va yangi qator belgilari)
+    privateKey = privateKey.trim().replace(/^["']|["']$/g, '').replace(/\\n/g, "\n");
+
+    if (getApps().length === 0) {
+      globalRef.firebaseAdminApp = initializeApp({
+        credential: cert({ projectId, clientEmail, privateKey }),
+      });
+      console.log("⚡ Firebase Admin Singleton muvaffaqiyatli ishga tushdi.");
+    } else {
+      globalRef.firebaseAdminApp = getApps()[0];
+    }
   }
-
-  if (getApps().length === 0) {
-    // --- KALITNI TOZALASH VA FORMATLASH FILTERI ---
-    // Agar kalit chetlarida ortiqcha qo'shtirnoqlar qolib ketgan bo'lsa olib tashlaymiz
-    privateKey = privateKey.trim().replace(/^["']|["']$/g, '');
-
-    // Agar kalit ichida \n harflari bo'lsa, ularni haqiqiy yangi qator belgisiga aylantiramiz
-    privateKey = privateKey.replace(/\\n/g, "\n");
-
-    initializeApp({
-      credential: cert({
-        projectId,
-        clientEmail,
-        privateKey,
-      }),
-    });
-  }
-
-  return {
-    auth: getAuth(),
-    db: getFirestore(),
-  };
 }
 
 export async function POST(req: Request) {
   try {
-    const { auth, db } = getAdminServices();
-    const body = await req.json();
-    const { email, password, role } = body;
-
-    if (!email || !password) {
-      return NextResponse.json({ error: "Email va parol majburiy!" }, { status: 400 });
+    if (!globalRef.firebaseAdminApp) {
+      return NextResponse.json({ error: "Firebase sozlamalari to'liq emas." }, { status: 500 });
     }
 
-    // 1. Firebase Auth'da foydalanuvchi ochish
-    const userRecord = await auth.createUser({
-      email,
-      password,
-      emailVerified: true,
-    });
+    const auth = getAuth();
+    const db = getFirestore();
+    const { email, password, role } = await req.json();
 
-    // 2. Firestore'ga oq ro'yxat sifatida yozish
-    await db.collection("allowed_users").doc(email).set({
-      uid: userRecord.uid,
-      role: role || "user",
-      status: "active",
-      createdAt: new Date().toISOString(),
-    });
+    if (!email || !password) {
+      return NextResponse.json({ error: "Email va parol kiritilishi shart." }, { status: 400 });
+    }
 
-    return NextResponse.json({ success: true, message: "Foydalanuvchi yaratildi!" });
+    // Promise.race orqali Firebase ulanishini 8 soniya bilan cheklaymiz
+    const timeoutPromise = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error("Firebase serveriga ulanish vaqti tugadi (Timeout).")), 8000)
+    );
+
+    const createUserPromise = async () => {
+      const userRecord = await auth.createUser({ email, password, emailVerified: true });
+      await db.collection("allowed_users").doc(email).set({
+        uid: userRecord.uid,
+        role: role || "user",
+        status: "active",
+        createdAt: new Date().toISOString(),
+      });
+      return userRecord;
+    };
+
+    // Yoki createUser tugaydi, yoki timeout ishga tushib xato qaytaradi
+    await Promise.race([createUserPromise(), timeoutPromise]);
+
+    return NextResponse.json({ success: true });
   } catch (error: any) {
     console.error("🔴 API ERROR:", error.message);
     return NextResponse.json({ error: error.message }, { status: 500 });
