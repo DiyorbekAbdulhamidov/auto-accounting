@@ -155,7 +155,7 @@ export default function CompanyDetailPage({ params }: PageProps) {
 
   const displayData = useMemo(() =>
     filteredData.filter((tx) => selectedInns.includes(tx.inn)),
-  [filteredData, selectedInns]);
+    [filteredData, selectedInns]);
 
   // CHECKBOX VA EXPAND
   const toggleSelection = (inn: string) => {
@@ -450,8 +450,8 @@ export default function CompanyDetailPage({ params }: PageProps) {
                   </th>
                   <th className="p-2 border border-gray-400 bg-gray-50 text-sm">Фирма номлари</th>
                   <th className="p-2 border border-gray-400 bg-gray-50 text-sm w-32">СТИР</th>
-                  <th className="p-2 border border-gray-400 bg-gray-50 text-sm w-40">Чиққан пул<br/>жами</th>
-                  <th className="p-2 border border-gray-400 bg-gray-50 text-sm w-40">Келган счет-ф<br/>жами</th>
+                  <th className="p-2 border border-gray-400 bg-gray-50 text-sm w-40">Чиққан пул<br />жами</th>
+                  <th className="p-2 border border-gray-400 bg-gray-50 text-sm w-40">Келган счет-ф<br />жами</th>
                   <th className="p-2 border border-gray-400 bg-gray-50 text-sm w-40">Фарқи</th>
                   <th className="p-2 border border-gray-400 bg-gray-50 text-sm w-48">Изоҳ</th>
                   <th className="p-2 border border-gray-400 bg-gray-50 text-sm w-24">Ойлар</th>
