@@ -1,21 +1,51 @@
+// app/company/[id]/page.tsx
 "use client";
 import React, { useState, use, useMemo, useEffect } from "react";
-// 🔥 FIREBASE IMPORTLARI 
+// 🔥 FIREBASE IMPORTLARI
 import { collection, addDoc, serverTimestamp, query, where, getDocs } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 
+interface MonthlyBucket {
+  debit: number;
+  credit: number;
+}
+interface TransactionRecord {
+  date: string;
+  type: string;
+  debit: number;
+  credit: number;
+}
 interface AggregatedTx {
   name: string;
   inn: string;
-  debitMonths: Record<number, number>;
-  creditMonths: Record<number, number>;
+  monthlyData: Record<string, MonthlyBucket>; // key: "YYYY-MM" - yillar aralashib ketmasligi uchun
+  transactions: TransactionRecord[];
   totalDebit: number;
   totalCredit: number;
   difference: number;
 }
+interface SverkaReportDoc {
+  companyId: string;
+  savedAt?: { toMillis: () => number };
+  firmsData: AggregatedTx[];
+  totals?: { debit: number; credit: number; diff: number };
+}
 
 interface PageProps {
   params: Promise<{ id: string }>;
+}
+
+const MONTH_NAMES = ["Январь", "Февраль", "Март", "Апрель", "Май", "Июнь", "Июль", "Август", "Сентябрь", "Октябрь", "Ноябрь", "Декабрь"];
+
+// "YYYY-MM" -> "Июнь 2026". Qatordagi string sort YYYY-MM formatida
+// xronologik tartibga ham to'g'ri keladi (zero-padded, yil birinchi).
+function periodLabel(period: string): string {
+  const [y, m] = period.split('-').map(Number);
+  const name = MONTH_NAMES[(m || 1) - 1] || period;
+  return `${name} ${y}`;
+}
+function sortedPeriods(monthlyData: Record<string, MonthlyBucket>): string[] {
+  return Object.keys(monthlyData || {}).sort();
 }
 
 export default function CompanyDetailPage({ params }: PageProps) {
@@ -26,28 +56,22 @@ export default function CompanyDetailPage({ params }: PageProps) {
   const [loading, setLoading] = useState(false);
   const [isFetchingData, setIsFetchingData] = useState(true);
 
-  // Asosiy ma'lumotlar bazasi (tahrirlanadigan state)
   const [parsedData, setParsedData] = useState<AggregatedTx[]>([]);
   const [detectedFormats, setDetectedFormats] = useState<string[]>([]);
 
-  // Tanlangan va ochilgan qatorlar
   const [selectedInns, setSelectedInns] = useState<string[]>([]);
   const [expandedInns, setExpandedInns] = useState<string[]>([]);
   const [isSaving, setIsSaving] = useState(false);
 
-  // 🔍 Qidiruv va Filtr state'lari
   const [searchTerm, setSearchTerm] = useState("");
   const [filterType, setFilterType] = useState<"ALL" | "DIFF" | "EQUAL">("DIFF");
 
-  const months = ["Январь", "Февраль", "Март", "Апрель", "Май", "Июнь", "Июль", "Август", "Сентябрь", "Октябрь", "Ноябрь", "Декабрь"];
-
-  // Raqamlarni rasmdagidek formatlash (vergul bilan 2 ta qoldiq: 6 050 220,00)
   const formatNum = (num: number) => {
     if (!num && num !== 0) return "-";
     return num.toLocaleString("ru-RU", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   };
 
-  // 🔄 1. SAHIFA OCHILGANDA FIREBASE'DAN MA'LUMOTLARNI YUKLASH
+  // 🔄 SAHIFA OCHILGANDA FIREBASE'DAN MA'LUMOTLARNI YUKLASH
   useEffect(() => {
     async function fetchSavedData() {
       if (!companyId) return;
@@ -60,15 +84,14 @@ export default function CompanyDetailPage({ params }: PageProps) {
         const querySnapshot = await getDocs(q);
 
         if (!querySnapshot.empty) {
-          const docs = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-          // @ts-ignore
+          const docs = querySnapshot.docs.map((d) => ({ id: d.id, ...d.data() } as SverkaReportDoc & { id: string }));
           docs.sort((a, b) => (b.savedAt?.toMillis() || 0) - (a.savedAt?.toMillis() || 0));
 
-          const latestReport = docs[0] as any;
+          const latestReport = docs[0];
 
           if (latestReport.firmsData && latestReport.firmsData.length > 0) {
             setParsedData(latestReport.firmsData);
-            setSelectedInns(latestReport.firmsData.map((d: AggregatedTx) => d.inn));
+            setSelectedInns(latestReport.firmsData.map((d) => d.inn));
           }
         }
       } catch (error) {
@@ -116,25 +139,28 @@ export default function CompanyDetailPage({ params }: PageProps) {
     }
   };
 
-  // ✍️ QO'LDA O'ZGARTIRISH FUNKSIYASI (Manual Edit)
-  const handleCellEdit = (inn: string, month: number, field: "debit" | "credit", val: string) => {
+  // ✍️ QO'LDA O'ZGARTIRISH (endi monthlyData["YYYY-MM"] ustida ishlaydi)
+  const handleCellEdit = (inn: string, period: string, field: "debit" | "credit", val: string) => {
     const numVal = parseFloat(val.replace(/,/g, "")) || 0;
 
     setParsedData((prev) =>
       prev.map((row) => {
         if (row.inn !== inn) return row;
 
-        const newRow = { ...row };
-        if (field === "debit") {
-          newRow.debitMonths = { ...newRow.debitMonths, [month]: numVal };
-          newRow.totalDebit = Object.values(newRow.debitMonths).reduce((a, b) => a + b, 0);
-        } else {
-          newRow.creditMonths = { ...newRow.creditMonths, [month]: numVal };
-          newRow.totalCredit = Object.values(newRow.creditMonths).reduce((a, b) => a + b, 0);
-        }
+        const newMonthlyData = { ...row.monthlyData };
+        const existing = newMonthlyData[period] || { debit: 0, credit: 0 };
+        newMonthlyData[period] = { ...existing, [field]: numVal };
 
-        newRow.difference = newRow.totalDebit - newRow.totalCredit;
-        return newRow;
+        const totalDebit = Object.values(newMonthlyData).reduce((a, b) => a + (b.debit || 0), 0);
+        const totalCredit = Object.values(newMonthlyData).reduce((a, b) => a + (b.credit || 0), 0);
+
+        return {
+          ...row,
+          monthlyData: newMonthlyData,
+          totalDebit,
+          totalCredit,
+          difference: totalCredit - totalDebit,
+        };
       })
     );
   };
@@ -153,20 +179,35 @@ export default function CompanyDetailPage({ params }: PageProps) {
     });
   }, [parsedData, searchTerm, filterType]);
 
+  // Ko'rinadigan (qidiruv + filtr + belgilash) - jadval va PDF uchun
   const displayData = useMemo(() =>
     filteredData.filter((tx) => selectedInns.includes(tx.inn)),
     [filteredData, selectedInns]);
 
-  // CHECKBOX VA EXPAND
+  // Faqat belgilash bo'yicha (qidiruv matnidan mustaqil) - Firebase'ga saqlash uchun.
+  // MUHIM: agar shuni "displayData" bilan almashtirsa, qidiruv orqali bitta firmani
+  // filtrlab turib "saqlash" bosilsa, boshqa barcha belgilangan firmalar
+  // saqlangan hisobotdan yo'qolib qolar edi.
+  const selectedFullData = useMemo(() =>
+    parsedData.filter((tx) => selectedInns.includes(tx.inn)),
+    [parsedData, selectedInns]);
+
   const toggleSelection = (inn: string) => {
     setSelectedInns((prev) => prev.includes(inn) ? prev.filter((i) => i !== inn) : [...prev, inn]);
   };
 
+  // MUHIM: avval filteredData.length bilan solishtirib butun selectedInns'ni
+  // filteredData bilan ALMASHTIRARDI - shu sabab qidiruv/filtr faol paytida
+  // "barchasini belgilash/bekor qilish" ko'rinmayotgan firmalarning
+  // belgisini ham o'chirib yuborardi. Endi faqat KO'RINAYOTGAN qatorlar
+  // ustida ishlaydi, boshqalarining holati saqlanadi.
   const toggleAll = () => {
-    if (selectedInns.length === filteredData.length && filteredData.length > 0) {
-      setSelectedInns([]);
+    const filteredInns = filteredData.map((d) => d.inn);
+    const allSelected = filteredInns.length > 0 && filteredInns.every((inn) => selectedInns.includes(inn));
+    if (allSelected) {
+      setSelectedInns((prev) => prev.filter((inn) => !filteredInns.includes(inn)));
     } else {
-      setSelectedInns(filteredData.map((d) => d.inn));
+      setSelectedInns((prev) => Array.from(new Set([...prev, ...filteredInns])));
     }
   };
 
@@ -174,7 +215,7 @@ export default function CompanyDetailPage({ params }: PageProps) {
     setExpandedInns((prev) => prev.includes(inn) ? prev.filter((i) => i !== inn) : [...prev, inn]);
   };
 
-  // ЖАМИ СУММАЛАРНИ ҲИСОБЛАШ (Grand Total)
+  // ЖАМИ СУММАЛАРНИ ҲИСОБЛАШ (ko'rinadigan qatorlar bo'yicha - jadval footer'i uchun)
   const grandTotals = displayData.reduce(
     (acc, curr) => {
       acc.debit += curr.totalDebit;
@@ -185,17 +226,27 @@ export default function CompanyDetailPage({ params }: PageProps) {
     { debit: 0, credit: 0, diff: 0 }
   );
 
-  // ☁️ FIREBASE-GA SAQLASH
+  // ☁️ FIREBASE-GA SAQLASH (endi to'liq belgilangan ro'yxat, qidiruvdan mustaqil)
   const handleSaveToFirebase = async () => {
-    if (displayData.length === 0) return alert("Сақлаш учун камида битта фирмани белгиланг!");
+    if (selectedFullData.length === 0) return alert("Сақлаш учун камида битта фирмани белгиланг!");
 
     setIsSaving(true);
     try {
+      const totals = selectedFullData.reduce(
+        (acc, curr) => {
+          acc.debit += curr.totalDebit;
+          acc.credit += curr.totalCredit;
+          acc.diff += curr.difference;
+          return acc;
+        },
+        { debit: 0, credit: 0, diff: 0 }
+      );
+
       const docRef = await addDoc(collection(db, "sverka_reports"), {
         companyId: companyId,
         savedAt: serverTimestamp(),
-        totals: grandTotals,
-        firmsData: displayData,
+        totals,
+        firmsData: selectedFullData,
       });
       alert(`Муваффақиятли сақланди! (ID: ${docRef.id})`);
     } catch (error) {
@@ -232,9 +283,11 @@ export default function CompanyDetailPage({ params }: PageProps) {
     `;
 
     displayData.forEach((tx, index) => {
-      const isDebt = tx.difference < 0;
-      const statusText = isDebt ? 'Қарзмиз' : tx.difference > 0 ? 'Ҳисоб фактура олиш керак' : '-';
-      const statusClass = isDebt ? 'status-debt' : tx.difference > 0 ? 'status-invoice' : '';
+      // MUHIM: difference > 0 => kredit(faktura) > debit(to'lov) => KORXONA QARZDOR.
+      // Avvalgi versiyada bu shart TESKARI edi (< 0 bilan > 0 almashtirilgan).
+      const isDebt = tx.difference > 0;
+      const statusText = isDebt ? 'Қарзмиз' : tx.difference < 0 ? 'Ҳисоб фактура олиш керак' : '-';
+      const statusClass = isDebt ? 'status-debt' : tx.difference < 0 ? 'status-invoice' : '';
 
       tableHTML += `
         <tr class="firm-row">
@@ -248,21 +301,21 @@ export default function CompanyDetailPage({ params }: PageProps) {
         </tr>
       `;
 
-      months.forEach((mName, i) => {
-        const m = i + 1;
-        const dVal = tx.debitMonths[m] || 0;
-        const cVal = tx.creditMonths[m] || 0;
-        const diff = dVal - cVal;
+      sortedPeriods(tx.monthlyData).forEach((period) => {
+        const bucket = tx.monthlyData[period] || { debit: 0, credit: 0 };
+        const dVal = bucket.debit || 0;
+        const cVal = bucket.credit || 0;
+        const diff = cVal - dVal; // umumiy difference bilan bir xil konventsiya
 
         if (dVal > 0 || cVal > 0 || diff !== 0) {
-          const isMonthDebt = diff < 0;
-          const mStatusText = isMonthDebt ? 'Қарзмиз' : diff > 0 ? 'Ҳисоб фактура олиш керак' : '-';
-          const mStatusClass = isMonthDebt ? 'status-debt' : diff > 0 ? 'status-invoice' : '';
+          const isMonthDebt = diff > 0;
+          const mStatusText = isMonthDebt ? 'Қарзмиз' : diff < 0 ? 'Ҳисоб фактура олиш керак' : '-';
+          const mStatusClass = isMonthDebt ? 'status-debt' : diff < 0 ? 'status-invoice' : '';
 
           tableHTML += `
             <tr class="month-row">
               <td></td>
-              <td class="month-name">-- ${mName}</td>
+              <td class="month-name">-- ${periodLabel(period)}</td>
               <td class="text-center">-</td>
               <td class="text-right">${formatNum(dVal)}</td>
               <td class="text-right">${formatNum(cVal)}</td>
@@ -274,9 +327,9 @@ export default function CompanyDetailPage({ params }: PageProps) {
       });
     });
 
-    const grandIsDebt = grandTotals.diff < 0;
-    const grandStatusText = grandIsDebt ? 'Қарзмиз' : grandTotals.diff > 0 ? 'Ҳисоб фактура олиш керак' : '-';
-    const grandStatusClass = grandIsDebt ? 'status-debt' : grandTotals.diff > 0 ? 'status-invoice' : '';
+    const grandIsDebt = grandTotals.diff > 0;
+    const grandStatusText = grandIsDebt ? 'Қарзмиз' : grandTotals.diff < 0 ? 'Ҳисоб фактура олиш керак' : '-';
+    const grandStatusClass = grandIsDebt ? 'status-debt' : grandTotals.diff < 0 ? 'status-invoice' : '';
 
     tableHTML += `
           <tr class="grand-total">
@@ -317,7 +370,7 @@ export default function CompanyDetailPage({ params }: PageProps) {
           .text-center { text-align: center; }
           
           .status-debt { color: #dc2626 !important; font-weight: bold; }
-          .status-invoice { color: #16a34a !important; font-weight: bold; }
+          .status-invoice { color: #d97706 !important; font-weight: bold; }
           
           .grand-total { background-color: #e2e8f0; font-weight: bold; border-top: 2px solid #1e3a8a; }
           .grand-total td { padding: 8px 6px; }
@@ -416,7 +469,6 @@ export default function CompanyDetailPage({ params }: PageProps) {
             </div>
 
             <div className="flex flex-col md:flex-row gap-2 w-full md:w-auto">
-              {/* PDF EXPORT TUGMASI */}
               <button
                 onClick={handleExportPDF}
                 disabled={displayData.length === 0}
@@ -427,7 +479,7 @@ export default function CompanyDetailPage({ params }: PageProps) {
 
               <button
                 onClick={handleSaveToFirebase}
-                disabled={isSaving || displayData.length === 0}
+                disabled={isSaving || selectedFullData.length === 0}
                 className="bg-green-600 hover:bg-green-700 disabled:bg-green-400 text-white px-6 py-2.5 rounded-lg text-sm font-bold shadow-md transition-all flex items-center gap-2 w-full md:w-auto justify-center"
               >
                 {isSaving ? "Сақланмоқда..." : "💾 Firebase'га сақлаш"}
@@ -435,7 +487,7 @@ export default function CompanyDetailPage({ params }: PageProps) {
             </div>
           </div>
 
-          {/* 📝 ASOSIY JADVAL (Excel-like dizayn) */}
+          {/* 📝 ASOSIY JADVAL */}
           <div className="overflow-x-auto w-full border border-gray-400 rounded-lg shadow-inner pb-4 custom-scrollbar">
             <table className="w-full text-sm table-auto border-collapse border border-gray-400">
               <thead className="bg-white text-black font-semibold text-center sticky top-0 z-20 shadow-sm">
@@ -444,7 +496,7 @@ export default function CompanyDetailPage({ params }: PageProps) {
                     <input
                       type="checkbox"
                       className="w-4 h-4 cursor-pointer accent-indigo-600"
-                      checked={selectedInns.length === filteredData.length && filteredData.length > 0}
+                      checked={filteredData.length > 0 && filteredData.every((d) => selectedInns.includes(d.inn))}
                       onChange={toggleAll}
                     />
                   </th>
@@ -470,8 +522,10 @@ export default function CompanyDetailPage({ params }: PageProps) {
                     const isSelected = selectedInns.includes(tx.inn);
                     const isExpanded = expandedInns.includes(tx.inn);
 
-                    // Изоҳ мантиқи
-                    const statusText = tx.difference < 0 ? "Қарзмиз" : tx.difference > 0 ? "Ҳисоб фактура олиш керак" : "-";
+                    // MUHIM: difference > 0 => KORXONA QARZDOR ("Қарзмиз").
+                    // Avvalgi versiyada bu shart teskari edi.
+                    const statusText = tx.difference > 0 ? "Қарзмиз" : tx.difference < 0 ? "Ҳисоб фактура олиш керак" : "-";
+                    const statusColor = tx.difference > 0 ? "text-red-600" : tx.difference < 0 ? "text-amber-600" : "text-gray-500";
 
                     return (
                       <React.Fragment key={`${tx.inn}-${idx}`}>
@@ -495,10 +549,10 @@ export default function CompanyDetailPage({ params }: PageProps) {
                           <td className="p-2 border border-gray-400 text-right text-gray-900">
                             {formatNum(tx.totalCredit)}
                           </td>
-                          <td className="p-2 border border-gray-400 text-right text-gray-900">
+                          <td className={`p-2 border border-gray-400 text-right font-semibold ${statusColor}`}>
                             {formatNum(tx.difference)}
                           </td>
-                          <td className="p-2 border border-gray-400 text-left text-gray-900 pl-4">
+                          <td className={`p-2 border border-gray-400 text-left pl-4 font-medium ${statusColor}`}>
                             {statusText}
                           </td>
                           <td className="p-2 border border-gray-400 text-center">
@@ -523,28 +577,32 @@ export default function CompanyDetailPage({ params }: PageProps) {
                                   <table className="w-full text-sm text-left">
                                     <thead className="bg-indigo-100/60 text-indigo-900">
                                       <tr>
-                                        <th className="p-3 font-bold border-r border-indigo-100">Ойлар</th>
+                                        <th className="p-3 font-bold border-r border-indigo-100">Давр</th>
                                         <th className="p-3 font-bold border-r border-indigo-100 text-right">Чиққан пул (Дебет)</th>
                                         <th className="p-3 font-bold border-r border-indigo-100 text-right">Келган счет-ф (Кредит)</th>
                                         <th className="p-3 font-bold text-right text-indigo-900">Фарқ</th>
                                       </tr>
                                     </thead>
                                     <tbody className="divide-y divide-indigo-50">
-                                      {months.map((mName, i) => {
-                                        const m = i + 1;
-                                        const dVal = tx.debitMonths[m] || 0;
-                                        const cVal = tx.creditMonths[m] || 0;
-                                        const diff = dVal - cVal;
+                                      {sortedPeriods(tx.monthlyData).length === 0 ? (
+                                        <tr>
+                                          <td colSpan={4} className="p-3 text-center text-gray-400">Ойлик маълумот йўқ</td>
+                                        </tr>
+                                      ) : sortedPeriods(tx.monthlyData).map((period) => {
+                                        const bucket = tx.monthlyData[period] || { debit: 0, credit: 0 };
+                                        const dVal = bucket.debit || 0;
+                                        const cVal = bucket.credit || 0;
+                                        const diff = cVal - dVal; // umumiy difference bilan bir xil konventsiya
 
                                         return (
-                                          <tr key={mName} className="hover:bg-indigo-50/30 transition-colors">
-                                            <td className="p-3 font-semibold text-gray-700 border-r border-indigo-50 bg-gray-50/50">{mName}</td>
+                                          <tr key={period} className="hover:bg-indigo-50/30 transition-colors">
+                                            <td className="p-3 font-semibold text-gray-700 border-r border-indigo-50 bg-gray-50/50">{periodLabel(period)}</td>
                                             <td className="p-2 border-r border-indigo-50">
                                               <input
                                                 type="number"
                                                 value={dVal === 0 ? '' : dVal}
                                                 placeholder="0.00"
-                                                onChange={(e) => handleCellEdit(tx.inn, m, 'debit', e.target.value)}
+                                                onChange={(e) => handleCellEdit(tx.inn, period, 'debit', e.target.value)}
                                                 className="w-full text-right p-1.5 border border-gray-200 rounded text-gray-800 font-medium focus:ring-2 focus:ring-blue-400 outline-none transition-all"
                                               />
                                             </td>
@@ -553,11 +611,11 @@ export default function CompanyDetailPage({ params }: PageProps) {
                                                 type="number"
                                                 value={cVal === 0 ? '' : cVal}
                                                 placeholder="0.00"
-                                                onChange={(e) => handleCellEdit(tx.inn, m, 'credit', e.target.value)}
+                                                onChange={(e) => handleCellEdit(tx.inn, period, 'credit', e.target.value)}
                                                 className="w-full text-right p-1.5 border border-gray-200 rounded text-gray-800 font-medium focus:ring-2 focus:ring-blue-400 outline-none transition-all"
                                               />
                                             </td>
-                                            <td className={`p-3 text-right font-bold ${diff < 0 ? 'text-red-600' : diff > 0 ? 'text-green-600' : 'text-gray-400'}`}>
+                                            <td className={`p-3 text-right font-bold ${diff > 0 ? 'text-red-600' : diff < 0 ? 'text-amber-600' : 'text-gray-400'}`}>
                                               {formatNum(diff)}
                                             </td>
                                           </tr>
@@ -569,11 +627,42 @@ export default function CompanyDetailPage({ params }: PageProps) {
                                         <td className="p-3 border-r border-indigo-100">ЖАМИ:</td>
                                         <td className="p-3 text-right border-r border-indigo-100">{formatNum(tx.totalDebit)}</td>
                                         <td className="p-3 text-right border-r border-indigo-100">{formatNum(tx.totalCredit)}</td>
-                                        <td className={`p-3 text-right ${tx.difference < 0 ? 'text-red-600' : 'text-green-600'}`}>{formatNum(tx.difference)}</td>
+                                        <td className={`p-3 text-right ${tx.difference > 0 ? 'text-red-600' : tx.difference < 0 ? 'text-amber-600' : 'text-gray-600'}`}>{formatNum(tx.difference)}</td>
                                       </tr>
                                     </tfoot>
                                   </table>
                                 </div>
+
+                                {/* 🧾 Barcha operatsiyalar - tekshirish/audit uchun (backend hisoblab beradi, avval frontendda umuman ko'rsatilmasdi) */}
+                                {tx.transactions && tx.transactions.length > 0 && (
+                                  <div className="mt-4 overflow-hidden rounded-xl border border-indigo-200 bg-white shadow-sm">
+                                    <div className="px-4 py-2 bg-indigo-50 text-indigo-900 font-bold text-sm border-b border-indigo-100">
+                                      🧾 Барча ўтказмалар ({tx.transactions.length})
+                                    </div>
+                                    <div className="max-h-64 overflow-y-auto">
+                                      <table className="w-full text-xs text-left">
+                                        <thead className="bg-gray-50 text-gray-600 sticky top-0">
+                                          <tr>
+                                            <th className="p-2 border-r border-gray-100">Сана</th>
+                                            <th className="p-2 border-r border-gray-100">Тури</th>
+                                            <th className="p-2 border-r border-gray-100 text-right">Дебет</th>
+                                            <th className="p-2 text-right">Кредит</th>
+                                          </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-gray-50">
+                                          {tx.transactions.map((t, ti) => (
+                                            <tr key={ti} className="hover:bg-gray-50">
+                                              <td className="p-2 border-r border-gray-100 text-gray-700">{t.date}</td>
+                                              <td className="p-2 border-r border-gray-100 text-gray-500">{t.type}</td>
+                                              <td className="p-2 border-r border-gray-100 text-right">{t.debit ? formatNum(t.debit) : '-'}</td>
+                                              <td className="p-2 text-right">{t.credit ? formatNum(t.credit) : '-'}</td>
+                                            </tr>
+                                          ))}
+                                        </tbody>
+                                      </table>
+                                    </div>
+                                  </div>
+                                )}
                               </div>
                             </td>
                           </tr>
@@ -592,11 +681,11 @@ export default function CompanyDetailPage({ params }: PageProps) {
                     <td colSpan={2} className="p-3 border border-gray-400 text-right uppercase tracking-wider text-gray-700">Жами танланганлар:</td>
                     <td className="p-3 border border-gray-400 text-right text-base">{formatNum(grandTotals.debit)}</td>
                     <td className="p-3 border border-gray-400 text-right text-base">{formatNum(grandTotals.credit)}</td>
-                    <td className="p-3 border border-gray-400 text-right text-base">
+                    <td className={`p-3 border border-gray-400 text-right text-base ${grandTotals.diff > 0 ? 'text-red-600' : grandTotals.diff < 0 ? 'text-amber-600' : ''}`}>
                       {formatNum(grandTotals.diff)}
                     </td>
-                    <td className="p-3 border border-gray-400 text-left pl-4">
-                      {grandTotals.diff < 0 ? "Қарзмиз" : grandTotals.diff > 0 ? "Ҳисоб фактура олиш керак" : "-"}
+                    <td className={`p-3 border border-gray-400 text-left pl-4 ${grandTotals.diff > 0 ? 'text-red-600' : grandTotals.diff < 0 ? 'text-amber-600' : ''}`}>
+                      {grandTotals.diff > 0 ? "Қарзмиз" : grandTotals.diff < 0 ? "Ҳисоб фактура олиш керак" : "-"}
                     </td>
                     <td className="p-3 border border-gray-400"></td>
                   </tr>

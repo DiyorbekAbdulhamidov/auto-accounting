@@ -1,65 +1,137 @@
+// app/api/upload-preview/route.ts
 import { NextResponse } from 'next/server';
 import * as XLSX from 'xlsx';
 
-// 1. Sanalarni xavfsiz va aniq o'girish (Xatoliklarni oldini olish)
+// ============================================================
+// 1. Sanani xavfsiz va aniq o'girish
+//    - Excel serial (number YOKI raqamli string) -> UTC asosida
+//    - DD.MM.YYYY / DD-MM-YYYY (1 yoki 2 xonali kun/oy, matn ichida
+//      qayerda bo'lishidan qat'iy nazar, masalan "1036 от 30.06.2026")
+//    - Hammasi UTC bilan quriladi, shuning uchun keyinchalik
+//      getUTCFullYear/getUTCMonth bilan mos keladi (server qaysi
+//      timezone'da ishlashidan qat'iy nazar oy/yil siljib ketmaydi)
+// ============================================================
 function parseExcelDate(value: any): Date | null {
-  if (!value) return null;
+  if (value === null || value === undefined || value === '') return null;
   if (value instanceof Date && !isNaN(value.getTime())) return value;
 
-  if (typeof value === 'number' || (!isNaN(Number(value)) && !String(value).includes('.'))) {
+  const isPureNumeric = typeof value === 'number'
+    ? isFinite(value)
+    : /^\d+$/.test(String(value).trim());
+
+  if (isPureNumeric) {
     const serial = Number(value);
-    const utc_days = Math.floor(serial - 25569);
-    const date = new Date(utc_days * 86400 * 1000);
-    return isNaN(date.getTime()) ? null : date;
+    const utcDays = Math.floor(serial - 25569);
+    const date = new Date(utcDays * 86400 * 1000);
+    if (!isNaN(date.getTime())) return date;
   }
 
-  let dateStr = String(value).trim();
-  const ruDateMatch = dateStr.match(/(\d{2})\.(\d{2})\.(\d{4})/);
+  const strVal = String(value).trim();
+  if (!strVal) return null;
+
+  const ruDateMatch = strVal.match(/(\d{1,2})[.\-](\d{1,2})[.\-](\d{4})/);
   if (ruDateMatch) {
-    const date = new Date(`${ruDateMatch[3]}-${ruDateMatch[2]}-${ruDateMatch[1]}T00:00:00Z`);
-    return isNaN(date.getTime()) ? null : date;
+    const day = Number(ruDateMatch[1]);
+    const month = Number(ruDateMatch[2]);
+    const year = Number(ruDateMatch[3]);
+    if (month >= 1 && month <= 12 && day >= 1 && day <= 31) {
+      const date = new Date(Date.UTC(year, month - 1, day));
+      if (!isNaN(date.getTime())) return date;
+    }
   }
 
-  const fallback = new Date(dateStr);
+  const fallback = new Date(strVal);
   return !isNaN(fallback.getTime()) ? fallback : null;
 }
 
-// 2. Pul summalarini tozalash (Probel, vergullardan tozalash)
+// ============================================================
+// 2. Pul summalarini tozalash
+//    - "1,234.56" (US), "1.234,56" (EU/RU), "1 234,56" (probel bilan)
+//    - "(1 234,56)" -> manfiy
+//    - valyuta harflari/belgilari ("so'm", "сум", "UZS", "$") olib tashlanadi
+// ============================================================
 function parseAmount(val: any): number {
   if (typeof val === 'number') return val;
-  if (!val) return 0;
+  if (val === null || val === undefined) return 0;
 
   let str = String(val).trim();
-  if (str.includes(',') && str.includes('.')) {
-    str = str.replace(/,/g, '');
-  } else if (str.includes(',') && !str.includes('.')) {
-    str = str.replace(/,/g, '.');
+  if (!str) return 0;
+
+  let negative = false;
+  if (/^\(.*\)$/.test(str)) {
+    negative = true;
+    str = str.slice(1, -1).trim();
   }
+  if (str.startsWith('-')) {
+    negative = true;
+    str = str.slice(1);
+  }
+
+  str = str.replace(/[^\d,.\s]/g, '');
   str = str.replace(/\s/g, '');
-  return Number(str) || 0;
+  if (!str) return 0;
+
+  const lastComma = str.lastIndexOf(',');
+  const lastDot = str.lastIndexOf('.');
+
+  if (lastComma !== -1 && lastDot !== -1) {
+    // ikkalasi ham bor: eng oxirgisi kasr ajratkichi hisoblanadi
+    str = lastComma > lastDot
+      ? str.replace(/\./g, '').replace(',', '.')
+      : str.replace(/,/g, '');
+  } else if (lastComma !== -1) {
+    const parts = str.split(',');
+    const isDecimal = parts.length === 2 && parts[1].length > 0 && parts[1].length <= 2;
+    str = isDecimal ? str.replace(',', '.') : str.replace(/,/g, '');
+  }
+  // faqat nuqta bo'lsa (yoki umuman ajratkich bo'lmasa) - Number() to'g'ri o'qiydi
+
+  const num = Number(str);
+  if (isNaN(num)) return 0;
+  return negative ? -num : num;
 }
 
+// ============================================================
 // 3. INN (STIR) ni xavfsiz tozalash
+// ============================================================
 function cleanInn(inn: any): string {
   if (!inn) return '-';
   const cleaned = String(inn).replace(/\D/g, '');
   return cleaned.length > 0 ? cleaned : '-';
 }
 
-// 🌟 YANGI: O'zbekiston INN (STIR) raqamlarini haqiqiyligini tekshirish
+// O'zbekiston INN (STIR) raqamlarini haqiqiyligini tekshirish (mobil raqamlarni chetlab o'tish)
 function isValidUzbekInn(inn: string): boolean {
-  // INN aniq 9 xonali raqam bo'lishi kerak (yoki JShShIR bo'lsa 14 xonali)
   if (!/^\d{9}$/.test(inn) && !/^\d{14}$/.test(inn)) return false;
-
-  // Agar 9 xonali bo'lsa, u mobil raqam bo'lmasligini tekshiramiz
   if (inn.length === 9) {
     const mobilePrefixes = ['90', '91', '93', '94', '95', '97', '98', '99', '33', '88', '77', '55'];
     const prefix = inn.substring(0, 2);
-    if (mobilePrefixes.includes(prefix)) {
-      return false; // Bu katta ehtimol bilan telefon raqami
-    }
+    if (mobilePrefixes.includes(prefix)) return false;
   }
   return true;
+}
+
+// ============================================================
+// Umumiy tiplar
+// ============================================================
+interface MonthlyBucket {
+  debit: number;
+  credit: number;
+}
+interface TxRecord {
+  date: string;
+  type: string;
+  debit: number;
+  credit: number;
+}
+interface AggEntry {
+  inn: string;
+  name: string;
+  monthlyData: Record<string, MonthlyBucket>; // key: "YYYY-MM"
+  transactions: TxRecord[];
+  totalDebit: number;
+  totalCredit: number;
+  difference?: number;
 }
 
 export async function POST(req: Request) {
@@ -71,31 +143,41 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Fayl(lar) yuklanmadi!" }, { status: 400 });
     }
 
-    const agg: Record<string, any> = {};
+    const agg: Record<string, AggEntry> = {};
+    // FAKTURA fayllarida bir xil hisob-faktura ikki marta tushib qolmasligi uchun
+    // (masalan fayl ichida qisman ustma-ust tushgan qatorlar bo'lsa)
+    const seenInvoiceSignatures = new Set<string>();
 
-    // 🌟 YANGI: Tranzaksiyalarni qo'shish mantiqi (Yil-Oy va Detalizatsiya bilan)
-    function addTx(name: string, inn: string, date: Date | null, debit: number, credit: number, docType: string) {
+    function addTx(
+      name: string,
+      inn: string,
+      date: Date | null,
+      debit: number,
+      credit: number,
+      docType: string
+    ) {
       const cInn = cleanInn(inn);
-      let cName = name ? String(name).trim() : "Noma'lum kontragent";
-
-      // Agar INN topilmasa, nomini kalit qilamiz, aks holda INNni
-      const key = (cInn !== '-' && cInn !== '0' && cInn.length > 5) ? cInn : cName.toUpperCase() || 'UNKNOWN';
+      const cName = name ? String(name).trim() : "Noma'lum kontragent";
+      const key = (cInn !== '-' && cInn !== '0' && cInn.length > 5) ? cInn : (cName.toUpperCase() || 'UNKNOWN');
 
       if (!agg[key]) {
         agg[key] = {
           inn: cInn,
           name: cName,
-          monthlyData: {}, // Masalan: "2023-01": { debit: 100, credit: 50 }
-          transactions: [], // Barcha operatsiyalar ro'yxati (Buxgalter tekshirishi uchun)
+          monthlyData: {},
+          transactions: [],
           totalDebit: 0,
           totalCredit: 0,
         };
       }
 
       const txDate = date || new Date();
-      const year = txDate.getFullYear();
-      const month = String(txDate.getMonth() + 1).padStart(2, '0');
-      const periodKey = `${year}-${month}`; // Format: YYYY-MM (Yillar aralashib ketmaydi)
+      // MUHIM: UTC getterlar ishlatiladi, chunki txDate ham UTC asosida qurilgan
+      // (server qaysi timezone'da ishlashidan qat'iy nazar oy/yil noto'g'ri
+      // hisoblanib qolmasligi uchun - masalan 01.01.2026 dekabrga tushib qolmasligi kerak)
+      const year = txDate.getUTCFullYear();
+      const month = String(txDate.getUTCMonth() + 1).padStart(2, '0');
+      const periodKey = `${year}-${month}`;
 
       if (!agg[key].monthlyData[periodKey]) {
         agg[key].monthlyData[periodKey] = { debit: 0, credit: 0 };
@@ -110,13 +192,12 @@ export async function POST(req: Request) {
         agg[key].totalCredit += credit;
       }
 
-      // Har bir operatsiyani tarixda saqlaymiz
       if (debit > 0 || credit > 0) {
         agg[key].transactions.push({
           date: txDate.toISOString().split('T')[0],
-          type: docType, // 'BANK' yoki 'FAKTURA'
-          debit: debit,
-          credit: credit
+          type: docType,
+          debit,
+          credit,
         });
       }
     }
@@ -156,30 +237,63 @@ export async function POST(req: Request) {
           const accountInfo = String(row[1] || '').split('/');
           if (accountInfo.length >= 2) {
             const rawInn = accountInfo[1] ? accountInfo[1].trim() : '';
-            const rawName = accountInfo[2] ? accountInfo[2].trim() : String(row[1]);
+            const rawName = accountInfo[2] ? accountInfo[2].trim() : (rawInn || String(row[1]));
             const txDate = parseExcelDate(row[0]);
             const debit = parseAmount(row[2]);
             const credit = parseAmount(row[3]);
-            addTx(rawName, rawInn, txDate, debit, credit, 'BANK');
+            if (debit > 0 || credit > 0) addTx(rawName, rawInn, txDate, debit, credit, 'BANK');
           }
         }
       }
+
       else if (formatType === 'IPOTEKA_ASBT') {
+        // Qaysi ustun "o'zimizning" (hisob egasining) INN'i, qaysisi kontragentniki -
+        // debit (chiqim) faylida "получатель" (8/9-ustun) kontragent, "плательщик" (3/4) - o'zimiz.
+        // Kredit (kirim) faylida buning aksi.
+        const ownInnCol = isIpotekaDebit ? 4 : 9;
+        const targetNameCol = isIpotekaDebit ? 8 : 3;
+        const targetInnCol = isIpotekaDebit ? 9 : 4;
+
+        // Hisob egasining o'z INN'ini birinchi to'g'ri qatordan aniqlaymiz -
+        // shu orqali o'zining ikkinchi hisobvarag'iga o'tkazma/kredit to'lovlarini
+        // (kontragent emasligini) aniqlab, hisobotdan chetlashtiramiz.
+        let ownInn = '-';
         for (let i = 0; i < rawData.length; i++) {
           const row = rawData[i];
-          if (!row || row.length < 8) continue;
-          const rowNumStr = String(row[0]).trim();
-          if (/^\d+$/.test(rowNumStr)) {
-            const txDate = parseExcelDate(row[5]);
-            const sum = parseAmount(row[7]);
-            let targetName = isIpotekaDebit ? String(row[8] || '') : String(row[3] || '');
-            let targetInn = isIpotekaDebit ? String(row[9] || '') : String(row[4] || '');
-            let debit = isIpotekaDebit ? sum : 0;
-            let credit = isIpotekaDebit ? 0 : sum;
-            addTx(targetName, targetInn, txDate, debit, credit, 'BANK');
+          if (!row || row.length < 9) continue;
+          if (/^\d+$/.test(String(row[0]).trim())) {
+            const candidate = cleanInn(row[ownInnCol]);
+            if (candidate !== '-') { ownInn = candidate; break; }
           }
         }
+
+        for (let i = 0; i < rawData.length; i++) {
+          const row = rawData[i];
+          // MUHIM: oldin "row.length < 8" edi, lekin 8/9-indeksdagi ustunlarga
+          // (nomi/INN) kirish uchun kamida 9 ta ustun kerak - aks holda
+          // qatorning oxiri qirqilib qolgan hollarda xato ma'lumot chiqishi mumkin edi.
+          if (!row || row.length < 9) continue;
+          const rowNumStr = String(row[0]).trim();
+          if (!/^\d+$/.test(rowNumStr)) continue;
+
+          const txDate = parseExcelDate(row[5]);
+          const sum = parseAmount(row[7]);
+          if (sum <= 0) continue;
+
+          const targetName = String(row[targetNameCol] || '');
+          const targetInn = cleanInn(row[targetInnCol]);
+
+          // O'zining ikkinchi hisobvarag'iga o'tkazma / kredit asosiy qarzi to'lovi
+          // kabi ICHKI harakatlar - bu kontragent emas, shot-fakturaga qarshi
+          // solishtirish uchun kerak emas.
+          if (ownInn !== '-' && targetInn === ownInn) continue;
+
+          const debit = isIpotekaDebit ? sum : 0;
+          const credit = isIpotekaDebit ? 0 : sum;
+          addTx(targetName, targetInn, txDate, debit, credit, 'BANK');
+        }
       }
+
       else if (formatType === 'FAKTURA') {
         let startIndex = 1;
         for (let r = 0; r < Math.min(20, rawData.length); r++) {
@@ -188,6 +302,18 @@ export async function POST(req: Request) {
             break;
           }
         }
+
+        // Fayl "Подтверждён/Тасдиқланган" kabi status tizimidan foydalanadimi?
+        // Agar ha - faqat SHU statusdagi (ikkala tomon tomonidan yakunlangan)
+        // fakturalarni hisoblaymiz. "Ожидает подписи партнёра" (hali imzolanmagan)
+        // yoki bo'sh statusli qatorlar (bu ayni faylda ba'zan bitta yozuvning
+        // ustma-ust tushган nusxasi bo'lib chiqadi) hisobga olinmaydi.
+        let hasConfirmedMarker = false;
+        for (let i = startIndex; i < rawData.length; i++) {
+          const s = String(rawData[i]?.[1] || '').toLowerCase();
+          if (s.includes('подтвержд') || s.includes('тасдиқ')) { hasConfirmedMarker = true; break; }
+        }
+
         for (let i = startIndex; i < rawData.length; i++) {
           const row = rawData[i];
           if (!row || row.length < 8) continue;
@@ -195,8 +321,8 @@ export async function POST(req: Request) {
           if (!/^\d+(\.\d+)?$/.test(rowNumStr)) continue;
 
           const status = String(row[1] || '').trim().toLowerCase();
-          // Bekor qilingan fakturalarni hisobga olmaymiz
-          if (status.includes('отклонен') || status.includes('отменен') || status.includes('bekor')) continue;
+          if (status.includes('отклонен') || status.includes('отменен') || status.includes('bekor') || status.includes('rad et')) continue;
+          if (hasConfirmedMarker && !(status.includes('подтвержд') || status.includes('тасдиқ'))) continue;
 
           const docStr = String(row[2] || '');
           const txDate = parseExcelDate(docStr);
@@ -204,9 +330,16 @@ export async function POST(req: Request) {
           const sellerName = String(row[5] || '');
           const amount = parseAmount(row[8]);
 
-          if (amount > 0) addTx(sellerName, sellerInn, txDate, 0, amount, 'FAKTURA');
+          if (amount <= 0) continue;
+
+          const signature = `${docStr.trim()}|${cleanInn(sellerInn)}|${amount}`;
+          if (seenInvoiceSignatures.has(signature)) continue;
+          seenInvoiceSignatures.add(signature);
+
+          addTx(sellerName, sellerInn, txDate, 0, amount, 'FAKTURA');
         }
       }
+
       else if (formatType === 'GENERIC') {
         let innIdx = -1, nameIdx = -1, dateIdx = -1, debitIdx = -1, creditIdx = -1, sumIdx = -1;
 
@@ -243,8 +376,7 @@ export async function POST(req: Request) {
             if (debitIdx !== -1) debit = parseAmount(row[debitIdx]);
             if (creditIdx !== -1) credit = parseAmount(row[creditIdx]);
             else if (sumIdx !== -1) debit = parseAmount(row[sumIdx]);
-          }
-          else {
+          } else {
             let foundInn = false;
             const nums: number[] = [];
 
@@ -252,16 +384,13 @@ export async function POST(req: Request) {
               const cellStr = String(row[c]).trim();
               const possibleInn = cleanInn(cellStr);
 
-              // 🌟 YANGI: Strogiy INN tekshiruvi (Mobil raqamlarni chetlab o'tish)
               if (!foundInn && isValidUzbekInn(possibleInn)) {
                 targetInn = possibleInn;
                 foundInn = true;
                 targetName = String(row[c - 1] || row[c + 1] || 'Noma\'lum');
-              }
-              else if (cellStr.includes('.') && cellStr.split('.').length === 3 && cellStr.length <= 10) {
+              } else if (cellStr.includes('.') && cellStr.split('.').length === 3 && cellStr.length <= 10) {
                 txDate = parseExcelDate(row[c]);
-              }
-              else {
+              } else {
                 const amount = parseAmount(row[c]);
                 if (!isNaN(amount) && amount > 0 && amount !== Number(possibleInn)) nums.push(amount);
               }
@@ -286,14 +415,11 @@ export async function POST(req: Request) {
       }, { status: 400 });
     }
 
-    // 🌟 YANGI: Sal'doni aniq hisoblash (Faktura vs Pul to'lovi qoldig'i)
     const result = Object.values(agg).map((item) => {
-      // difference > 0 bo'lsa korxona qarzdor, < 0 bo'lsa xaridor qarzdor
+      // difference > 0 => kelgan (kredit/faktura) summa to'langandan (debit) ko'p => KORXONA QARZDOR
+      // difference < 0 => to'langan summa fakturadan ko'p => HISOB-FAKTURA OLISH KERAK
       item.difference = item.totalCredit - item.totalDebit;
-
-      // Buxgalter uchun tranzaksiyalarni sana bo'yicha saralaymiz
-      item.transactions.sort((a: any, b: any) => new Date(a.date).getTime() - new Date(b.date).getTime());
-
+      item.transactions.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
       return item;
     });
 
