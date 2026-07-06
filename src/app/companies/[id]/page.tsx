@@ -522,10 +522,10 @@ export default function CompanyDetailPage({ params }: PageProps) {
                     const isSelected = selectedInns.includes(tx.inn);
                     const isExpanded = expandedInns.includes(tx.inn);
 
-                    // MUHIM: difference > 0 => KORXONA QARZDOR ("Қарзмиз").
-                    // Avvalgi versiyada bu shart teskari edi.
-                    const statusText = tx.difference > 0 ? "Қарзмиз" : tx.difference < 0 ? "Ҳисоб фактура олиш керак" : "-";
-                    const statusColor = tx.difference > 0 ? "text-red-600" : tx.difference < 0 ? "text-amber-600" : "text-gray-500";
+                    // To'langan pul (debit) kelgan fakturadan (kredit) KO'P bo'lsa => "Қарзмиз".
+                    // Kelgan faktura to'langan puldan ko'p bo'lsa => "Ҳисоб фактура олиш керак".
+                    const statusText = tx.difference < 0 ? "Қарзмиз" : tx.difference > 0 ? "Ҳисоб фактура олиш керак" : "-";
+                    const statusColor = tx.difference < 0 ? "text-red-600" : tx.difference > 0 ? "text-amber-600" : "text-gray-500";
 
                     return (
                       <React.Fragment key={`${tx.inn}-${idx}`}>
