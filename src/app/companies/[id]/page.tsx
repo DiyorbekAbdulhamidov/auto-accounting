@@ -18,7 +18,7 @@ interface TransactionRecord {
 interface AggregatedTx {
   name: string;
   inn: string;
-  monthlyData: Record<string, MonthlyBucket>; // key: "YYYY-MM" - yillar aralashib ketmasligi uchun
+  monthlyData: Record<string, MonthlyBucket>; // key: "YYYY-MM"
   transactions: TransactionRecord[];
   totalDebit: number;
   totalCredit: number;
@@ -37,8 +37,6 @@ interface PageProps {
 
 const MONTH_NAMES = ["Январь", "Февраль", "Март", "Апрель", "Май", "Июнь", "Июль", "Август", "Сентябрь", "Октябрь", "Ноябрь", "Декабрь"];
 
-// "YYYY-MM" -> "Июнь 2026". Qatordagi string sort YYYY-MM formatida
-// xronologik tartibga ham to'g'ri keladi (zero-padded, yil birinchi).
 function periodLabel(period: string): string {
   const [y, m] = period.split('-').map(Number);
   const name = MONTH_NAMES[(m || 1) - 1] || period;
@@ -90,8 +88,13 @@ export default function CompanyDetailPage({ params }: PageProps) {
           const latestReport = docs[0];
 
           if (latestReport.firmsData && latestReport.firmsData.length > 0) {
-            setParsedData(latestReport.firmsData);
-            setSelectedInns(latestReport.firmsData.map((d) => d.inn));
+            // Формула ўзгаргани учун фарқни қайта ҳисоблаб оламиз: Чиққан пул - Келган пул
+            const correctedData = latestReport.firmsData.map((item) => ({
+              ...item,
+              difference: item.totalDebit - item.totalCredit,
+            }));
+            setParsedData(correctedData);
+            setSelectedInns(correctedData.map((d) => d.inn));
           }
         }
       } catch (error) {
@@ -123,10 +126,16 @@ export default function CompanyDetailPage({ params }: PageProps) {
       const data = await res.json();
 
       if (data.success) {
-        setParsedData(data.data);
+        // Келган маълумотни янги формула бўйича тўғрилаймиз: Чиққан пул (debit) - Келган пул (credit)
+        const correctedData = data.data.map((item: AggregatedTx) => ({
+          ...item,
+          difference: item.totalDebit - item.totalCredit,
+        }));
+
+        setParsedData(correctedData);
         setDetectedFormats(data.detectedFormats);
 
-        const diffData = data.data.filter((item: AggregatedTx) => Math.abs(item.difference) > 0.01);
+        const diffData = correctedData.filter((item: AggregatedTx) => Math.abs(item.difference) > 0.01);
         setSelectedInns(diffData.map((d: AggregatedTx) => d.inn));
       } else {
         alert("Хатолик: " + (data.error || "Номаълум хатолик юз берди"));
@@ -139,7 +148,7 @@ export default function CompanyDetailPage({ params }: PageProps) {
     }
   };
 
-  // ✍️ QO'LDA O'ZGARTIRISH (endi monthlyData["YYYY-MM"] ustida ishlaydi)
+  // ✍️ QO'LDA O'ZGARTIRISH
   const handleCellEdit = (inn: string, period: string, field: "debit" | "credit", val: string) => {
     const numVal = parseFloat(val.replace(/,/g, "")) || 0;
 
@@ -159,7 +168,7 @@ export default function CompanyDetailPage({ params }: PageProps) {
           monthlyData: newMonthlyData,
           totalDebit,
           totalCredit,
-          difference: totalCredit - totalDebit,
+          difference: totalDebit - totalCredit, // Янги формула: Чиққан пул - Келган пул
         };
       })
     );
@@ -179,15 +188,10 @@ export default function CompanyDetailPage({ params }: PageProps) {
     });
   }, [parsedData, searchTerm, filterType]);
 
-  // Ko'rinadigan (qidiruv + filtr + belgilash) - jadval va PDF uchun
   const displayData = useMemo(() =>
     filteredData.filter((tx) => selectedInns.includes(tx.inn)),
     [filteredData, selectedInns]);
 
-  // Faqat belgilash bo'yicha (qidiruv matnidan mustaqil) - Firebase'ga saqlash uchun.
-  // MUHIM: agar shuni "displayData" bilan almashtirsa, qidiruv orqali bitta firmani
-  // filtrlab turib "saqlash" bosilsa, boshqa barcha belgilangan firmalar
-  // saqlangan hisobotdan yo'qolib qolar edi.
   const selectedFullData = useMemo(() =>
     parsedData.filter((tx) => selectedInns.includes(tx.inn)),
     [parsedData, selectedInns]);
@@ -196,11 +200,6 @@ export default function CompanyDetailPage({ params }: PageProps) {
     setSelectedInns((prev) => prev.includes(inn) ? prev.filter((i) => i !== inn) : [...prev, inn]);
   };
 
-  // MUHIM: avval filteredData.length bilan solishtirib butun selectedInns'ni
-  // filteredData bilan ALMASHTIRARDI - shu sabab qidiruv/filtr faol paytida
-  // "barchasini belgilash/bekor qilish" ko'rinmayotgan firmalarning
-  // belgisini ham o'chirib yuborardi. Endi faqat KO'RINAYOTGAN qatorlar
-  // ustida ishlaydi, boshqalarining holati saqlanadi.
   const toggleAll = () => {
     const filteredInns = filteredData.map((d) => d.inn);
     const allSelected = filteredInns.length > 0 && filteredInns.every((inn) => selectedInns.includes(inn));
@@ -215,7 +214,7 @@ export default function CompanyDetailPage({ params }: PageProps) {
     setExpandedInns((prev) => prev.includes(inn) ? prev.filter((i) => i !== inn) : [...prev, inn]);
   };
 
-  // ЖАМИ СУММАЛАРНИ ҲИСОБЛАШ (ko'rinadigan qatorlar bo'yicha - jadval footer'i uchun)
+  // ЖАМИ СУММАЛАРНИ ҲИСОБЛАШ
   const grandTotals = displayData.reduce(
     (acc, curr) => {
       acc.debit += curr.totalDebit;
@@ -226,7 +225,7 @@ export default function CompanyDetailPage({ params }: PageProps) {
     { debit: 0, credit: 0, diff: 0 }
   );
 
-  // ☁️ FIREBASE-GA SAQLASH (endi to'liq belgilangan ro'yxat, qidiruvdan mustaqil)
+  // ☁️ FIREBASE-GA SAQLASH
   const handleSaveToFirebase = async () => {
     if (selectedFullData.length === 0) return alert("Сақлаш учун камида битта фирмани белгиланг!");
 
@@ -283,11 +282,10 @@ export default function CompanyDetailPage({ params }: PageProps) {
     `;
 
     displayData.forEach((tx, index) => {
-      // MUHIM: difference > 0 => kredit(faktura) > debit(to'lov) => KORXONA QARZDOR.
-      // Avvalgi versiyada bu shart TESKARI edi (< 0 bilan > 0 almashtirilgan).
-      const isDebt = tx.difference > 0;
-      const statusText = isDebt ? 'Қарзмиз' : tx.difference < 0 ? 'Ҳисоб фактура олиш керак' : '-';
-      const statusClass = isDebt ? 'status-debt' : tx.difference < 0 ? 'status-invoice' : '';
+      const isInvoiceNeeded = tx.difference > 0; // Чиққан пул катта
+      const isDebt = tx.difference < 0;        // Счет-фактура катта (минус)
+      const statusText = isInvoiceNeeded ? 'Ҳисоб фактура олиш керак' : isDebt ? 'Қарзмиз' : '-';
+      const statusClass = isDebt ? 'status-debt' : isInvoiceNeeded ? 'status-invoice' : '';
 
       tableHTML += `
         <tr class="firm-row">
@@ -305,12 +303,13 @@ export default function CompanyDetailPage({ params }: PageProps) {
         const bucket = tx.monthlyData[period] || { debit: 0, credit: 0 };
         const dVal = bucket.debit || 0;
         const cVal = bucket.credit || 0;
-        const diff = cVal - dVal; // umumiy difference bilan bir xil konventsiya
+        const diff = dVal - cVal; // Чиққан пул - Келган пул
 
         if (dVal > 0 || cVal > 0 || diff !== 0) {
-          const isMonthDebt = diff > 0;
-          const mStatusText = isMonthDebt ? 'Қарзмиз' : diff < 0 ? 'Ҳисоб фактура олиш керак' : '-';
-          const mStatusClass = isMonthDebt ? 'status-debt' : diff < 0 ? 'status-invoice' : '';
+          const isMonthInvoice = diff > 0;
+          const isMonthDebt = diff < 0;
+          const mStatusText = isMonthInvoice ? 'Ҳисоб фактура олиш керак' : isMonthDebt ? 'Қарзмиз' : '-';
+          const mStatusClass = isMonthDebt ? 'status-debt' : isMonthInvoice ? 'status-invoice' : '';
 
           tableHTML += `
             <tr class="month-row">
@@ -327,9 +326,10 @@ export default function CompanyDetailPage({ params }: PageProps) {
       });
     });
 
-    const grandIsDebt = grandTotals.diff > 0;
-    const grandStatusText = grandIsDebt ? 'Қарзмиз' : grandTotals.diff < 0 ? 'Ҳисоб фактура олиш керак' : '-';
-    const grandStatusClass = grandIsDebt ? 'status-debt' : grandTotals.diff < 0 ? 'status-invoice' : '';
+    const grandIsInvoice = grandTotals.diff > 0;
+    const grandIsDebt = grandTotals.diff < 0;
+    const grandStatusText = grandIsInvoice ? 'Ҳисоб фактура олиш керак' : grandIsDebt ? 'Қарзмиз' : '-';
+    const grandStatusClass = grandIsDebt ? 'status-debt' : grandIsInvoice ? 'status-invoice' : '';
 
     tableHTML += `
           <tr class="grand-total">
@@ -522,10 +522,14 @@ export default function CompanyDetailPage({ params }: PageProps) {
                     const isSelected = selectedInns.includes(tx.inn);
                     const isExpanded = expandedInns.includes(tx.inn);
 
-                    // To'langan pul (debit) kelgan fakturadan (kredit) KO'P bo'lsa => "Қарзмиз".
-                    // Kelgan faktura to'langan puldan ko'p bo'lsa => "Ҳисоб фактура олиш керак".
-                    const statusText = tx.difference < 0 ? "Қарзмиз" : tx.difference > 0 ? "Ҳисоб фактура олиш керак" : "-";
-                    const statusColor = tx.difference < 0 ? "text-red-600" : tx.difference > 0 ? "text-amber-600" : "text-gray-500";
+                    // Изоҳ мантиғи янгиланди: 
+                    // tx.difference > 0 (Чиққан пул кўп) -> Ҳисоб фактура олиш керак
+                    // tx.difference < 0 (Минус бўлса, Счёт-фактура кўп) -> Қарзмиз
+                    const isInvoiceNeeded = tx.difference > 0;
+                    const isDebt = tx.difference < 0;
+
+                    const statusText = isInvoiceNeeded ? "Ҳисоб фактура олиш керак" : isDebt ? "Қарзмиз" : "-";
+                    const statusColor = isDebt ? "text-red-600" : isInvoiceNeeded ? "text-amber-600" : "text-gray-500";
 
                     return (
                       <React.Fragment key={`${tx.inn}-${idx}`}>
@@ -592,7 +596,7 @@ export default function CompanyDetailPage({ params }: PageProps) {
                                         const bucket = tx.monthlyData[period] || { debit: 0, credit: 0 };
                                         const dVal = bucket.debit || 0;
                                         const cVal = bucket.credit || 0;
-                                        const diff = cVal - dVal; // umumiy difference bilan bir xil konventsiya
+                                        const diff = dVal - cVal; // Янги формула: Чиққан пул - Келган пул
 
                                         return (
                                           <tr key={period} className="hover:bg-indigo-50/30 transition-colors">
@@ -615,7 +619,7 @@ export default function CompanyDetailPage({ params }: PageProps) {
                                                 className="w-full text-right p-1.5 border border-gray-200 rounded text-gray-800 font-medium focus:ring-2 focus:ring-blue-400 outline-none transition-all"
                                               />
                                             </td>
-                                            <td className={`p-3 text-right font-bold ${diff > 0 ? 'text-red-600' : diff < 0 ? 'text-amber-600' : 'text-gray-400'}`}>
+                                            <td className={`p-3 text-right font-bold ${diff < 0 ? 'text-red-600' : diff > 0 ? 'text-amber-600' : 'text-gray-400'}`}>
                                               {formatNum(diff)}
                                             </td>
                                           </tr>
@@ -627,13 +631,13 @@ export default function CompanyDetailPage({ params }: PageProps) {
                                         <td className="p-3 border-r border-indigo-100">ЖАМИ:</td>
                                         <td className="p-3 text-right border-r border-indigo-100">{formatNum(tx.totalDebit)}</td>
                                         <td className="p-3 text-right border-r border-indigo-100">{formatNum(tx.totalCredit)}</td>
-                                        <td className={`p-3 text-right ${tx.difference > 0 ? 'text-red-600' : tx.difference < 0 ? 'text-amber-600' : 'text-gray-600'}`}>{formatNum(tx.difference)}</td>
+                                        <td className={`p-3 text-right ${tx.difference < 0 ? 'text-red-600' : tx.difference > 0 ? 'text-amber-600' : 'text-gray-600'}`}>{formatNum(tx.difference)}</td>
                                       </tr>
                                     </tfoot>
                                   </table>
                                 </div>
 
-                                {/* 🧾 Barcha operatsiyalar - tekshirish/audit uchun (backend hisoblab beradi, avval frontendda umuman ko'rsatilmasdi) */}
+                                {/* 🧾 Барча ўтказмалар */}
                                 {tx.transactions && tx.transactions.length > 0 && (
                                   <div className="mt-4 overflow-hidden rounded-xl border border-indigo-200 bg-white shadow-sm">
                                     <div className="px-4 py-2 bg-indigo-50 text-indigo-900 font-bold text-sm border-b border-indigo-100">
@@ -681,11 +685,11 @@ export default function CompanyDetailPage({ params }: PageProps) {
                     <td colSpan={2} className="p-3 border border-gray-400 text-right uppercase tracking-wider text-gray-700">Жами танланганлар:</td>
                     <td className="p-3 border border-gray-400 text-right text-base">{formatNum(grandTotals.debit)}</td>
                     <td className="p-3 border border-gray-400 text-right text-base">{formatNum(grandTotals.credit)}</td>
-                    <td className={`p-3 border border-gray-400 text-right text-base ${grandTotals.diff > 0 ? 'text-red-600' : grandTotals.diff < 0 ? 'text-amber-600' : ''}`}>
+                    <td className={`p-3 border border-gray-400 text-right text-base ${grandTotals.diff < 0 ? 'text-red-600' : grandTotals.diff > 0 ? 'text-amber-600' : ''}`}>
                       {formatNum(grandTotals.diff)}
                     </td>
-                    <td className={`p-3 border border-gray-400 text-left pl-4 ${grandTotals.diff > 0 ? 'text-red-600' : grandTotals.diff < 0 ? 'text-amber-600' : ''}`}>
-                      {grandTotals.diff > 0 ? "Қарзмиз" : grandTotals.diff < 0 ? "Ҳисоб фактура олиш керак" : "-"}
+                    <td className={`p-3 border border-gray-400 text-left pl-4 ${grandTotals.diff < 0 ? 'text-red-600' : grandTotals.diff > 0 ? 'text-amber-600' : ''}`}>
+                      {grandTotals.diff < 0 ? "Қарзмиз" : grandTotals.diff > 0 ? "Ҳисоб фактура олиш керак" : "-"}
                     </td>
                     <td className="p-3 border border-gray-400"></td>
                   </tr>
