@@ -1,9 +1,10 @@
-import { AuthProvider } from "@/context/AuthContext"; // To'g'ri yo'lni tekshiring (src/context/AuthContext)
-import "@/app/globals.css"; // Loyihangizning stillari
+import { AuthProvider } from "@/context/AuthContext";
+import "@/app/globals.css";
 
+// Metadata loyihangizning brauzerdagi nomi va SEO qismini bildiradi
 export const metadata = {
-  title: "Bank Analyzer AI",
-  description: "Avtomatlashtirilgan accounting tizimi",
+  title: "Бухгалтерия Хизматлари Маркази | Ички Тизим",
+  description: "Интеллектуал бошқарув ва автоматик аудит тизими. Барча ҳаракатлар назорат остида.",
 };
 
 export default function RootLayout({

@@ -4,6 +4,9 @@ import React, { useState, use, useMemo, useEffect } from "react";
 // 🔥 FIREBASE IMPORTLARI
 import { collection, addDoc, serverTimestamp, query, where, getDocs } from "firebase/firestore";
 import { db } from "@/lib/firebase";
+// 📊 EXCEL IMPORTLARI (CHiroylli dizayn uchun)
+import ExcelJS from "exceljs";
+import { saveAs } from "file-saver";
 
 interface MonthlyBucket {
   debit: number;
@@ -18,7 +21,7 @@ interface TransactionRecord {
 interface AggregatedTx {
   name: string;
   inn: string;
-  monthlyData: Record<string, MonthlyBucket>; // key: "YYYY-MM"
+  monthlyData: Record<string, MonthlyBucket>;
   transactions: TransactionRecord[];
   totalDebit: number;
   totalCredit: number;
@@ -69,26 +72,19 @@ export default function CompanyDetailPage({ params }: PageProps) {
     return num.toLocaleString("ru-RU", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   };
 
-  // 🔄 SAHIFA OCHILGANDA FIREBASE'DAN MA'LUMOTLARNI YUKLASH
   useEffect(() => {
     async function fetchSavedData() {
       if (!companyId) return;
       try {
-        const q = query(
-          collection(db, "sverka_reports"),
-          where("companyId", "==", companyId)
-        );
-
+        const q = query(collection(db, "sverka_reports"), where("companyId", "==", companyId));
         const querySnapshot = await getDocs(q);
 
         if (!querySnapshot.empty) {
           const docs = querySnapshot.docs.map((d) => ({ id: d.id, ...d.data() } as SverkaReportDoc & { id: string }));
           docs.sort((a, b) => (b.savedAt?.toMillis() || 0) - (a.savedAt?.toMillis() || 0));
-
           const latestReport = docs[0];
 
           if (latestReport.firmsData && latestReport.firmsData.length > 0) {
-            // Формула ўзгаргани учун фарқни қайта ҳисоблаб оламиз: Чиққан пул - Келган пул
             const correctedData = latestReport.firmsData.map((item) => ({
               ...item,
               difference: item.totalDebit - item.totalCredit,
@@ -103,7 +99,6 @@ export default function CompanyDetailPage({ params }: PageProps) {
         setIsFetchingData(false);
       }
     }
-
     fetchSavedData();
   }, [companyId]);
 
@@ -126,7 +121,6 @@ export default function CompanyDetailPage({ params }: PageProps) {
       const data = await res.json();
 
       if (data.success) {
-        // Келган маълумотни янги формула бўйича тўғрилаймиз: Чиққан пул (debit) - Келган пул (credit)
         const correctedData = data.data.map((item: AggregatedTx) => ({
           ...item,
           difference: item.totalDebit - item.totalCredit,
@@ -148,7 +142,6 @@ export default function CompanyDetailPage({ params }: PageProps) {
     }
   };
 
-  // ✍️ QO'LDA O'ZGARTIRISH
   const handleCellEdit = (inn: string, period: string, field: "debit" | "credit", val: string) => {
     const numVal = parseFloat(val.replace(/,/g, "")) || 0;
 
@@ -168,13 +161,12 @@ export default function CompanyDetailPage({ params }: PageProps) {
           monthlyData: newMonthlyData,
           totalDebit,
           totalCredit,
-          difference: totalDebit - totalCredit, // Янги формула: Чиққан пул - Келган пул
+          difference: totalDebit - totalCredit,
         };
       })
     );
   };
 
-  // 🎯 FILTRLASH VA QIDIRUV
   const filteredData = useMemo(() => {
     return parsedData.filter((item) => {
       const matchesSearch =
@@ -214,7 +206,6 @@ export default function CompanyDetailPage({ params }: PageProps) {
     setExpandedInns((prev) => prev.includes(inn) ? prev.filter((i) => i !== inn) : [...prev, inn]);
   };
 
-  // ЖАМИ СУММАЛАРНИ ҲИСОБЛАШ
   const grandTotals = displayData.reduce(
     (acc, curr) => {
       acc.debit += curr.totalDebit;
@@ -225,10 +216,8 @@ export default function CompanyDetailPage({ params }: PageProps) {
     { debit: 0, credit: 0, diff: 0 }
   );
 
-  // ☁️ FIREBASE-GA SAQLASH
   const handleSaveToFirebase = async () => {
     if (selectedFullData.length === 0) return alert("Сақлаш учун камида битта фирмани белгиланг!");
-
     setIsSaving(true);
     try {
       const totals = selectedFullData.reduce(
@@ -256,152 +245,132 @@ export default function CompanyDetailPage({ params }: PageProps) {
     }
   };
 
-  // 🖨️ PDF ФОРМАТИДА ОЙМА-ОЙ ЮКЛАБ ОЛИШ
-  const handleExportPDF = () => {
+  // 📈 MUKAMMAL EXCEL EXPORT (EXCELJS)
+  const handleExportExcel = async () => {
     if (displayData.length === 0) return alert("Рўйхат бўш. Камида битта фирмани белгиланг!");
 
-    const printWindow = window.open('', '', 'width=900,height=700');
-    if (!printWindow) return alert("Браузерингиз қалқиб чиқувчи (pop-up) ойналарни блоклаган!");
-
     const today = new Date().toLocaleDateString('ru-RU');
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet("Сверка");
 
-    let tableHTML = `
-      <table class="main-table">
-        <thead>
-          <tr>
-            <th style="width: 5%;">T/r</th>
-            <th>Фирма номлари</th>
-            <th style="width: 12%;">СТИР</th>
-            <th style="width: 15%;">Чиққан пул жами</th>
-            <th style="width: 15%;">Келган счет-ф жами</th>
-            <th style="width: 15%;">Фарқи</th>
-            <th style="width: 20%;">Изоҳ</th>
-          </tr>
-        </thead>
-        <tbody>
-    `;
+    // --- Ustun kengliklari ---
+    worksheet.columns = [
+      { key: "name", width: 50 },
+      { key: "inn", width: 18 },
+      { key: "debit", width: 22 },
+      { key: "credit", width: 22 },
+      { key: "diff", width: 22 },
+      { key: "note", width: 35 },
+    ];
 
-    displayData.forEach((tx, index) => {
-      const isInvoiceNeeded = tx.difference > 0; // Чиққан пул катта
-      const isDebt = tx.difference < 0;        // Счет-фактура катта (минус)
+    // --- Sarlavha qatorlari ---
+    // 1-qator (Kompaniya nomi - katta harflarda qalin qilib)
+    const titleRow = worksheet.addRow(["OOO \"AZAM-MARKET ANGREN\""]);
+    titleRow.getCell(1).font = { bold: true, size: 14, name: "Times New Roman" };
+
+    // 2-qator (Sana - o'ng tarafda)
+    const dateRow = worksheet.addRow(["", "", "", "", "", `${today} йил ҳолатига`]);
+    dateRow.getCell(6).alignment = { horizontal: "right" };
+    dateRow.getCell(6).font = { size: 11, name: "Times New Roman" };
+
+    // 3-qator (Jadval sarlavhalari - Balandroq qilib o'rtada saqlash)
+    const headerRow = worksheet.addRow([
+      "Фирма номлари",
+      "СТИР",
+      "Чиққан пул жами",
+      "Келган счет-ф жами",
+      "Фарқи",
+      "Изоҳ"
+    ]);
+    headerRow.height = 30; // Qator balandligi
+
+    // Sarlavha stillari va chiziqlari
+    headerRow.eachCell((cell) => {
+      cell.font = { bold: true, name: "Times New Roman", size: 12 };
+      cell.alignment = { horizontal: "center", vertical: "middle", wrapText: true };
+      cell.border = {
+        top: { style: "thin" },
+        left: { style: "thin" },
+        bottom: { style: "thin" },
+        right: { style: "thin" }
+      };
+    });
+
+    // --- Ma'lumotlarni yozish ---
+    displayData.forEach((tx) => {
+      const isInvoiceNeeded = tx.difference > 0;
+      const isDebt = tx.difference < 0;
       const statusText = isInvoiceNeeded ? 'Ҳисоб фактура олиш керак' : isDebt ? 'Қарзмиз' : '-';
-      const statusClass = isDebt ? 'status-debt' : isInvoiceNeeded ? 'status-invoice' : '';
 
-      tableHTML += `
-        <tr class="firm-row">
-          <td class="text-center">${index + 1}</td>
-          <td>${tx.name}</td>
-          <td class="text-center">${tx.inn}</td>
-          <td class="text-right">${formatNum(tx.totalDebit)}</td>
-          <td class="text-right">${formatNum(tx.totalCredit)}</td>
-          <td class="text-right ${statusClass}">${formatNum(tx.difference)}</td>
-          <td class="text-center ${statusClass}">${statusText}</td>
-        </tr>
-      `;
+      const row = worksheet.addRow([
+        tx.name,
+        tx.inn,
+        tx.totalDebit,
+        tx.totalCredit,
+        tx.difference,
+        statusText
+      ]);
 
-      sortedPeriods(tx.monthlyData).forEach((period) => {
-        const bucket = tx.monthlyData[period] || { debit: 0, credit: 0 };
-        const dVal = bucket.debit || 0;
-        const cVal = bucket.credit || 0;
-        const diff = dVal - cVal; // Чиққан пул - Келган пул
+      // Ma'lumot kataklari stillari
+      row.eachCell((cell, colNumber) => {
+        cell.font = { name: "Times New Roman", size: 11 };
+        cell.border = {
+          top: { style: "thin" },
+          left: { style: "thin" },
+          bottom: { style: "thin" },
+          right: { style: "thin" }
+        };
 
-        if (dVal > 0 || cVal > 0 || diff !== 0) {
-          const isMonthInvoice = diff > 0;
-          const isMonthDebt = diff < 0;
-          const mStatusText = isMonthInvoice ? 'Ҳисоб фактура олиш керак' : isMonthDebt ? 'Қарзмиз' : '-';
-          const mStatusClass = isMonthDebt ? 'status-debt' : isMonthInvoice ? 'status-invoice' : '';
-
-          tableHTML += `
-            <tr class="month-row">
-              <td></td>
-              <td class="month-name">-- ${periodLabel(period)}</td>
-              <td class="text-center">-</td>
-              <td class="text-right">${formatNum(dVal)}</td>
-              <td class="text-right">${formatNum(cVal)}</td>
-              <td class="text-right ${mStatusClass}">${formatNum(diff)}</td>
-              <td class="text-center ${mStatusClass}">${mStatusText}</td>
-            </tr>
-          `;
+        if (colNumber === 1) {
+          cell.alignment = { horizontal: "left", vertical: "middle", wrapText: true };
+        } else if (colNumber === 2) {
+          cell.alignment = { horizontal: "center", vertical: "middle" };
+        } else if (colNumber === 6) {
+          cell.alignment = { horizontal: "center", vertical: "middle" };
+        } else {
+          // Pul summalari ustunlari (#,##0.00 formati, masalan: 1 500 000,00)
+          cell.numFmt = '#,##0.00';
+          cell.alignment = { horizontal: "right", vertical: "middle" };
         }
       });
     });
 
-    const grandIsInvoice = grandTotals.diff > 0;
-    const grandIsDebt = grandTotals.diff < 0;
-    const grandStatusText = grandIsInvoice ? 'Ҳисоб фактура олиш керак' : grandIsDebt ? 'Қарзмиз' : '-';
-    const grandStatusClass = grandIsDebt ? 'status-debt' : grandIsInvoice ? 'status-invoice' : '';
+    // --- ЖАМИ qatori (Oxirgi qator) ---
+    const grandStatusText = grandTotals.diff > 0 ? 'Ҳисоб фактура олиш керак' : grandTotals.diff < 0 ? 'Қарзмиз' : '-';
 
-    tableHTML += `
-          <tr class="grand-total">
-            <td class="text-center">✓</td>
-            <td colspan="2">ЖАМИ ТАНЛАНГАНЛАР</td>
-            <td class="text-right">${formatNum(grandTotals.debit)}</td>
-            <td class="text-right">${formatNum(grandTotals.credit)}</td>
-            <td class="text-right ${grandStatusClass}">${formatNum(grandTotals.diff)}</td>
-            <td class="text-center ${grandStatusClass}">${grandStatusText}</td>
-          </tr>
-        </tbody>
-      </table>
-    `;
+    const grandRow = worksheet.addRow([
+      "ЖАМИ",
+      "",
+      grandTotals.debit,
+      grandTotals.credit,
+      grandTotals.diff,
+      grandStatusText
+    ]);
 
-    const htmlContent = `
-      <!DOCTYPE html>
-      <html lang="uz">
-      <head>
-        <meta charset="utf-8">
-        <title>Далолатнома - ${today}</title>
-        <style>
-          @page { size: A4; margin: 15mm; }
-          body { font-family: 'Times New Roman', serif; color: #000; font-size: 12px; margin: 0; padding: 0;}
-          .header { text-align: center; margin-bottom: 20px; border-bottom: 2px solid #1e3a8a; padding-bottom: 10px; }
-          h1 { font-size: 16px; text-transform: uppercase; margin: 0 0 5px 0; color: #1e3a8a; font-weight: bold; }
-          .subtitle { font-size: 12px; color: #444; font-style: italic; }
-          .meta { width: 100%; margin-bottom: 15px; font-size: 12px; }
-          
-          .main-table { width: 100%; border-collapse: collapse; margin-top: 10px; }
-          .main-table th { background-color: #1e3a8a; color: #fff; border: 1px solid #1e3a8a; padding: 6px; font-size: 11px; text-transform: uppercase;}
-          .main-table td { border: 1px solid #aaa; padding: 4px 6px; font-size: 11px; }
-          
-          .firm-row { background-color: #f1f5f9; font-weight: bold; }
-          .month-row { background-color: #fff; }
-          .month-name { padding-left: 20px !important; color: #444; font-style: italic; }
-          
-          .text-right { text-align: right; }
-          .text-center { text-align: center; }
-          
-          .status-debt { color: #dc2626 !important; font-weight: bold; }
-          .status-invoice { color: #d97706 !important; font-weight: bold; }
-          
-          .grand-total { background-color: #e2e8f0; font-weight: bold; border-top: 2px solid #1e3a8a; }
-          .grand-total td { padding: 8px 6px; }
-        </style>
-      </head>
-      <body>
-        <div class="header">
-          <h1>ДАЛОЛАТНОМА ҲИСОБОТИ (СВЕРКА)</h1>
-          <div class="subtitle">Ойма-ой батафсил таҳлил ва автоматик изоҳлар</div>
-        </div>
-        <table class="meta">
-          <tr>
-            <td style="width: 20%;"><strong>Ҳисобот санаси:</strong></td>
-            <td>${today}</td>
-          </tr>
-        </table>
-        
-        ${tableHTML}
-        
-        <script>
-          window.onload = function() { 
-            setTimeout(() => { window.print(); }, 500);
-          }
-        </script>
-      </body>
-      </html>
-    `;
+    // Jami qatorining stillari (qalin yozuv va chiziqlar)
+    grandRow.eachCell((cell, colNumber) => {
+      cell.font = { bold: true, name: "Times New Roman", size: 12 };
+      cell.border = {
+        top: { style: "medium" }, // Tepasi qalinroq chiziq bilan ajralib turadi
+        left: { style: "thin" },
+        bottom: { style: "thin" },
+        right: { style: "thin" }
+      };
 
-    printWindow.document.open();
-    printWindow.document.write(htmlContent);
-    printWindow.document.close();
+      if (colNumber === 1 || colNumber === 2) {
+        cell.alignment = { horizontal: "center", vertical: "middle" };
+      } else if (colNumber === 6) {
+        cell.alignment = { horizontal: "center", vertical: "middle" };
+      } else {
+        cell.numFmt = '#,##0.00';
+        cell.alignment = { horizontal: "right", vertical: "middle" };
+      }
+    });
+
+    // Faylni buferga yig'ish va saqlash
+    const buffer = await workbook.xlsx.writeBuffer();
+    const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+    saveAs(blob, `Sverka_${today}.xlsx`);
   };
 
   if (isFetchingData) {
@@ -414,7 +383,6 @@ export default function CompanyDetailPage({ params }: PageProps) {
 
   return (
     <div className="p-4 md:p-8 max-w-[100vw] overflow-x-hidden space-y-6 bg-gray-50/50 min-h-screen">
-      {/* 📁 FAYL YUKLASH */}
       <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 max-w-4xl mx-auto">
         <h1 className="text-2xl font-black text-gray-800 mb-2">Далолатнома (Сверка)</h1>
         <p className="text-sm text-gray-500 mb-6">
@@ -443,11 +411,8 @@ export default function CompanyDetailPage({ params }: PageProps) {
         </form>
       </div>
 
-      {/* 📊 ASOSIY QISM */}
       {parsedData.length > 0 && (
         <div className="bg-white rounded-2xl shadow-lg border border-gray-200 p-4 md:p-6 w-full max-w-[1500px] mx-auto overflow-hidden">
-
-          {/* 🔍 FILTRLAR VA ТУГМАЛАР */}
           <div className="flex flex-col md:flex-row justify-between items-center gap-4 mb-6 bg-gray-50 p-4 rounded-xl border border-gray-200">
             <div className="flex gap-4 w-full md:w-auto">
               <input
@@ -469,25 +434,25 @@ export default function CompanyDetailPage({ params }: PageProps) {
             </div>
 
             <div className="flex flex-col md:flex-row gap-2 w-full md:w-auto">
+              {/* EXCELJS EXPORT TUGMASI */}
               <button
-                onClick={handleExportPDF}
+                onClick={handleExportExcel}
                 disabled={displayData.length === 0}
-                className="bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white px-5 py-2.5 rounded-lg text-sm font-bold shadow-md transition-all flex items-center gap-2 w-full md:w-auto justify-center"
+                className="bg-green-600 hover:bg-green-700 disabled:bg-green-400 text-white px-5 py-2.5 rounded-lg text-sm font-bold shadow-md transition-all flex items-center gap-2 w-full md:w-auto justify-center"
               >
-                📄 PDF юклаш
+                📊 Excel юклаш
               </button>
 
               <button
                 onClick={handleSaveToFirebase}
                 disabled={isSaving || selectedFullData.length === 0}
-                className="bg-green-600 hover:bg-green-700 disabled:bg-green-400 text-white px-6 py-2.5 rounded-lg text-sm font-bold shadow-md transition-all flex items-center gap-2 w-full md:w-auto justify-center"
+                className="bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white px-6 py-2.5 rounded-lg text-sm font-bold shadow-md transition-all flex items-center gap-2 w-full md:w-auto justify-center"
               >
                 {isSaving ? "Сақланмоқда..." : "💾 Firebase'га сақлаш"}
               </button>
             </div>
           </div>
 
-          {/* 📝 ASOSIY JADVAL */}
           <div className="overflow-x-auto w-full border border-gray-400 rounded-lg shadow-inner pb-4 custom-scrollbar">
             <table className="w-full text-sm table-auto border-collapse border border-gray-400">
               <thead className="bg-white text-black font-semibold text-center sticky top-0 z-20 shadow-sm">
@@ -521,10 +486,6 @@ export default function CompanyDetailPage({ params }: PageProps) {
                   filteredData.map((tx, idx) => {
                     const isSelected = selectedInns.includes(tx.inn);
                     const isExpanded = expandedInns.includes(tx.inn);
-
-                    // Изоҳ мантиғи янгиланди: 
-                    // tx.difference > 0 (Чиққан пул кўп) -> Ҳисоб фактура олиш керак
-                    // tx.difference < 0 (Минус бўлса, Счёт-фактура кўп) -> Қарзмиз
                     const isInvoiceNeeded = tx.difference > 0;
                     const isDebt = tx.difference < 0;
 
@@ -546,19 +507,10 @@ export default function CompanyDetailPage({ params }: PageProps) {
                             {tx.name}
                           </td>
                           <td className="p-2 border border-gray-400 text-center text-gray-800">{tx.inn}</td>
-
-                          <td className="p-2 border border-gray-400 text-right text-gray-900">
-                            {formatNum(tx.totalDebit)}
-                          </td>
-                          <td className="p-2 border border-gray-400 text-right text-gray-900">
-                            {formatNum(tx.totalCredit)}
-                          </td>
-                          <td className={`p-2 border border-gray-400 text-right font-semibold ${statusColor}`}>
-                            {formatNum(tx.difference)}
-                          </td>
-                          <td className={`p-2 border border-gray-400 text-left pl-4 font-medium ${statusColor}`}>
-                            {statusText}
-                          </td>
+                          <td className="p-2 border border-gray-400 text-right text-gray-900">{formatNum(tx.totalDebit)}</td>
+                          <td className="p-2 border border-gray-400 text-right text-gray-900">{formatNum(tx.totalCredit)}</td>
+                          <td className={`p-2 border border-gray-400 text-right font-semibold ${statusColor}`}>{formatNum(tx.difference)}</td>
+                          <td className={`p-2 border border-gray-400 text-left pl-4 font-medium ${statusColor}`}>{statusText}</td>
                           <td className="p-2 border border-gray-400 text-center">
                             <button
                               onClick={() => toggleExpand(tx.inn)}
@@ -569,7 +521,6 @@ export default function CompanyDetailPage({ params }: PageProps) {
                           </td>
                         </tr>
 
-                        {/* 🌟 ОЙМА-ОЙ ИЧКИ ЖАДВАЛ */}
                         {isExpanded && (
                           <tr>
                             <td colSpan={8} className="p-0 border border-gray-400">
@@ -596,7 +547,7 @@ export default function CompanyDetailPage({ params }: PageProps) {
                                         const bucket = tx.monthlyData[period] || { debit: 0, credit: 0 };
                                         const dVal = bucket.debit || 0;
                                         const cVal = bucket.credit || 0;
-                                        const diff = dVal - cVal; // Янги формула: Чиққан пул - Келган пул
+                                        const diff = dVal - cVal;
 
                                         return (
                                           <tr key={period} className="hover:bg-indigo-50/30 transition-colors">
@@ -626,47 +577,8 @@ export default function CompanyDetailPage({ params }: PageProps) {
                                         );
                                       })}
                                     </tbody>
-                                    <tfoot className="bg-indigo-50 font-black text-indigo-900 border-t border-indigo-200">
-                                      <tr>
-                                        <td className="p-3 border-r border-indigo-100">ЖАМИ:</td>
-                                        <td className="p-3 text-right border-r border-indigo-100">{formatNum(tx.totalDebit)}</td>
-                                        <td className="p-3 text-right border-r border-indigo-100">{formatNum(tx.totalCredit)}</td>
-                                        <td className={`p-3 text-right ${tx.difference < 0 ? 'text-red-600' : tx.difference > 0 ? 'text-amber-600' : 'text-gray-600'}`}>{formatNum(tx.difference)}</td>
-                                      </tr>
-                                    </tfoot>
                                   </table>
                                 </div>
-
-                                {/* 🧾 Барча ўтказмалар */}
-                                {tx.transactions && tx.transactions.length > 0 && (
-                                  <div className="mt-4 overflow-hidden rounded-xl border border-indigo-200 bg-white shadow-sm">
-                                    <div className="px-4 py-2 bg-indigo-50 text-indigo-900 font-bold text-sm border-b border-indigo-100">
-                                      🧾 Барча ўтказмалар ({tx.transactions.length})
-                                    </div>
-                                    <div className="max-h-64 overflow-y-auto">
-                                      <table className="w-full text-xs text-left">
-                                        <thead className="bg-gray-50 text-gray-600 sticky top-0">
-                                          <tr>
-                                            <th className="p-2 border-r border-gray-100">Сана</th>
-                                            <th className="p-2 border-r border-gray-100">Тури</th>
-                                            <th className="p-2 border-r border-gray-100 text-right">Дебет</th>
-                                            <th className="p-2 text-right">Кредит</th>
-                                          </tr>
-                                        </thead>
-                                        <tbody className="divide-y divide-gray-50">
-                                          {tx.transactions.map((t, ti) => (
-                                            <tr key={ti} className="hover:bg-gray-50">
-                                              <td className="p-2 border-r border-gray-100 text-gray-700">{t.date}</td>
-                                              <td className="p-2 border-r border-gray-100 text-gray-500">{t.type}</td>
-                                              <td className="p-2 border-r border-gray-100 text-right">{t.debit ? formatNum(t.debit) : '-'}</td>
-                                              <td className="p-2 text-right">{t.credit ? formatNum(t.credit) : '-'}</td>
-                                            </tr>
-                                          ))}
-                                        </tbody>
-                                      </table>
-                                    </div>
-                                  </div>
-                                )}
                               </div>
                             </td>
                           </tr>
@@ -677,7 +589,6 @@ export default function CompanyDetailPage({ params }: PageProps) {
                 )}
               </tbody>
 
-              {/* 🏁 ЯКУНИЙ ЖАМИ */}
               {displayData.length > 0 && (
                 <tfoot className="sticky bottom-0 z-30 bg-gray-100 text-black font-bold border-t-2 border-gray-400">
                   <tr>
@@ -701,4 +612,4 @@ export default function CompanyDetailPage({ params }: PageProps) {
       )}
     </div>
   );
-}
+};
