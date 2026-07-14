@@ -11,7 +11,8 @@ import {
   Cpu,
   Lock,
   ShieldCheck,
-  Building2
+  Building2,
+  Boxes // 📦 Yangi ikonka qo'shildi
 } from "lucide-react";
 import { app } from "@/lib/firebase";
 
@@ -53,19 +54,17 @@ export default function HubPage() {
   if (!isAuthenticated) return null;
 
   return (
-    // justify-center butunlay olib tashlandi. flex-col qilib, header eng tepaga qadab qo'yildi
     <div className={`min-h-screen transition-colors duration-500 ${darkMode ? "bg-slate-950 text-slate-100" : "bg-slate-50 text-slate-800"} px-4 md:px-8 pt-6 relative overflow-hidden flex flex-col`}>
 
       {/* Orqa fon uchun chiroyli bezaklar */}
       <div className="absolute top-[-50px] left-1/2 -translate-x-1/2 w-[800px] h-[300px] bg-indigo-500/10 dark:bg-indigo-500/5 blur-[120px] rounded-full pointer-events-none" />
 
-      {/* 🛡️ TOP BAR (Endi doim ekranning eng yuqori qismida turadi) */}
+      {/* 🛡️ TOP BAR */}
       <div className="w-full max-w-7xl mx-auto flex justify-between items-center pb-4 border-b border-slate-300/60 dark:border-slate-800 relative z-10">
         <div className="flex items-center gap-3">
           <div className={`p-2.5 rounded-lg ${darkMode ? "bg-indigo-500/20 text-indigo-400" : "bg-indigo-100 text-indigo-700"}`}>
             <Building2 className="w-5 h-5" />
           </div>
-          {/* Maxfiy ulanish olib tashlandi, faqat nom qoldi */}
           <h2 className="text-sm md:text-base font-black uppercase tracking-widest leading-none">
             Бухгалтерия Хизматлари Маркази
           </h2>
@@ -80,8 +79,8 @@ export default function HubPage() {
         </button>
       </div>
 
-      {/* 💎 MAIN CONTENT (Tepadan ozgina pastga tushirilgan, o'rtada chiroyli turishi uchun) */}
-      <div className="max-w-5xl mx-auto w-full mt-10 md:mt-16 space-y-12 relative z-10">
+      {/* 💎 MAIN CONTENT */}
+      <div className="max-w-7xl mx-auto w-full mt-10 md:mt-16 space-y-12 relative z-10">
 
         {/* TITLE & BRANDING */}
         <div className="text-center max-w-2xl mx-auto space-y-4">
@@ -96,8 +95,8 @@ export default function HubPage() {
           </p>
         </div>
 
-        {/* 🎛️ 2 TA DAXSHAT ASOSIY TUGMA */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+        {/* 🎛️ 3 TA ASOSIY TUGMA (Responsive grid o'zgartirildi) */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
 
           {/* 1-TUGMA: Excel Smart-Audit */}
           <Link href="/excel-audit" className="block group">
@@ -127,7 +126,35 @@ export default function HubPage() {
             </div>
           </Link>
 
-          {/* 2-TUGMA: AI Bashorat Moduli (SOON) */}
+          {/* 2-TUGMA: Виртуал Омбор (Астатка) - YANGI QO'SHILGAN BO'LIM */}
+          <Link href="/astatka" className="block group">
+            <div className={`p-8 rounded-3xl border text-left transition-all duration-500 relative shadow-2xl flex flex-col justify-between h-64 overflow-hidden ${darkMode
+              ? "bg-slate-900/60 border-slate-800 text-slate-300 hover:border-indigo-500 hover:bg-slate-900"
+              : "bg-white border-slate-200/80 text-slate-700 hover:border-indigo-600 hover:shadow-indigo-600/10"
+              }`}>
+              {/* Karta ichidagi fon effekti */}
+              <div className="absolute top-0 right-0 p-16 bg-indigo-500/5 rounded-bl-full group-hover:scale-150 transition-transform duration-700 pointer-events-none" />
+
+              <div className="flex justify-between items-start w-full relative z-10">
+                <div className={`p-4 rounded-2xl transition-transform group-hover:scale-110 duration-300 ${darkMode ? "bg-indigo-500/10 text-indigo-400" : "bg-indigo-50 text-indigo-600"}`}>
+                  <Boxes className="w-8 h-8" />
+                </div>
+                <span className="text-xs font-black uppercase tracking-widest px-4 py-2 rounded-xl bg-indigo-600 text-white shadow-lg shadow-indigo-600/30 group-hover:bg-indigo-500 group-hover:shadow-indigo-500/40 transition-all flex items-center gap-1">
+                  Кириш <span>→</span>
+                </span>
+              </div>
+              <div className="space-y-2 relative z-10">
+                <h3 className={`text-2xl font-extrabold tracking-tight ${darkMode ? "text-white" : "text-slate-900"} group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors`}>
+                  Виртуал Омбор (Астатка)
+                </h3>
+                <p className="text-sm text-slate-400 max-w-sm">
+                  Кирувчи ва чиқувчи счёт-фактуралар асосида МХИК (ИКПУ) кодлари бўйича товар қолдиқларини автоматик ҳисоблаш тизими.
+                </p>
+              </div>
+            </div>
+          </Link>
+
+          {/* 3-TUGMA: AI Bashorat Moduli (SOON) */}
           <div
             className={`p-8 rounded-3xl border text-left relative flex flex-col justify-between h-64 select-none opacity-50 bg-gradient-to-br transition-all duration-300 overflow-hidden ${darkMode
               ? "from-slate-900 to-slate-950 border-slate-900/60"

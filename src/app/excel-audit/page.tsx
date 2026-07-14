@@ -181,7 +181,7 @@ export default function ExcelAuditPage() {
         {/* HEADER BAR */}
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 pb-4 border-b border-slate-200 dark:border-slate-800">
           <div className="flex items-center gap-4">
-            <NextLink href="/dashboard">
+            <NextLink href="/">
               <button className={`p-2.5 rounded-xl border transition ${darkMode ? "bg-slate-900 border-slate-800 text-slate-300 hover:bg-slate-800" : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50"}`}>
                 <ArrowLeft className="w-4 h-4" />
               </button>
@@ -318,8 +318,8 @@ export default function ExcelAuditPage() {
                             <button
                               onClick={() => handleDeleteCompany(company.id, company.name)}
                               className={`p-1.5 rounded-lg border transition-all ${darkMode
-                                  ? "bg-slate-900 border-slate-800 text-slate-500 hover:text-rose-400 hover:border-rose-500/30"
-                                  : "bg-white border-slate-200 text-slate-400 hover:text-rose-600 hover:border-rose-200"
+                                ? "bg-slate-900 border-slate-800 text-slate-500 hover:text-rose-400 hover:border-rose-500/30"
+                                : "bg-white border-slate-200 text-slate-400 hover:text-rose-600 hover:border-rose-200"
                                 }`}
                               title="Корхонани ўчириш"
                             >
@@ -363,8 +363,8 @@ export default function ExcelAuditPage() {
                   onChange={(e) => setNewCompanyName(e.target.value)}
                   placeholder="Masalan: 'Premium Trade' MChJ"
                   className={`w-full px-4 py-3 rounded-xl border text-sm outline-none transition-all ${darkMode
-                      ? "bg-slate-950 border-slate-800 focus:border-indigo-500 text-white placeholder-slate-600"
-                      : "bg-slate-50 border-slate-200 focus:border-indigo-600 text-slate-900 placeholder-slate-400"
+                    ? "bg-slate-950 border-slate-800 focus:border-indigo-500 text-white placeholder-slate-600"
+                    : "bg-slate-50 border-slate-200 focus:border-indigo-600 text-slate-900 placeholder-slate-400"
                     }`}
                 />
               </div>
@@ -380,8 +380,8 @@ export default function ExcelAuditPage() {
                   onChange={(e) => setNewCompanyInn(e.target.value.replace(/\D/g, ""))}
                   placeholder="9 xonali STIR raqami"
                   className={`w-full px-4 py-3 rounded-xl border font-mono text-sm outline-none transition-all ${darkMode
-                      ? "bg-slate-950 border-slate-800 focus:border-indigo-500 text-white placeholder-slate-600"
-                      : "bg-slate-50 border-slate-200 focus:border-indigo-600 text-slate-900 placeholder-slate-400"
+                    ? "bg-slate-950 border-slate-800 focus:border-indigo-500 text-white placeholder-slate-600"
+                    : "bg-slate-50 border-slate-200 focus:border-indigo-600 text-slate-900 placeholder-slate-400"
                     }`}
                 />
               </div>
