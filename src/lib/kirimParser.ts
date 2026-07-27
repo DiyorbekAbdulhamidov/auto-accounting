@@ -24,6 +24,7 @@
 
 import * as XLSX from 'xlsx';
 import iconv from 'iconv-lite';
+import { createHash } from 'crypto';
 
 export type Cell = string | number | boolean | Date | null | undefined;
 
@@ -64,6 +65,13 @@ export interface SkippedInvoice {
   amount: number;
 }
 
+export interface YearTotal {
+  year: string;
+  bankCredit: number;
+  facturaSent: number;
+  difference: number;
+}
+
 export interface KirimReport {
   parties: PartyRow[];
   totals: {
@@ -81,6 +89,7 @@ export interface KirimReport {
     bankCreditRaw: number;   // ko'chirmadagi umumiy kredit (ichki o'tkazmalar bilan)
     invoiceCount: number;
     skippedInvoices: SkippedInvoice[];
+    byYear: YearTotal[];
     periodFrom: string | null;
     periodTo: string | null;
     warnings: string[];
@@ -418,6 +427,32 @@ function findHeader(
 
 const TOTAL_ROW_RE = /(^|[^А-ЯЁA-Z])(ИТОГО|ЖАМИ|ВСЕГО|JAMI|TOTAL|ОБОРОТ ВСЕГО|ОБОРОТЫ ВСЕГО)([^А-ЯЁA-Z]|$)/;
 
+// Shu dasturning O'ZI chiqargan natija fayli qaytadan yuklanганини aniqlash.
+// Bunday fayl na bank ko'chirmasi, na faktura reestri - lekin jim o'tkazib
+// yuborilsa, foydalanuvchi haqiqiy oborotkani yuklamaganini sezmay qoladi.
+function isOwnExportSheet(rows: Cell[][]): boolean {
+  const limit = Math.min(8, rows.length);
+  for (let r = 0; r < limit; r++) {
+    const text = (rows[r] || []).map((v) => cellText(v)).join('|').toUpperCase();
+    if (!text.includes('ФИРМА НОМЛАРИ')) continue;
+    if (/(КЕЛГАН|ЧИҚҚАН|ЧИККАН)\s+ПУЛ\s+ЖАМИ/.test(text)) return true;
+    if (/СЧЕТ-Ф\s+ЖАМИ/.test(text)) return true;
+  }
+  return false;
+}
+
+// Varaqda umuman ma'lumot bormi? (bo'sh/dekorativ varaqlar uchun
+// keraksiz ogohlantirish chiqmasligi kerak)
+function hasContent(rows: Cell[][]): boolean {
+  let filled = 0;
+  for (const row of rows) {
+    if (!row) continue;
+    for (const v of row) if (cellText(v) !== '') { filled++; break; }
+    if (filled >= 5) return true;
+  }
+  return false;
+}
+
 function isTotalRow(row: Cell[]): boolean {
   for (let c = 0; c < Math.min(row.length, 4); c++) {
     const s = cellText(row[c]).toUpperCase();
@@ -692,7 +727,19 @@ export function analyzeKirim(files: InputFile[]): KirimReport {
   let totalCreditRaw = 0;
   let totalDebitRaw = 0;
 
+  // Aynan bir xil fayl ikki marta tanlangan bo'lsa - ikkinchisi o'qilmaydi
+  // (summa ikkilanib ketmasligi uchun)
+  const seenFileHash = new Map<string, string>();
+
   for (const file of files) {
+    const hash = createHash('sha1').update(file.buffer).digest('hex');
+    const twin = seenFileHash.get(hash);
+    if (twin) {
+      warnings.push(`"${file.name}" — "${twin}" файлининг айнан нусхаси, иккинчи марта ҳисобланмади.`);
+      continue;
+    }
+    seenFileHash.set(hash, file.name);
+
     let sheets: SheetData[];
     try {
       sheets = readSheets(file);
@@ -755,10 +802,50 @@ export function analyzeKirim(files: InputFile[]): KirimReport {
   if (bankSheets.length === 0) warnings.push('Банк кўчирмаси топилмади — фақат фактуралар ҳисобланди.');
   if (facturaSheets.length === 0) warnings.push('Счёт-фактура реестри топилмади — фақат банк кирими ҳисобланди.');
 
+  // --- Takroriy fakturalarni olib tashlash ---
+  // Bir xil davr uchun ikki marta eksport qilingan reestrlar (yoki bitta
+  // fayl ikki marta yuklangan holat) summani ikkilantirib yubormasligi kerak.
+  const seenInvoice = new Set<string>();
+  const uniqueInvoices: ParsedInvoice[] = [];
+  let dupInvoiceCount = 0;
+  let dupInvoiceSum = 0;
+  for (const inv of allInvoices) {
+    const sig = inv.id || `${inv.number}|${inv.inn}|${inv.amount}`;
+    if (seenInvoice.has(sig)) {
+      dupInvoiceCount++;
+      dupInvoiceSum += inv.amount;
+      continue;
+    }
+    seenInvoice.add(sig);
+    uniqueInvoices.push(inv);
+  }
+  if (dupInvoiceCount > 0) {
+    warnings.push(
+      `${dupInvoiceCount} та такрорий счёт-фактура (${dupInvoiceSum.toLocaleString('ru-RU')} сўм) ` +
+      `бир марта ҳисобланди — файллар устма-уст тушган.`
+    );
+  }
+
   // --- Kontragentlar jadvali ---
   const parties = new Map<string, PartyRow>();
-  const byNorm = new Map<string, string>(); // normallashgan nom -> key
-  const byInn = new Map<string, string>();  // STIR -> key
+  const byInn = new Map<string, string>();               // STIR -> key
+  const normIndex = new Map<string, Set<string>>();      // normallashgan nom -> key(lar)
+
+  // Nom bo'yicha ulash FAQAT bitta nomzod bo'lganda ishonchli.
+  // Ikki xil STIRli firma bir xil nomga normallашса - taxmin qilinmaydi.
+  function resolveByNorm(norm: string): string | null {
+    if (!norm) return null;
+    const set = normIndex.get(norm);
+    if (!set || set.size !== 1) return null;
+    return [...set][0];
+  }
+  function indexNorm(norm: string, key: string) {
+    if (!norm) return;
+    let set = normIndex.get(norm);
+    if (!set) { set = new Set(); normIndex.set(norm, set); }
+    set.add(key);
+  }
+  const ambiguousNames = new Set<string>();
 
   const ownNorm = normalizeName(ownName);
   // Ko'rsatiladigan nom uchun E-faktura reestridagi rasmiy nom ustun turadi
@@ -801,15 +888,19 @@ export function analyzeKirim(files: InputFile[]): KirimReport {
     return p.monthly[period];
   }
 
-  // 1. Avval fakturalar — ular STIR bilan keladi, indeks shular asosida quriladi
-  for (const inv of allInvoices) {
+  // 1. Avval fakturalar — ularda STIR har doim bor, indeks shular asosida quriladi.
+  //    MUHIM: STIR bo'lsa, kalit FAQAT STIR bo'yicha olinadi. Nom bo'yicha
+  //    birlashtirish bu yerda ishlatilmaydi — aks holda nomi o'xshash, lekin
+  //    STIRi boshqa ikki firma bitta qatorga qo'shilib ketishi mumkin edi.
+  for (const inv of uniqueInvoices) {
     const norm = normalizeName(inv.name);
-    let key = (inv.inn !== '-' ? byInn.get(inv.inn) : undefined) || (norm ? byNorm.get(norm) : undefined);
-    if (!key) key = inv.inn !== '-' ? `INN:${inv.inn}` : `NAME:${norm || 'UNKNOWN'}`;
+    const key = inv.inn !== '-'
+      ? (byInn.get(inv.inn) || `INN:${inv.inn}`)
+      : (resolveByNorm(norm) || `NAME:${norm || 'UNKNOWN'}`);
 
     const p = touch(key, inv.inn, inv.name, true);
     if (inv.inn !== '-') byInn.set(inv.inn, key);
-    if (norm) byNorm.set(norm, key);
+    indexNorm(norm, key);
 
     p.facturaSent += inv.amount;
     bucket(p, periodKey(inv.date)).factura += inv.amount;
@@ -818,6 +909,10 @@ export function analyzeKirim(files: InputFile[]): KirimReport {
 
   // 2. Bank kirimlari — STIR bo'lsa STIR bo'yicha, aks holda nom bo'yicha ulanadi
   let ownTransferTotal = 0;
+  const paySignatures = new Set<string>();
+  let dupPayCount = 0;
+  let dupPaySum = 0;
+
   for (const pay of allPayments) {
     const norm = normalizeName(pay.name);
 
@@ -829,12 +924,31 @@ export function analyzeKirim(files: InputFile[]): KirimReport {
       continue;
     }
 
-    let key = (pay.inn !== '-' ? byInn.get(pay.inn) : undefined) || (norm ? byNorm.get(norm) : undefined);
-    if (!key) key = pay.inn !== '-' ? `INN:${pay.inn}` : `NAME:${norm || 'UNKNOWN'}`;
+    // Bir xil ko'chirma ikki marta yuklanганini sezish uchun (o'chirilmaydi,
+    // faqat ogohlantiriladi — bir kunda bir xil summali ikki to'lov ham bo'ladi)
+    const sig = `${isoDay(pay.date)}|${pay.amount}|${norm}|${pay.doc}`;
+    if (paySignatures.has(sig)) { dupPayCount++; dupPaySum += pay.amount; }
+    else paySignatures.add(sig);
+
+    let key: string | undefined;
+    if (pay.inn !== '-') {
+      key = byInn.get(pay.inn);
+      if (!key) {
+        // Bankdagi STIR fakturalar ичida topilmadi: nom bo'yicha faqat
+        // STIRi noma'lum qatorga qo'shilishi mumkin
+        const nk = resolveByNorm(norm);
+        if (nk && parties.get(nk)?.inn === '-') key = nk;
+      }
+      if (!key) key = `INN:${pay.inn}`;
+    } else {
+      key = resolveByNorm(norm) || undefined;
+      if (!key && norm && (normIndex.get(norm)?.size || 0) > 1) ambiguousNames.add(pay.name);
+      if (!key) key = `NAME:${norm || 'UNKNOWN'}`;
+    }
 
     const p = touch(key, pay.inn, pay.name);
     if (pay.inn !== '-') byInn.set(pay.inn, key);
-    if (norm) byNorm.set(norm, key);
+    indexNorm(norm, key);
 
     p.bankCredit += pay.amount;
     bucket(p, periodKey(pay.date)).credit += pay.amount;
@@ -849,6 +963,19 @@ export function analyzeKirim(files: InputFile[]): KirimReport {
   if (ownTransferTotal > 0) {
     warnings.push(
       `Ўз ҳисобварағингиз ичидаги ҳаракатлар (${ownTransferTotal.toLocaleString('ru-RU')} сўм) контрагент сифатида ҳисобланмади.`
+    );
+  }
+  if (dupPayCount > 0) {
+    warnings.push(
+      `ДИҚҚАТ: банк кўчирмасида ${dupPayCount} та бир хил ўтказма топилди ` +
+      `(${dupPaySum.toLocaleString('ru-RU')} сўм) — битта файлни икки марта юклаган бўлишингиз мумкин. ` +
+      `Улар ҳисобдан чиқарилмади, текширинг.`
+    );
+  }
+  if (ambiguousNames.size > 0) {
+    warnings.push(
+      `Қуйидаги банк номлари бир нечта фирмага тўғри келгани учун уланмади: ` +
+      `${[...ambiguousNames].slice(0, 5).join(', ')}. Уларни қўлда текширинг.`
     );
   }
 

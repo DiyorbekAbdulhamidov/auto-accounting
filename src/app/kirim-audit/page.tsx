@@ -341,11 +341,10 @@ export default function KirimAuditPage() {
             <div className="flex flex-col md:flex-row gap-4 items-stretch">
               <label className="w-full md:w-3/4 cursor-pointer">
                 <div
-                  className={`flex items-center gap-3 p-4 border-2 border-dashed rounded-xl transition-all duration-300 ${
-                    files.length > 0
+                  className={`flex items-center gap-3 p-4 border-2 border-dashed rounded-xl transition-all duration-300 ${files.length > 0
                       ? "border-emerald-500/50 bg-emerald-500/5"
                       : "border-slate-200 dark:border-slate-800 bg-slate-100 dark:bg-slate-950/50 hover:border-slate-400 dark:hover:border-slate-600"
-                  }`}
+                    }`}
                 >
                   <div className="p-2.5 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 shrink-0">
                     <CloudUpload className="w-5 h-5" />
@@ -427,7 +426,7 @@ export default function KirimAuditPage() {
         {report && totals && (
           <>
             {/* 📊 УМУМИЙ КЎРСАТКИЧЛАР */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            {/* <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               <div className="anim-fade-up delay-1 surface p-6 flex items-center justify-between transition-all duration-300 hover:border-emerald-500/30 hover:-translate-y-1">
                 <div className="space-y-1.5">
                   <p className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-widest">
@@ -480,7 +479,7 @@ export default function KirimAuditPage() {
                   <Scale className="w-5 h-5" />
                 </div>
               </div>
-            </div>
+            </div> */}
 
             {/* Ҳисобга олинмаган фактуралар */}
             {report.meta.skippedInvoices.length > 0 && (
@@ -603,11 +602,10 @@ export default function KirimAuditPage() {
                               <td className="p-3 text-center">
                                 <button
                                   onClick={() => toggleExpand(p.key)}
-                                  className={`inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-bold transition-all duration-300 border ${
-                                    isOpen
+                                  className={`inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-bold transition-all duration-300 border ${isOpen
                                       ? "bg-emerald-600 text-white border-emerald-600 shadow-lg shadow-emerald-600/25"
                                       : "bg-white dark:bg-slate-900/60 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-800 hover:text-emerald-600 dark:hover:text-emerald-400 hover:border-emerald-500/40"
-                                  }`}
+                                    }`}
                                 >
                                   {isOpen ? "Ёпиш" : "Очиш"}
                                   <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-300 ${isOpen ? "rotate-180" : ""}`} />
