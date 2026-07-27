@@ -1,12 +1,26 @@
-// app/company/[id]/page.tsx
+// app/excel-audit/companies/[id]/page.tsx
 "use client";
 import React, { useState, use, useMemo, useEffect } from "react";
 // 🔥 FIREBASE IMPORTLARI
 import { collection, addDoc, serverTimestamp, query, where, getDocs } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-// 📊 EXCEL IMPORTLARI (CHiroylli dizayn uchun)
+// 📊 EXCEL IMPORTLARI
 import ExcelJS from "exceljs";
 import { saveAs } from "file-saver";
+import NextLink from "next/link";
+import {
+  ArrowLeft,
+  ChevronDown,
+  CloudUpload,
+  Download,
+  FileSpreadsheet,
+  Loader2,
+  Save,
+  Search,
+  SlidersHorizontal,
+} from "lucide-react";
+import SortHeader from "@/components/SortHeader";
+import ThemeToggle from "@/components/ThemeToggle";
 
 interface MonthlyBucket {
   debit: number;
@@ -49,6 +63,18 @@ function sortedPeriods(monthlyData: Record<string, MonthlyBucket>): string[] {
   return Object.keys(monthlyData || {}).sort();
 }
 
+// Aniqlangan format nomlarini chiroyli ko'rsatish
+const FORMAT_LABELS: Record<string, string> = {
+  HAMKORBANK: "Hamkorbank",
+  IPOTEKA_ASBT: "Ipoteka / ASBT",
+  FAKTURA: "Счёт-фактура",
+  UNIVERSAL: "Universal parser",
+  GENERIC: "Umumiy format",
+};
+
+type SortKey = "name" | "inn" | "debit" | "credit" | "diff";
+type SortDir = "asc" | "desc";
+
 export default function CompanyDetailPage({ params }: PageProps) {
   const resolvedParams = use(params);
   const companyId = resolvedParams.id;
@@ -66,6 +92,10 @@ export default function CompanyDetailPage({ params }: PageProps) {
 
   const [searchTerm, setSearchTerm] = useState("");
   const [filterType, setFilterType] = useState<"ALL" | "DIFF" | "EQUAL">("DIFF");
+
+  // 🔽 Jadval sortlash holati
+  const [sortKey, setSortKey] = useState<SortKey>("name");
+  const [sortDir, setSortDir] = useState<SortDir>("asc");
 
   const formatNum = (num: number) => {
     if (!num && num !== 0) return "-";
@@ -167,8 +197,9 @@ export default function CompanyDetailPage({ params }: PageProps) {
     );
   };
 
+  // 🔍 Qidiruv + filtr + sort - bitta zanjirda
   const filteredData = useMemo(() => {
-    return parsedData.filter((item) => {
+    const result = parsedData.filter((item) => {
       const matchesSearch =
         item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
         item.inn.includes(searchTerm);
@@ -178,7 +209,26 @@ export default function CompanyDetailPage({ params }: PageProps) {
       if (filterType === "EQUAL") return Math.abs(item.difference) <= 0.01;
       return true;
     });
-  }, [parsedData, searchTerm, filterType]);
+
+    const dir = sortDir === "asc" ? 1 : -1;
+    result.sort((a, b) => {
+      switch (sortKey) {
+        case "name":
+          return dir * (a.name || "").localeCompare(b.name || "", "ru");
+        case "inn":
+          return dir * (a.inn || "").localeCompare(b.inn || "");
+        case "debit":
+          return dir * (a.totalDebit - b.totalDebit);
+        case "credit":
+          return dir * (a.totalCredit - b.totalCredit);
+        case "diff":
+          return dir * (a.difference - b.difference);
+        default:
+          return 0;
+      }
+    });
+    return result;
+  }, [parsedData, searchTerm, filterType, sortKey, sortDir]);
 
   const displayData = useMemo(() =>
     filteredData.filter((tx) => selectedInns.includes(tx.inn)),
@@ -204,6 +254,15 @@ export default function CompanyDetailPage({ params }: PageProps) {
 
   const toggleExpand = (inn: string) => {
     setExpandedInns((prev) => prev.includes(inn) ? prev.filter((i) => i !== inn) : [...prev, inn]);
+  };
+
+  const toggleSort = (key: SortKey) => {
+    if (sortKey === key) {
+      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    } else {
+      setSortKey(key);
+      setSortDir(key === "name" || key === "inn" ? "asc" : "desc");
+    }
   };
 
   const grandTotals = displayData.reduce(
@@ -264,16 +323,13 @@ export default function CompanyDetailPage({ params }: PageProps) {
     ];
 
     // --- Sarlavha qatorlari ---
-    // 1-qator (Kompaniya nomi - katta harflarda qalin qilib)
     const titleRow = worksheet.addRow(["OOO \"AZAM-MARKET ANGREN\""]);
     titleRow.getCell(1).font = { bold: true, size: 14, name: "Times New Roman" };
 
-    // 2-qator (Sana - o'ng tarafda)
     const dateRow = worksheet.addRow(["", "", "", "", "", `${today} йил ҳолатига`]);
     dateRow.getCell(6).alignment = { horizontal: "right" };
     dateRow.getCell(6).font = { size: 11, name: "Times New Roman" };
 
-    // 3-qator (Jadval sarlavhalari - Balandroq qilib o'rtada saqlash)
     const headerRow = worksheet.addRow([
       "Фирма номлари",
       "СТИР",
@@ -282,9 +338,8 @@ export default function CompanyDetailPage({ params }: PageProps) {
       "Фарқи",
       "Изоҳ"
     ]);
-    headerRow.height = 30; // Qator balandligi
+    headerRow.height = 30;
 
-    // Sarlavha stillari va chiziqlari
     headerRow.eachCell((cell) => {
       cell.font = { bold: true, name: "Times New Roman", size: 12 };
       cell.alignment = { horizontal: "center", vertical: "middle", wrapText: true };
@@ -311,7 +366,6 @@ export default function CompanyDetailPage({ params }: PageProps) {
         statusText
       ]);
 
-      // Ma'lumot kataklari stillari
       row.eachCell((cell, colNumber) => {
         cell.font = { name: "Times New Roman", size: 11 };
         cell.border = {
@@ -328,14 +382,13 @@ export default function CompanyDetailPage({ params }: PageProps) {
         } else if (colNumber === 6) {
           cell.alignment = { horizontal: "center", vertical: "middle" };
         } else {
-          // Pul summalari ustunlari (#,##0.00 formati, masalan: 1 500 000,00)
           cell.numFmt = '#,##0.00';
           cell.alignment = { horizontal: "right", vertical: "middle" };
         }
       });
     });
 
-    // --- ЖАМИ qatori (Oxirgi qator) ---
+    // --- ЖАМИ qatori ---
     const grandStatusText = grandTotals.diff > 0 ? 'Ҳисоб фактура олиш керак' : grandTotals.diff < 0 ? 'Қарзмиз' : '-';
 
     const grandRow = worksheet.addRow([
@@ -347,11 +400,10 @@ export default function CompanyDetailPage({ params }: PageProps) {
       grandStatusText
     ]);
 
-    // Jami qatorining stillari (qalin yozuv va chiziqlar)
     grandRow.eachCell((cell, colNumber) => {
       cell.font = { bold: true, name: "Times New Roman", size: 12 };
       cell.border = {
-        top: { style: "medium" }, // Tepasi qalinroq chiziq bilan ajralib turadi
+        top: { style: "medium" },
         left: { style: "thin" },
         bottom: { style: "thin" },
         right: { style: "thin" }
@@ -367,7 +419,6 @@ export default function CompanyDetailPage({ params }: PageProps) {
       }
     });
 
-    // Faylni buferga yig'ish va saqlash
     const buffer = await workbook.xlsx.writeBuffer();
     const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
     saveAs(blob, `Sverka_${today}.xlsx`);
@@ -375,110 +426,161 @@ export default function CompanyDetailPage({ params }: PageProps) {
 
   if (isFetchingData) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-gray-50/50 text-gray-500 font-medium">
-        <span className="animate-pulse">Маълумотлар юкланмоқда... ⏳</span>
+      <div className="flex flex-col items-center justify-center min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-500 dark:text-slate-400">
+        <Loader2 className="h-12 w-12 text-indigo-500 animate-spin" />
+        <p className="mt-4 font-semibold text-sm animate-pulse">Маълумотлар юкланмоқда...</p>
       </div>
     );
   }
 
   return (
-    <div className="p-4 md:p-8 max-w-[100vw] overflow-x-hidden space-y-6 bg-gray-50/50 min-h-screen">
-      <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 max-w-4xl mx-auto">
-        <h1 className="text-2xl font-black text-gray-800 mb-2">Далолатнома (Сверка)</h1>
-        <p className="text-sm text-gray-500 mb-6">
-          Банк айланмаси ва Э-Фактура файлларни юкланг, таҳрирланг ва таҳлил қилинг.
-        </p>
+    <div className="p-4 md:p-8 max-w-[100vw] overflow-x-hidden space-y-6 bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 min-h-screen relative">
+      {/* Orqa fon bezagi */}
+      <div className="anim-blob absolute top-[-100px] left-1/2 -translate-x-1/2 w-[700px] h-[300px] bg-indigo-500/[0.07] blur-[130px] rounded-full pointer-events-none" />
 
-        <form onSubmit={handleFileUpload} className="flex flex-col gap-4">
-          <div className="flex flex-col md:flex-row gap-4 items-end">
-            <div className="w-full md:w-3/4">
+      {/* 📤 YUKLASH KARTASI */}
+      <div className="anim-fade-up surface glow-indigo p-6 md:p-8 max-w-4xl mx-auto relative z-10">
+        <div className="flex items-center gap-4 mb-1">
+          <NextLink href="/excel-audit">
+            <button className="p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/60 text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:border-slate-300 dark:hover:border-slate-700 transition-all duration-300 hover:-translate-x-0.5">
+              <ArrowLeft className="w-4 h-4" />
+            </button>
+          </NextLink>
+          <div>
+            <h1 className="text-2xl font-black tracking-tight text-slate-900 dark:text-white">Далолатнома (Сверка)</h1>
+            <p className="text-sm text-slate-500">
+              Банк айланмаси ва Э-Фактура файлларни юкланг, таҳрирланг ва таҳлил қилинг.
+            </p>
+          </div>
+          <div className="ml-auto"><ThemeToggle /></div>
+        </div>
+
+        <form onSubmit={handleFileUpload} className="flex flex-col gap-4 mt-6">
+          <div className="flex flex-col md:flex-row gap-4 items-stretch">
+            <label className="w-full md:w-3/4 cursor-pointer">
+              <div className={`flex items-center gap-3 p-4 border-2 border-dashed rounded-xl transition-all duration-300 ${files.length > 0 ? "border-indigo-500/50 bg-indigo-500/5" : "border-slate-200 dark:border-slate-800 bg-slate-100 dark:bg-slate-950/50 hover:border-slate-400 dark:hover:border-slate-600"}`}>
+                <div className="p-2.5 rounded-xl bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 shrink-0">
+                  <CloudUpload className="w-5 h-5" />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-sm font-bold text-slate-700 dark:text-slate-200 truncate">
+                    {files.length > 0
+                      ? `${files.length} та файл танланди`
+                      : "Excel / CSV файлларни танланг"}
+                  </p>
+                  <p className="text-xs text-slate-500 truncate">
+                    {files.length > 0 ? files.map((f) => f.name).join(", ") : ".xls, .xlsx, .csv — бир нечта файлни бирга юкласа бўлади"}
+                  </p>
+                </div>
+              </div>
               <input
                 type="file"
                 accept=".xls,.xlsx,.csv"
                 multiple
                 onChange={(e) => setFiles(Array.from(e.target.files || []))}
-                className="w-full p-2.5 border border-gray-200 rounded-xl bg-gray-50 text-sm font-medium text-gray-700 cursor-pointer file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100"
+                className="hidden"
               />
-            </div>
+            </label>
             <button
               type="submit"
               disabled={loading}
-              className="w-full md:w-1/4 px-8 py-3 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400 text-white font-bold rounded-xl shadow-md transition-all flex items-center justify-center"
+              className="w-full md:w-1/4 px-8 py-3 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-60 text-white font-bold rounded-xl shadow-lg shadow-indigo-600/25 transition-all duration-300 flex items-center justify-center gap-2 hover:-translate-y-0.5 active:scale-95"
             >
-              {loading ? "Ўқилмоқда..." : "🚀 Таҳлил"}
+              {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileSpreadsheet className="w-4 h-4" />}
+              {loading ? "Ўқилмоқда..." : "Таҳлил"}
             </button>
           </div>
+
+          {/* Aniqlangan formatlar */}
+          {detectedFormats.length > 0 && (
+            <div className="anim-fade flex flex-wrap items-center gap-2">
+              <span className="text-[11px] uppercase tracking-wider font-bold text-slate-500">Аниқланган форматлар:</span>
+              {detectedFormats.map((f) => (
+                <span key={f} className="px-2.5 py-1 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400 text-xs font-bold">
+                  {FORMAT_LABELS[f] || f}
+                </span>
+              ))}
+            </div>
+          )}
         </form>
       </div>
 
       {parsedData.length > 0 && (
-        <div className="bg-white rounded-2xl shadow-lg border border-gray-200 p-4 md:p-6 w-full max-w-[1500px] mx-auto overflow-hidden">
-          <div className="flex flex-col md:flex-row justify-between items-center gap-4 mb-6 bg-gray-50 p-4 rounded-xl border border-gray-200">
-            <div className="flex gap-4 w-full md:w-auto">
-              <input
-                type="text"
-                placeholder="Фирма номи ёки СТИР бўйича қидирув..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="px-4 py-2 w-full md:w-80 rounded-lg border border-gray-300 focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
-              />
-              <select
-                value={filterType}
-                onChange={(e) => setFilterType(e.target.value as "ALL" | "DIFF" | "EQUAL")}
-                className="px-4 py-2 rounded-lg border border-gray-300 bg-white focus:ring-2 focus:ring-indigo-500 font-medium text-gray-700 outline-none"
-              >
-                <option value="ALL">Барчаси ({parsedData.length})</option>
-                <option value="DIFF">Фарқи борлар</option>
-                <option value="EQUAL">Тенг бўлганлар</option>
-              </select>
+        <div className="anim-fade-up delay-2 surface p-4 md:p-6 w-full max-w-[1500px] mx-auto overflow-hidden relative z-10">
+          {/* FILTER BAR */}
+          <div className="flex flex-col md:flex-row justify-between items-center gap-4 mb-6 bg-slate-100/70 dark:bg-slate-900/50 p-4 rounded-xl border border-slate-200 dark:border-slate-800/80">
+            <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
+              <div className="relative w-full sm:w-80">
+                <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500 w-4 h-4" />
+                <input
+                  type="text"
+                  placeholder="Фирма номи ёки СТИР бўйича қидирув..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="pl-10 pr-4 py-2.5 w-full rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950/70 text-sm text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-600 outline-none transition-all duration-300 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20"
+                />
+              </div>
+              <div className="relative">
+                <SlidersHorizontal className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500 w-4 h-4 pointer-events-none" />
+                <select
+                  value={filterType}
+                  onChange={(e) => setFilterType(e.target.value as "ALL" | "DIFF" | "EQUAL")}
+                  className="pl-10 pr-8 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950/70 font-semibold text-sm text-slate-700 dark:text-slate-200 outline-none cursor-pointer transition-all duration-300 focus:border-indigo-500 appearance-none"
+                >
+                  <option value="ALL" className="bg-slate-100 dark:bg-slate-900">Барчаси ({parsedData.length})</option>
+                  <option value="DIFF" className="bg-slate-100 dark:bg-slate-900">Фарқи борлар</option>
+                  <option value="EQUAL" className="bg-slate-100 dark:bg-slate-900">Тенг бўлганлар</option>
+                </select>
+              </div>
             </div>
 
-            <div className="flex flex-col md:flex-row gap-2 w-full md:w-auto">
-              {/* EXCELJS EXPORT TUGMASI */}
+            <div className="flex flex-col sm:flex-row gap-2 w-full md:w-auto">
               <button
                 onClick={handleExportExcel}
                 disabled={displayData.length === 0}
-                className="bg-green-600 hover:bg-green-700 disabled:bg-green-400 text-white px-5 py-2.5 rounded-lg text-sm font-bold shadow-md transition-all flex items-center gap-2 w-full md:w-auto justify-center"
+                className="bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white px-5 py-2.5 rounded-xl text-sm font-bold shadow-lg shadow-emerald-600/20 transition-all duration-300 flex items-center gap-2 w-full md:w-auto justify-center hover:-translate-y-0.5 active:scale-95"
               >
-                📊 Excel юклаш
+                <Download className="w-4 h-4" /> Excel юклаш
               </button>
 
               <button
                 onClick={handleSaveToFirebase}
                 disabled={isSaving || selectedFullData.length === 0}
-                className="bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white px-6 py-2.5 rounded-lg text-sm font-bold shadow-md transition-all flex items-center gap-2 w-full md:w-auto justify-center"
+                className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white px-6 py-2.5 rounded-xl text-sm font-bold shadow-lg shadow-indigo-600/25 transition-all duration-300 flex items-center gap-2 w-full md:w-auto justify-center hover:-translate-y-0.5 active:scale-95"
               >
-                {isSaving ? "Сақланмоқда..." : "💾 Firebase'га сақлаш"}
+                {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                {isSaving ? "Сақланмоқда..." : "Сақлаш"}
               </button>
             </div>
           </div>
 
-          <div className="overflow-x-auto w-full border border-gray-400 rounded-lg shadow-inner pb-4 custom-scrollbar">
-            <table className="w-full text-sm table-auto border-collapse border border-gray-400">
-              <thead className="bg-white text-black font-semibold text-center sticky top-0 z-20 shadow-sm">
-                <tr>
-                  <th className="p-2 border border-gray-400 w-12 text-center bg-gray-50">
+          {/* JADVAL */}
+          <div className="overflow-x-auto w-full border border-slate-200 dark:border-slate-800 rounded-xl pb-0 custom-scrollbar">
+            <table className="w-full text-sm table-auto border-collapse">
+              <thead className="sticky top-0 z-20">
+                <tr className="bg-slate-100 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800">
+                  <th className="p-3 w-12 text-center">
                     <input
                       type="checkbox"
-                      className="w-4 h-4 cursor-pointer accent-indigo-600"
+                      className="w-4 h-4 cursor-pointer accent-indigo-500"
                       checked={filteredData.length > 0 && filteredData.every((d) => selectedInns.includes(d.inn))}
                       onChange={toggleAll}
                     />
                   </th>
-                  <th className="p-2 border border-gray-400 bg-gray-50 text-sm">Фирма номлари</th>
-                  <th className="p-2 border border-gray-400 bg-gray-50 text-sm w-32">СТИР</th>
-                  <th className="p-2 border border-gray-400 bg-gray-50 text-sm w-40">Чиққан пул<br />жами</th>
-                  <th className="p-2 border border-gray-400 bg-gray-50 text-sm w-40">Келган счет-ф<br />жами</th>
-                  <th className="p-2 border border-gray-400 bg-gray-50 text-sm w-40">Фарқи</th>
-                  <th className="p-2 border border-gray-400 bg-gray-50 text-sm w-48">Изоҳ</th>
-                  <th className="p-2 border border-gray-400 bg-gray-50 text-sm w-24">Ойлар</th>
+                  <th className="p-3 text-left"><SortHeader label="Фирма номлари" k="name" activeKey={sortKey} dir={sortDir} onToggle={toggleSort} /></th>
+                  <th className="p-3 w-32 text-center"><SortHeader label="СТИР" k="inn" align="center" activeKey={sortKey} dir={sortDir} onToggle={toggleSort} /></th>
+                  <th className="p-3 w-40 text-right"><SortHeader label="Чиққан пул жами" k="debit" align="right" activeKey={sortKey} dir={sortDir} onToggle={toggleSort} /></th>
+                  <th className="p-3 w-40 text-right"><SortHeader label="Келган счет-ф жами" k="credit" align="right" activeKey={sortKey} dir={sortDir} onToggle={toggleSort} /></th>
+                  <th className="p-3 w-40 text-right"><SortHeader label="Фарқи" k="diff" align="right" activeKey={sortKey} dir={sortDir} onToggle={toggleSort} /></th>
+                  <th className="p-3 w-48 text-left uppercase tracking-wider text-[11px] font-bold text-slate-500 dark:text-slate-400">Изоҳ</th>
+                  <th className="p-3 w-24 text-center uppercase tracking-wider text-[11px] font-bold text-slate-500 dark:text-slate-400">Ойлар</th>
                 </tr>
               </thead>
 
-              <tbody className="bg-white">
+              <tbody className="divide-y divide-slate-200 dark:divide-slate-800/70">
                 {filteredData.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="text-center p-12 text-gray-500 font-medium text-base border border-gray-400">
+                    <td colSpan={8} className="text-center p-12 text-slate-500 font-medium text-base">
                       Маълумот топилмади... 🕵️‍♂️
                     </td>
                   </tr>
@@ -490,58 +592,65 @@ export default function CompanyDetailPage({ params }: PageProps) {
                     const isDebt = tx.difference < 0;
 
                     const statusText = isInvoiceNeeded ? "Ҳисоб фактура олиш керак" : isDebt ? "Қарзмиз" : "-";
-                    const statusColor = isDebt ? "text-red-600" : isInvoiceNeeded ? "text-amber-600" : "text-gray-500";
+                    const statusColor = isDebt ? "text-rose-600 dark:text-rose-400" : isInvoiceNeeded ? "text-amber-600 dark:text-amber-400" : "text-slate-500";
 
                     return (
                       <React.Fragment key={`${tx.inn}-${idx}`}>
-                        <tr className={`transition-all ${isSelected ? 'bg-indigo-50/20' : 'hover:bg-gray-50'}`}>
-                          <td className="p-2 border border-gray-400 text-center">
+                        <tr className={`transition-colors duration-200 ${isSelected ? "bg-indigo-500/[0.06]" : "hover:bg-slate-100 dark:hover:bg-slate-900/60"}`}>
+                          <td className="p-3 text-center">
                             <input
                               type="checkbox"
-                              className="w-4 h-4 cursor-pointer accent-indigo-600"
+                              className="w-4 h-4 cursor-pointer accent-indigo-500"
                               checked={isSelected}
                               onChange={() => toggleSelection(tx.inn)}
                             />
                           </td>
-                          <td className="p-2 border border-gray-400 text-left text-gray-900 whitespace-normal min-w-[250px]">
+                          <td className="p-3 text-left text-slate-900 dark:text-slate-100 font-medium whitespace-normal min-w-[250px]">
                             {tx.name}
                           </td>
-                          <td className="p-2 border border-gray-400 text-center text-gray-800">{tx.inn}</td>
-                          <td className="p-2 border border-gray-400 text-right text-gray-900">{formatNum(tx.totalDebit)}</td>
-                          <td className="p-2 border border-gray-400 text-right text-gray-900">{formatNum(tx.totalCredit)}</td>
-                          <td className={`p-2 border border-gray-400 text-right font-semibold ${statusColor}`}>{formatNum(tx.difference)}</td>
-                          <td className={`p-2 border border-gray-400 text-left pl-4 font-medium ${statusColor}`}>{statusText}</td>
-                          <td className="p-2 border border-gray-400 text-center">
+                          <td className="p-3 text-center">
+                            <span className="font-mono text-xs text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-800 bg-slate-100 dark:bg-slate-950/60 px-2 py-0.5 rounded-md">{tx.inn}</span>
+                          </td>
+                          <td className="p-3 text-right text-slate-700 dark:text-slate-200 tabular">{formatNum(tx.totalDebit)}</td>
+                          <td className="p-3 text-right text-slate-700 dark:text-slate-200 tabular">{formatNum(tx.totalCredit)}</td>
+                          <td className={`p-3 text-right font-bold tabular ${statusColor}`}>{formatNum(tx.difference)}</td>
+                          <td className={`p-3 text-left pl-4 font-semibold text-xs ${statusColor}`}>{statusText}</td>
+                          <td className="p-3 text-center">
                             <button
                               onClick={() => toggleExpand(tx.inn)}
-                              className={`px-3 py-1 rounded text-xs font-bold transition-all border ${isExpanded ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-gray-700 border-gray-400 hover:bg-gray-100'}`}
+                              className={`inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-bold transition-all duration-300 border ${
+                                isExpanded
+                                  ? "bg-indigo-600 text-white border-indigo-600 shadow-lg shadow-indigo-600/25"
+                                  : "bg-white dark:bg-slate-900/60 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-800 hover:text-indigo-600 dark:hover:text-indigo-400 hover:border-indigo-500/40"
+                              }`}
                             >
-                              {isExpanded ? 'Ёпиш ▴' : 'Очиш ▾'}
+                              {isExpanded ? "Ёпиш" : "Очиш"}
+                              <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-300 ${isExpanded ? "rotate-180" : ""}`} />
                             </button>
                           </td>
                         </tr>
 
                         {isExpanded && (
                           <tr>
-                            <td colSpan={8} className="p-0 border border-gray-400">
-                              <div className="bg-gradient-to-br from-indigo-50 to-blue-50 p-6 border-b border-indigo-200 shadow-inner">
-                                <h4 className="font-bold text-indigo-900 mb-4 flex items-center gap-2">
-                                  <span>📅 {tx.name} - Ойма-ой тафсилотлар</span>
+                            <td colSpan={8} className="p-0">
+                              <div className="anim-fade bg-slate-100/70 dark:bg-slate-900/50 p-5 md:p-6 border-y border-indigo-500/10">
+                                <h4 className="font-bold text-indigo-700 dark:text-indigo-300 mb-4 flex items-center gap-2 text-sm">
+                                  📅 {tx.name} — Ойма-ой тафсилотлар
                                 </h4>
-                                <div className="overflow-hidden rounded-xl border border-indigo-200 bg-white shadow-sm">
+                                <div className="overflow-hidden rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-100 dark:bg-slate-950/60">
                                   <table className="w-full text-sm text-left">
-                                    <thead className="bg-indigo-100/60 text-indigo-900">
+                                    <thead className="bg-slate-100 dark:bg-slate-900/80 text-slate-500 dark:text-slate-400">
                                       <tr>
-                                        <th className="p-3 font-bold border-r border-indigo-100">Давр</th>
-                                        <th className="p-3 font-bold border-r border-indigo-100 text-right">Чиққан пул (Дебет)</th>
-                                        <th className="p-3 font-bold border-r border-indigo-100 text-right">Келган счет-ф (Кредит)</th>
-                                        <th className="p-3 font-bold text-right text-indigo-900">Фарқ</th>
+                                        <th className="p-3 font-bold text-[11px] uppercase tracking-wider">Давр</th>
+                                        <th className="p-3 font-bold text-[11px] uppercase tracking-wider text-right">Чиққан пул (Дебет)</th>
+                                        <th className="p-3 font-bold text-[11px] uppercase tracking-wider text-right">Келган счет-ф (Кредит)</th>
+                                        <th className="p-3 font-bold text-[11px] uppercase tracking-wider text-right">Фарқ</th>
                                       </tr>
                                     </thead>
-                                    <tbody className="divide-y divide-indigo-50">
+                                    <tbody className="divide-y divide-slate-200 dark:divide-slate-800/60">
                                       {sortedPeriods(tx.monthlyData).length === 0 ? (
                                         <tr>
-                                          <td colSpan={4} className="p-3 text-center text-gray-400">Ойлик маълумот йўқ</td>
+                                          <td colSpan={4} className="p-3 text-center text-slate-500">Ойлик маълумот йўқ</td>
                                         </tr>
                                       ) : sortedPeriods(tx.monthlyData).map((period) => {
                                         const bucket = tx.monthlyData[period] || { debit: 0, credit: 0 };
@@ -550,27 +659,27 @@ export default function CompanyDetailPage({ params }: PageProps) {
                                         const diff = dVal - cVal;
 
                                         return (
-                                          <tr key={period} className="hover:bg-indigo-50/30 transition-colors">
-                                            <td className="p-3 font-semibold text-gray-700 border-r border-indigo-50 bg-gray-50/50">{periodLabel(period)}</td>
-                                            <td className="p-2 border-r border-indigo-50">
+                                          <tr key={period} className="hover:bg-slate-100 dark:hover:bg-slate-900/50 transition-colors">
+                                            <td className="p-3 font-semibold text-slate-700 dark:text-slate-300">{periodLabel(period)}</td>
+                                            <td className="p-2">
                                               <input
                                                 type="number"
                                                 value={dVal === 0 ? '' : dVal}
                                                 placeholder="0.00"
                                                 onChange={(e) => handleCellEdit(tx.inn, period, 'debit', e.target.value)}
-                                                className="w-full text-right p-1.5 border border-gray-200 rounded text-gray-800 font-medium focus:ring-2 focus:ring-blue-400 outline-none transition-all"
+                                                className="w-full text-right p-2 border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950/70 rounded-lg text-slate-900 dark:text-slate-100 font-medium tabular outline-none transition-all duration-300 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20"
                                               />
                                             </td>
-                                            <td className="p-2 border-r border-indigo-50">
+                                            <td className="p-2">
                                               <input
                                                 type="number"
                                                 value={cVal === 0 ? '' : cVal}
                                                 placeholder="0.00"
                                                 onChange={(e) => handleCellEdit(tx.inn, period, 'credit', e.target.value)}
-                                                className="w-full text-right p-1.5 border border-gray-200 rounded text-gray-800 font-medium focus:ring-2 focus:ring-blue-400 outline-none transition-all"
+                                                className="w-full text-right p-2 border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950/70 rounded-lg text-slate-900 dark:text-slate-100 font-medium tabular outline-none transition-all duration-300 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20"
                                               />
                                             </td>
-                                            <td className={`p-3 text-right font-bold ${diff < 0 ? 'text-red-600' : diff > 0 ? 'text-amber-600' : 'text-gray-400'}`}>
+                                            <td className={`p-3 text-right font-bold tabular ${diff < 0 ? "text-rose-600 dark:text-rose-400" : diff > 0 ? "text-amber-600 dark:text-amber-400" : "text-slate-500"}`}>
                                               {formatNum(diff)}
                                             </td>
                                           </tr>
@@ -590,19 +699,19 @@ export default function CompanyDetailPage({ params }: PageProps) {
               </tbody>
 
               {displayData.length > 0 && (
-                <tfoot className="sticky bottom-0 z-30 bg-gray-100 text-black font-bold border-t-2 border-gray-400">
+                <tfoot className="sticky bottom-0 z-30 bg-slate-100 dark:bg-slate-900 font-bold border-t-2 border-slate-300 dark:border-slate-700">
                   <tr>
-                    <td className="p-3 border border-gray-400 text-center">✓</td>
-                    <td colSpan={2} className="p-3 border border-gray-400 text-right uppercase tracking-wider text-gray-700">Жами танланганлар:</td>
-                    <td className="p-3 border border-gray-400 text-right text-base">{formatNum(grandTotals.debit)}</td>
-                    <td className="p-3 border border-gray-400 text-right text-base">{formatNum(grandTotals.credit)}</td>
-                    <td className={`p-3 border border-gray-400 text-right text-base ${grandTotals.diff < 0 ? 'text-red-600' : grandTotals.diff > 0 ? 'text-amber-600' : ''}`}>
+                    <td className="p-3 text-center text-indigo-600 dark:text-indigo-400">✓</td>
+                    <td colSpan={2} className="p-3 text-right uppercase tracking-wider text-[11px] text-slate-500 dark:text-slate-400">Жами танланганлар:</td>
+                    <td className="p-3 text-right text-base text-slate-900 dark:text-white tabular">{formatNum(grandTotals.debit)}</td>
+                    <td className="p-3 text-right text-base text-slate-900 dark:text-white tabular">{formatNum(grandTotals.credit)}</td>
+                    <td className={`p-3 text-right text-base tabular ${grandTotals.diff < 0 ? "text-rose-600 dark:text-rose-400" : grandTotals.diff > 0 ? "text-amber-600 dark:text-amber-400" : "text-slate-900 dark:text-white"}`}>
                       {formatNum(grandTotals.diff)}
                     </td>
-                    <td className={`p-3 border border-gray-400 text-left pl-4 ${grandTotals.diff < 0 ? 'text-red-600' : grandTotals.diff > 0 ? 'text-amber-600' : ''}`}>
+                    <td className={`p-3 text-left pl-4 text-xs ${grandTotals.diff < 0 ? "text-rose-600 dark:text-rose-400" : grandTotals.diff > 0 ? "text-amber-600 dark:text-amber-400" : "text-slate-500"}`}>
                       {grandTotals.diff < 0 ? "Қарзмиз" : grandTotals.diff > 0 ? "Ҳисоб фактура олиш керак" : "-"}
                     </td>
-                    <td className="p-3 border border-gray-400"></td>
+                    <td className="p-3"></td>
                   </tr>
                 </tfoot>
               )}
@@ -612,4 +721,4 @@ export default function CompanyDetailPage({ params }: PageProps) {
       )}
     </div>
   );
-};
+}

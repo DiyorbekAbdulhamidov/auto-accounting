@@ -1,6 +1,8 @@
 "use client";
 import { useState } from "react";
 import { useAuth } from "@/context/AuthContext";
+import { Building2, Loader2, Lock, Mail, ShieldCheck } from "lucide-react";
+import ThemeToggle from "@/components/ThemeToggle";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
@@ -16,51 +18,62 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gray-50 px-4">
-      <div className="w-full max-w-md space-y-8 rounded-2xl bg-white p-8 shadow-xl border border-gray-100">
-        <div className="text-center">
-          <h2 className="text-3xl font-bold tracking-tight text-gray-900">
-            Bank Analyzer AI
+    <div className="flex min-h-screen items-center justify-center bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 px-4 relative overflow-hidden">
+      {/* Orqa fon bezaklari */}
+      <div className="absolute top-4 right-4 z-20"><ThemeToggle /></div>
+      <div className="anim-blob absolute top-[-120px] left-1/2 -translate-x-1/2 w-[700px] h-[320px] bg-indigo-500/10 blur-[130px] rounded-full pointer-events-none" />
+      <div className="anim-blob absolute bottom-[-140px] left-[-100px] w-[500px] h-[300px] bg-violet-500/[0.08] blur-[130px] rounded-full pointer-events-none" style={{ animationDelay: "-7s" }} />
+
+      <div className="anim-scale w-full max-w-md surface glow-indigo p-8 md:p-10 space-y-8 relative z-10">
+        <div className="text-center space-y-3">
+          <div className="inline-flex p-3.5 rounded-2xl bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20 mb-1">
+            <Building2 className="w-7 h-7" />
+          </div>
+          <h2 className="text-2xl font-black tracking-tight text-slate-900 dark:text-white">
+            Бухгалтерия Хизматлари Маркази
           </h2>
-          <p className="mt-2 text-sm text-gray-600">
-            Tizimga kirish faqat ruxsat etilgan foydalanuvchilar uchun
+          <p className="text-sm text-slate-500 dark:text-slate-400 flex items-center justify-center gap-1.5">
+            <ShieldCheck className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+            Кириш фақат рухсат этилган фойдаланувчилар учун
           </p>
         </div>
-        <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
-          <div className="space-y-4 rounded-md shadow-sm">
-            <div>
-              <label className="text-sm font-medium text-gray-700">Email manzilingiz</label>
-              <input
-                type="email"
-                required
-                className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-indigo-500"
-                placeholder="admin@firma.uz"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-              />
-            </div>
-            <div>
-              <label className="text-sm font-medium text-gray-700">Parol</label>
-              <input
-                type="password"
-                required
-                className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-indigo-500"
-                placeholder="••••••••"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-              />
-            </div>
+
+        <form className="space-y-5" onSubmit={handleSubmit}>
+          <div className="anim-fade-up delay-1 space-y-2">
+            <label className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
+              <Mail className="w-3.5 h-3.5" /> Email манзил
+            </label>
+            <input
+              type="email"
+              required
+              className="w-full rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950/70 px-4 py-3 text-sm text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-600 outline-none transition-all duration-300 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20"
+              placeholder="admin@firma.uz"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+            />
+          </div>
+          <div className="anim-fade-up delay-2 space-y-2">
+            <label className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
+              <Lock className="w-3.5 h-3.5" /> Парол
+            </label>
+            <input
+              type="password"
+              required
+              className="w-full rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950/70 px-4 py-3 text-sm text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-600 outline-none transition-all duration-300 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20"
+              placeholder="••••••••"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+            />
           </div>
 
-          <div>
-            <button
-              type="submit"
-              disabled={isSubmitting}
-              className="group relative flex w-full justify-center rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 disabled:bg-indigo-400"
-            >
-              {isSubmitting ? "Tekshirilmoqda..." : "Tizimga kirish"}
-            </button>
-          </div>
+          <button
+            type="submit"
+            disabled={isSubmitting}
+            className="anim-fade-up delay-3 group relative flex w-full items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-3.5 text-sm font-bold text-white transition-all duration-300 hover:bg-indigo-500 hover:shadow-lg hover:shadow-indigo-600/30 active:scale-[0.98] disabled:opacity-60 disabled:cursor-not-allowed"
+          >
+            {isSubmitting && <Loader2 className="w-4 h-4 animate-spin" />}
+            {isSubmitting ? "Текширилмоқда..." : "Тизимга кириш"}
+          </button>
         </form>
       </div>
     </div>

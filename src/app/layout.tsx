@@ -13,8 +13,14 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="uz">
+    <html lang="uz" suppressHydrationWarning>
       <body>
+        {/* Tema flash bo'lmasligi uchun hydratsiyadan oldin qo'llanadi */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `try{if(localStorage.getItem('theme')==='dark')document.documentElement.classList.add('dark')}catch(e){}`,
+          }}
+        />
         {/* Barcha sahifalar auth holatidan xabardor bo'lishi uchun provider ichiga olamiz */}
         <AuthProvider>
           {children}

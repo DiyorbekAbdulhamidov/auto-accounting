@@ -1,6 +1,8 @@
 // app/api/upload-preview/route.ts
 import { NextResponse } from 'next/server';
 import * as XLSX from 'xlsx';
+import { parseUniversal } from '@/lib/universalParser';
+import { readWorkbookSmart } from '@/lib/excelWorkbook';
 
 // ============================================================
 // 1. Sanani xavfsiz va aniq o'girish
@@ -204,12 +206,12 @@ export async function POST(req: Request) {
 
     const detectedFormats: string[] = [];
 
-    for (const file of files) {
-      const bytes = await file.arrayBuffer();
-      const workbook = XLSX.read(Buffer.from(bytes), { type: 'buffer', cellDates: false });
-      const worksheet = workbook.Sheets[workbook.SheetNames[0]];
-      const rawData: any[][] = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
-
+    // Bitta varaq (sheet) uchun format-aniqlash va o'qish. Ilgari faqat
+    // birinchi varaq o'qilardi; endi faylning BARCHA varaqlari shu
+    // funksiyadan o'tadi (ba'zi banklar ma'lumotni 2-varaqqa yozadi,
+    // buxgalterlar esa bank oborotkasi va fakturalarni alohida
+    // varaqlarga joylashtiradi). Parserlar mantig'i o'zgarmagan.
+    function processSheet(rawData: any[][]) {
       let formatType = 'UNKNOWN';
       let isIpotekaDebit = true;
 
@@ -341,71 +343,103 @@ export async function POST(req: Request) {
       }
 
       else if (formatType === 'GENERIC') {
-        let innIdx = -1, nameIdx = -1, dateIdx = -1, debitIdx = -1, creditIdx = -1, sumIdx = -1;
+        // YANGI QATLAM: universal parser - kengaytirilgan shapka lug'ati va
+        // statistik ustun tahlili bilan NOTANISH formatlarni o'qiydi.
+        // Ishonchli natija topa olmasa null qaytaradi va quyidagi eski
+        // evristika avvalgidek ishlayveradi. HAMKORBANK / IPOTEKA_ASBT /
+        // FAKTURA parserlariga bu qatlam umuman aralashmaydi.
+        const universal = parseUniversal(rawData);
 
-        for (let r = 0; r < Math.min(15, rawData.length); r++) {
-          const row = rawData[r];
-          if (!row) continue;
-          for (let c = 0; c < row.length; c++) {
-            const cellStr = String(row[c]).toUpperCase();
-            if (cellStr === 'ИНН' || cellStr === 'СТИР' || cellStr.includes('ИНН КОНТРАГЕНТА')) innIdx = c;
-            else if (cellStr.includes('НАИМЕНОВАНИЕ') || cellStr.includes('НОМИ') || cellStr.includes('КОНТРАГЕНТ') || cellStr.includes('КЛИЕНТ')) nameIdx = c;
-            else if (cellStr === 'ДАТА' || cellStr === 'САНА' || cellStr === 'DATE' || cellStr.includes('ДАТА ДОК')) dateIdx = c;
-            else if (cellStr === 'ДЕБЕТ' || cellStr.includes('РАСХОД') || cellStr.includes('ЎТКАЗМА')) debitIdx = c;
-            else if (cellStr === 'КРЕДИТ' || cellStr.includes('ПРИХОД') || cellStr.includes('КИРИМ')) creditIdx = c;
-            else if (cellStr === 'СУММА' || cellStr.includes('ИТОГО') || cellStr.includes('ОБОРОТ')) sumIdx = c;
+        if (universal) {
+          if (!detectedFormats.includes('UNIVERSAL')) {
+            detectedFormats.push('UNIVERSAL');
           }
-          if (innIdx !== -1 && (sumIdx !== -1 || debitIdx !== -1 || creditIdx !== -1)) break;
-        }
+          for (const tx of universal.rows) {
+            addTx(tx.name, tx.inn, tx.date, tx.debit, tx.credit, 'GENERIC_DOC');
+          }
+        } else {
+          // ESKI EVRISTIKA (o'zgartirilmagan)
+          let innIdx = -1, nameIdx = -1, dateIdx = -1, debitIdx = -1, creditIdx = -1, sumIdx = -1;
 
-        for (let i = 0; i < rawData.length; i++) {
-          const row = rawData[i];
-          if (!row || row.length < 2) continue;
-
-          let targetInn = '';
-          let targetName = "Noma'lum firma";
-          let txDate: Date | null = null;
-          let debit = 0;
-          let credit = 0;
-
-          if (innIdx !== -1) {
-            targetInn = cleanInn(row[innIdx]);
-            if (nameIdx !== -1) targetName = String(row[nameIdx] || '');
-            if (dateIdx !== -1) txDate = parseExcelDate(row[dateIdx]);
-
-            if (debitIdx !== -1) debit = parseAmount(row[debitIdx]);
-            if (creditIdx !== -1) credit = parseAmount(row[creditIdx]);
-            else if (sumIdx !== -1) debit = parseAmount(row[sumIdx]);
-          } else {
-            let foundInn = false;
-            const nums: number[] = [];
-
+          for (let r = 0; r < Math.min(15, rawData.length); r++) {
+            const row = rawData[r];
+            if (!row) continue;
             for (let c = 0; c < row.length; c++) {
-              const cellStr = String(row[c]).trim();
-              const possibleInn = cleanInn(cellStr);
+              const cellStr = String(row[c]).toUpperCase();
+              if (cellStr === 'ИНН' || cellStr === 'СТИР' || cellStr.includes('ИНН КОНТРАГЕНТА')) innIdx = c;
+              else if (cellStr.includes('НАИМЕНОВАНИЕ') || cellStr.includes('НОМИ') || cellStr.includes('КОНТРАГЕНТ') || cellStr.includes('КЛИЕНТ')) nameIdx = c;
+              else if (cellStr === 'ДАТА' || cellStr === 'САНА' || cellStr === 'DATE' || cellStr.includes('ДАТА ДОК')) dateIdx = c;
+              else if (cellStr === 'ДЕБЕТ' || cellStr.includes('РАСХОД') || cellStr.includes('ЎТКАЗМА')) debitIdx = c;
+              else if (cellStr === 'КРЕДИТ' || cellStr.includes('ПРИХОД') || cellStr.includes('КИРИМ')) creditIdx = c;
+              else if (cellStr === 'СУММА' || cellStr.includes('ИТОГО') || cellStr.includes('ОБОРОТ')) sumIdx = c;
+            }
+            if (innIdx !== -1 && (sumIdx !== -1 || debitIdx !== -1 || creditIdx !== -1)) break;
+          }
 
-              if (!foundInn && isValidUzbekInn(possibleInn)) {
-                targetInn = possibleInn;
-                foundInn = true;
-                targetName = String(row[c - 1] || row[c + 1] || 'Noma\'lum');
-              } else if (cellStr.includes('.') && cellStr.split('.').length === 3 && cellStr.length <= 10) {
-                txDate = parseExcelDate(row[c]);
-              } else {
-                const amount = parseAmount(row[c]);
-                if (!isNaN(amount) && amount > 0 && amount !== Number(possibleInn)) nums.push(amount);
+          for (let i = 0; i < rawData.length; i++) {
+            const row = rawData[i];
+            if (!row || row.length < 2) continue;
+
+            let targetInn = '';
+            let targetName = "Noma'lum firma";
+            let txDate: Date | null = null;
+            let debit = 0;
+            let credit = 0;
+
+            if (innIdx !== -1) {
+              targetInn = cleanInn(row[innIdx]);
+              if (nameIdx !== -1) targetName = String(row[nameIdx] || '');
+              if (dateIdx !== -1) txDate = parseExcelDate(row[dateIdx]);
+
+              if (debitIdx !== -1) debit = parseAmount(row[debitIdx]);
+              if (creditIdx !== -1) credit = parseAmount(row[creditIdx]);
+              else if (sumIdx !== -1) debit = parseAmount(row[sumIdx]);
+            } else {
+              let foundInn = false;
+              const nums: number[] = [];
+
+              for (let c = 0; c < row.length; c++) {
+                const cellStr = String(row[c]).trim();
+                const possibleInn = cleanInn(cellStr);
+
+                if (!foundInn && isValidUzbekInn(possibleInn)) {
+                  targetInn = possibleInn;
+                  foundInn = true;
+                  targetName = String(row[c - 1] || row[c + 1] || 'Noma\'lum');
+                } else if (cellStr.includes('.') && cellStr.split('.').length === 3 && cellStr.length <= 10) {
+                  txDate = parseExcelDate(row[c]);
+                } else {
+                  const amount = parseAmount(row[c]);
+                  if (!isNaN(amount) && amount > 0 && amount !== Number(possibleInn)) nums.push(amount);
+                }
+              }
+
+              if (foundInn) {
+                debit = nums[0] || 0;
+                credit = nums[1] || 0;
               }
             }
 
-            if (foundInn) {
-              debit = nums[0] || 0;
-              credit = nums[1] || 0;
+            if (targetInn.length >= 8 && (debit > 0 || credit > 0)) {
+              addTx(targetName, targetInn, txDate, debit, credit, 'GENERIC_DOC');
             }
           }
-
-          if (targetInn.length >= 8 && (debit > 0 || credit > 0)) {
-            addTx(targetName, targetInn, txDate, debit, credit, 'GENERIC_DOC');
-          }
         }
+      }
+    }
+
+    for (const file of files) {
+      const bytes = await file.arrayBuffer();
+      // readWorkbookSmart: bank "HTML-in-.xls" fayllarini (CBreport va h.k.)
+      // to'g'ri kodirovkada (windows-1251) o'qiydi, oddiy Excel'ni avvalgidek
+      const workbook = readWorkbookSmart(Buffer.from(bytes));
+
+      for (const sheetName of workbook.SheetNames) {
+        const worksheet = workbook.Sheets[sheetName];
+        if (!worksheet) continue;
+        const rawData: any[][] = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+        if (rawData.length === 0) continue;
+        processSheet(rawData);
       }
     }
 

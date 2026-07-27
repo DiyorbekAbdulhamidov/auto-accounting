@@ -1,6 +1,7 @@
 'use client';
 
 import { useMemo, useState, type ChangeEvent, type FormEvent } from 'react';
+import ComingSoon from '@/components/ComingSoon';
 import {
   ArrowDownCircle,
   ArrowUpCircle,
@@ -132,7 +133,15 @@ function BalanceBadge({ balance }: { balance: number }) {
   );
 }
 
+// 🔒 Modul hozircha yopiq - tayyor bo'lganda true qilinadi
+const ASTATKA_ENABLED: boolean = false;
+
 export default function AstatkaPage() {
+  if (!ASTATKA_ENABLED) return <ComingSoon title="Виртуал Омбор (Астатка)" />;
+  return <AstatkaPageOriginal />;
+}
+
+function AstatkaPageOriginal() {
   const [receivedFile, setReceivedFile] = useState<File | null>(null);
   const [sentFile, setSentFile] = useState<File | null>(null);
   const [data, setData] = useState<AstatkaResponse | null>(null);
