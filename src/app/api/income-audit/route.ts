@@ -1,4 +1,4 @@
-// app/api/kirim-audit/route.ts
+// app/api/income-audit/route.ts
 //
 // KIRIM SVERKASI: bank ko'chirmasidagi JAMI KELGAN PUL (kredit) ni
 // biz YOZIB BERGAN счёт-фактуралар bilan kontragent kesimida
@@ -8,7 +8,7 @@
 // parserlarga umuman tegmaydi.
 
 import { NextResponse } from 'next/server';
-import { analyzeKirim, type InputFile } from '@/lib/kirimParser';
+import { analyzeIncome, type InputFile } from '@/lib/incomeParser';
 
 export async function POST(req: Request) {
   try {
@@ -25,7 +25,7 @@ export async function POST(req: Request) {
       inputs.push({ name: file.name, buffer: Buffer.from(bytes) });
     }
 
-    const report = analyzeKirim(inputs);
+    const report = analyzeIncome(inputs);
 
     if (report.parties.length === 0) {
       return NextResponse.json(

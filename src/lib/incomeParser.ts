@@ -1,5 +1,5 @@
 // ============================================================
-// KIRIM AUDIT — MUSTAQIL MODUL
+// INCOME AUDIT — MUSTAQIL MODUL
 //
 // Bu modul faqat /kirim-audit sahifasi va /api/kirim-audit
 // route'i uchun yozilgan. Eski parserlar (upload-preview,
@@ -72,7 +72,7 @@ export interface YearTotal {
   difference: number;
 }
 
-export interface KirimReport {
+export interface IncomeReport {
   parties: PartyRow[];
   totals: {
     bankCredit: number;
@@ -243,6 +243,20 @@ const LEGAL_WORDS = [
   'JV', 'LLC', 'LTD', 'LLP', 'INC', 'SP', 'YATT', 'FX', 'XT', 'KFY', 'MFY',
 ];
 const LEGAL_WORD_RE = new RegExp(`(^|[^A-Z0-9])(${LEGAL_WORDS.join('|')})([^A-Z0-9]|$)`, 'g');
+
+// Ko'rsatish uchun nomni chiroyli qilish (solishtirish uchun EMAS):
+//   "JALIN KO`MIR" MCHJ      -> JALIN KO'MIR MCHJ
+//   "OILCHEM"МЧЖ             -> OILCHEM МЧЖ
+//   ООО `SEVEN HILLS ...`    -> ООО SEVEN HILLS ...
+export function prettifyName(raw: string): string {
+  if (!raw) return '';
+  return raw
+    .replace(/["«»“”„]/g, ' ')   // qo'shtirnoqlar olib tashlanadi
+    .replace(/[`’‘ʻʼ]/g, "'")     // apostroflar bir xil ko'rinishga keladi
+    .replace(/\s*'\s*/g, "'")     // "KO ' MIR" -> "KO'MIR"
+    .replace(/\s+/g, ' ')
+    .trim();
+}
 
 export function normalizeName(raw: string): string {
   if (!raw) return '';
@@ -711,10 +725,11 @@ function parseBankSheet(rows: Cell[][], hit: HeaderHit): BankSheetResult {
 // ASOSIY: fayllarni o'qib, kirim–faktura solishtiruvini qurish
 // ------------------------------------------------------------
 
-export function analyzeKirim(files: InputFile[]): KirimReport {
+export function analyzeIncome(files: InputFile[]): IncomeReport {
   const warnings: string[] = [];
   const bankSheets: string[] = [];
   const facturaSheets: string[] = [];
+  const unrecognized: string[] = [];
 
   const allInvoices: ParsedInvoice[] = [];
   const allPayments: ParsedPayment[] = [];
@@ -749,6 +764,16 @@ export function analyzeKirim(files: InputFile[]): KirimReport {
     }
 
     for (const sd of sheets) {
+      const label = `${sd.file}${sd.sheet !== 'CSV' ? ` / ${sd.sheet}` : ''}`;
+
+      if (isOwnExportSheet(sd.rows)) {
+        warnings.push(
+          `"${sd.file}" — бу шу дастур ЧИҚАРГАН ҳисобот файли, кириш файли эмас. ` +
+          `Ҳисобга олинмади: ўша йилнинг ҲАҚИҚИЙ банк кўчирмасини юкланг.`
+        );
+        continue;
+      }
+
       const facturaHit = looksLikeFacturaSheet(sd.rows);
       if (facturaHit) {
         const res = parseFacturaSheet(sd.rows, facturaHit);
@@ -787,18 +812,29 @@ export function analyzeKirim(files: InputFile[]): KirimReport {
       );
       if (bankHit && bankOk) {
         const res = parseBankSheet(sd.rows, bankHit);
-        if (res.rowCount === 0) continue;
-
-        bankSheets.push(`${sd.file}${sd.sheet !== 'CSV' ? ` / ${sd.sheet}` : ''}`);
-        if (!ownAccount && res.ownAccount) ownAccount = res.ownAccount;
-        bankRowCount += res.rowCount;
-        totalCreditRaw += res.totalCredit;
-        totalDebitRaw += res.totalDebit;
-        allPayments.push(...res.payments);
+        if (res.rowCount > 0) {
+          bankSheets.push(label);
+          if (!ownAccount && res.ownAccount) ownAccount = res.ownAccount;
+          bankRowCount += res.rowCount;
+          totalCreditRaw += res.totalCredit;
+          totalDebitRaw += res.totalDebit;
+          allPayments.push(...res.payments);
+          continue;
+        }
       }
+
+      // Na bank kо'chirmasi, na faktura reestri — jim o'tkazib yuborilmaydi
+      if (hasContent(sd.rows)) unrecognized.push(label);
     }
   }
 
+  if (unrecognized.length > 0) {
+    warnings.push(
+      `Қуйидаги файл/варақ танилмади ва ҲИСОБГА ОЛИНМАДИ: ${unrecognized.slice(0, 6).join('; ')}` +
+      `${unrecognized.length > 6 ? ` (яна ${unrecognized.length - 6} та)` : ''}. ` +
+      `Банк кўчирмасида «Дебет/Кредит» устунлари, фактура реестрида «СУММА К ОПЛАТЕ» устуни бўлиши керак.`
+    );
+  }
   if (bankSheets.length === 0) warnings.push('Банк кўчирмаси топилмади — фақат фактуралар ҳисобланди.');
   if (facturaSheets.length === 0) warnings.push('Счёт-фактура реестри топилмади — фақат банк кирими ҳисобланди.');
 
@@ -873,11 +909,12 @@ export function analyzeKirim(files: InputFile[]): KirimReport {
     if (name && !p.aliases.includes(name)) p.aliases.push(name);
 
     if (name) {
+      const pretty = prettifyName(name);
       if (official) {
-        if (!officialName.has(key) || name.length > p.name.length) p.name = name;
+        if (!officialName.has(key) || pretty.length > p.name.length) p.name = pretty;
         officialName.add(key);
-      } else if (!officialName.has(key) && name.length > p.name.length) {
-        p.name = name;
+      } else if (!officialName.has(key) && pretty.length > p.name.length) {
+        p.name = pretty;
       }
     }
     return p;
@@ -1009,6 +1046,44 @@ export function analyzeKirim(files: InputFile[]): KirimReport {
     }
   }
 
+  // Yillar kesimida (bir necha yillik fayllar birga yuklanганда kerak)
+  const NO_DATE = 'Санасиз';
+  const yearMap = new Map<string, YearTotal>();
+  for (const p of list) {
+    for (const [period, b] of Object.entries(p.monthly)) {
+      const year = /^\d{4}-\d{2}$/.test(period) ? period.slice(0, 4) : NO_DATE;
+      let y = yearMap.get(year);
+      if (!y) { y = { year, bankCredit: 0, facturaSent: 0, difference: 0 }; yearMap.set(year, y); }
+      y.bankCredit += b.credit;
+      y.facturaSent += b.factura;
+    }
+  }
+  const byYear = [...yearMap.values()]
+    .map((y) => ({ ...y, difference: y.bankCredit - y.facturaSent }))
+    .sort((a, b) => {
+      if (a.year === NO_DATE) return 1;
+      if (b.year === NO_DATE) return -1;
+      return a.year.localeCompare(b.year);
+    });
+
+  // Yil bo'yicha fayl yetishmayotganini aniqlash — eng xavfli xato shu:
+  // masalan 2026 fakturalari yuklanган, lekin 2026 oborotkasi unutilgan
+  // bo'lsa, butun yil "mijoz qarzdor" bo'lib chiqadi.
+  for (const y of byYear) {
+    if (y.year === NO_DATE) continue;
+    if (y.bankCredit === 0 && y.facturaSent > 0) {
+      warnings.push(
+        `${y.year} йил учун БАНК КЎЧИРМАСИ юкланмаган: ўша йилги ${y.facturaSent.toLocaleString('ru-RU')} сўмлик ` +
+        `фактура «қарздор» бўлиб кўринади. Ўша йилнинг обороткасини ҳам юкланг.`
+      );
+    } else if (y.facturaSent === 0 && y.bankCredit > 0) {
+      warnings.push(
+        `${y.year} йил учун СЧЁТ-ФАКТУРА РЕЕСТРИ юкланмаган: ўша йилги ${y.bankCredit.toLocaleString('ru-RU')} сўмлик ` +
+        `кирим «фактура ёзилмаган» бўлиб кўринади. Ўша йилнинг фактура файлини ҳам юкланг.`
+      );
+    }
+  }
+
   const skippedInvoices: SkippedInvoice[] = [...skippedMap.entries()]
     .map(([status, v]) => ({ status, count: v.count, amount: v.amount }))
     .sort((a, b) => b.amount - a.amount);
@@ -1018,13 +1093,14 @@ export function analyzeKirim(files: InputFile[]): KirimReport {
     totals,
     meta: {
       ownInn,
-      ownName,
+      ownName: prettifyName(ownName),
       bankSheets,
       facturaSheets,
       bankRowCount,
       bankCreditRaw: totalCreditRaw,
       invoiceCount: allInvoices.length,
       skippedInvoices,
+      byYear,
       periodFrom: from,
       periodTo: to,
       warnings,

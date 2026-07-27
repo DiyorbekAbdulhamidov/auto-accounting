@@ -166,7 +166,7 @@ export default function HubPage() {
           </Link>
 
           {/* 2 - Kirim Sverkasi (FAOL) */}
-          <Link href="/kirim-audit" className="anim-fade-up delay-3 block group">
+          <Link href="/income-audit" className="anim-fade-up delay-3 block group">
             <div className="surface p-8 text-left transition-all duration-500 relative flex flex-col justify-between h-64 overflow-hidden group-hover:border-emerald-500/60 group-hover:-translate-y-1.5 group-hover:shadow-[0_20px_60px_rgba(16,185,129,0.18)]">
               <div className="absolute top-0 right-0 p-16 bg-emerald-500/5 rounded-bl-full group-hover:scale-150 transition-transform duration-700 pointer-events-none" />
 
