@@ -3,6 +3,13 @@ import { NextResponse } from 'next/server';
 import * as XLSX from 'xlsx';
 import { parseUniversal } from '@/lib/universalParser';
 import { readWorkbookSmart } from '@/lib/excelWorkbook';
+import {
+  parseTwoSidedTurnover,
+  parseThreeRowAccountReport,
+  parseColumnarStatement,
+  sameEntity,
+  type BankStatement,
+} from '@/lib/bankStatements';
 
 // ============================================================
 // 1. Sanani xavfsiz va aniq o'girish
@@ -204,6 +211,23 @@ export async function POST(req: Request) {
       }
     }
 
+    // Yangi shakldagi ko'chirmani (src/lib/bankStatements.ts) umumiy
+    // yig'indiga qo'shish. O'z hisobvarag'i ichidagi harakatlar - o'z
+    // korporativ kartasiga o'tkazma, ikkinchi hisobvaraq - kontragent
+    // emas, shuning uchun ular tashlab yuboriladi (eski IPOTEKA_ASBT
+    // shoxchasida ham xuddi shunday qilingan).
+    function addStatement(st: BankStatement, docType: string) {
+      for (const tx of st.txs) {
+        if (tx.debit <= 0 && tx.credit <= 0) continue;
+        const isOwnMovement =
+          (!!st.ownInn && !!tx.inn && tx.inn === st.ownInn) ||
+          (!!st.ownAccount && !!tx.account && tx.account === st.ownAccount) ||
+          (!!st.ownName && !!tx.name && sameEntity(tx.name, st.ownName));
+        if (isOwnMovement) continue;
+        addTx(tx.name, tx.inn, tx.date, tx.debit, tx.credit, docType);
+      }
+    }
+
     const detectedFormats: string[] = [];
 
     // Bitta varaq (sheet) uchun format-aniqlash va o'qish. Ilgari faqat
@@ -249,6 +273,46 @@ export async function POST(req: Request) {
       }
 
       else if (formatType === 'IPOTEKA_ASBT') {
+        // ---- YANGI ASBT eksport shakllari -------------------------------
+        // Bank bitta sarlavha ostida bir necha xil jadval beradi. Quyidagi
+        // uchta tekshiruv o'z IMZOsiga qarab ishlaydi; imzo topilmasa eski
+        // mantiq (pastda) avvalgidek, so'zma-so'z o'zgarishsiz ishlaydi.
+
+        // (a) «Cправка о работе счета» - bitta o'tkazma uch qatorga yoyilgan
+        const threeRow = parseThreeRowAccountReport(rawData);
+        if (threeRow) {
+          if (!detectedFormats.includes('ASBT_3ROW')) detectedFormats.push('ASBT_3ROW');
+          addStatement(threeRow, 'BANK');
+          return;
+        }
+
+        // (b) «СПРАВКА ПО РАБОТЕ СЧЕТА» - Дебет va Кредит alohida ustunlarda
+        const columnar = parseColumnarStatement(rawData);
+        if (columnar) {
+          if (!detectedFormats.includes('ASBT_ACCOUNT_REPORT')) detectedFormats.push('ASBT_ACCOUNT_REPORT');
+          addStatement(columnar, 'BANK');
+          return;
+        }
+
+        // (c) «дебетовых/кредитовых оборотах» - ustunlar soni eksport
+        //     versiyasiga qarab farq qiladi (10 ta ham, 14 ta ham).
+        //     Eski qattiq indekslar (сана=5, сумма=7) shu varaqqa MOS
+        //     bo'lsa - hech narsa o'zgarmaydi, eski kod ishlaydi.
+        //     Mos bo'lmasa (yoki varaqda ikkita bo'lim bo'lsa) - ustunlar
+        //     shapka nomi bo'yicha aniqlanadi.
+        const twoSided = parseTwoSidedTurnover(rawData);
+        const legacyLayoutFits =
+          !!twoSided &&
+          twoSided.layout.length === 1 &&
+          twoSided.layout[0].amountCol === 7 &&
+          twoSided.layout[0].dateCol === 5;
+        if (twoSided && !legacyLayoutFits) {
+          if (!detectedFormats.includes('ASBT_TURNOVER')) detectedFormats.push('ASBT_TURNOVER');
+          addStatement(twoSided, 'BANK');
+          return;
+        }
+        // ---- ESKI MANTIQ (o'zgartirilmagan) -----------------------------
+
         // Qaysi ustun "o'zimizning" (hisob egasining) INN'i, qaysisi kontragentniki -
         // debit (chiqim) faylida "получатель" (8/9-ustun) kontragent, "плательщик" (3/4) - o'zimiz.
         // Kredit (kirim) faylida buning aksi.
@@ -297,11 +361,44 @@ export async function POST(req: Request) {
       }
 
       else if (formatType === 'FAKTURA') {
+        // E-фактура portali eksport ustunlarini vaqti-vaqti bilan o'zgartiradi:
+        // yangi eksportda ID / ТИП ЭСФ / ДОГОВОР / филиал ustunlari qo'shilgan
+        // va СУММА К ОПЛАТЕ 8-o'rindan 14-o'ringa surilgan. Shuning uchun
+        // ustunlar avval SHAPKA NOMI bo'yicha topiladi; shapka topilmasa -
+        // eski qattiq indekslar (1/2/4/5/8) avvalgidek ishlatiladi.
+        let cStatus = 1, cDoc = 2, cSellerInn = 4, cSellerName = 5, cAmount = 8;
         let startIndex = 1;
+        let headerFound = false;
+
         for (let r = 0; r < Math.min(20, rawData.length); r++) {
-          if (rawData[r] && String(rawData[r][0]).includes('№') && String(rawData[r][1]).includes('СТАТУС')) {
+          const row = rawData[r];
+          if (!row) continue;
+          let st = -1, doc = -1, sInn = -1, sName = -1, amt = -1;
+          for (let c = 0; c < row.length; c++) {
+            const t = String(row[c] ?? '').toUpperCase().replace(/\s+/g, ' ').trim();
+            if (!t) continue;
+            if (st === -1 && /^(СТАТУС|STATUS|ҲОЛАТ|ХОЛАТ|HOLAT)$/.test(t)) st = c;
+            else if (doc === -1 && /СЧ[ЁЕ]Т-?ФАКТУРА|ҲИСОБ-?ФАКТУРА|ХИСОБ-?ФАКТУРА/.test(t)) doc = c;
+            else if (sInn === -1 && /ПРОДАВЕЦ.*(ИНН|ПИНФЛ|СТИР)|СОТУВЧИ.*(СТИР|ИНН)/.test(t)) sInn = c;
+            else if (sName === -1 && /ПРОДАВЕЦ.*(НАИМЕНОВАНИЕ|НОМ)|СОТУВЧИ.*НОМИ/.test(t)) sName = c;
+            else if (amt === -1 && /СУММА К ОПЛАТЕ|ТЎЛОВГА|ТУЛОВГА|ЖАМИ СУММА/.test(t)) amt = c;
+          }
+          if (st !== -1 && doc !== -1 && amt !== -1) {
+            cStatus = st; cDoc = doc; cAmount = amt;
+            if (sInn !== -1) cSellerInn = sInn;
+            if (sName !== -1) cSellerName = sName;
             startIndex = r + 1;
+            headerFound = true;
             break;
+          }
+        }
+
+        if (!headerFound) {
+          for (let r = 0; r < Math.min(20, rawData.length); r++) {
+            if (rawData[r] && String(rawData[r][0]).includes('№') && String(rawData[r][1]).includes('СТАТУС')) {
+              startIndex = r + 1;
+              break;
+            }
           }
         }
 
@@ -312,25 +409,25 @@ export async function POST(req: Request) {
         // ustma-ust tushган nusxasi bo'lib chiqadi) hisobga olinmaydi.
         let hasConfirmedMarker = false;
         for (let i = startIndex; i < rawData.length; i++) {
-          const s = String(rawData[i]?.[1] || '').toLowerCase();
+          const s = String(rawData[i]?.[cStatus] || '').toLowerCase();
           if (s.includes('подтвержд') || s.includes('тасдиқ')) { hasConfirmedMarker = true; break; }
         }
 
         for (let i = startIndex; i < rawData.length; i++) {
           const row = rawData[i];
-          if (!row || row.length < 8) continue;
+          if (!row || row.length <= cAmount) continue;
           const rowNumStr = String(row[0]).trim();
           if (!/^\d+(\.\d+)?$/.test(rowNumStr)) continue;
 
-          const status = String(row[1] || '').trim().toLowerCase();
+          const status = String(row[cStatus] || '').trim().toLowerCase();
           if (status.includes('отклонен') || status.includes('отменен') || status.includes('bekor') || status.includes('rad et')) continue;
           if (hasConfirmedMarker && !(status.includes('подтвержд') || status.includes('тасдиқ'))) continue;
 
-          const docStr = String(row[2] || '');
+          const docStr = String(row[cDoc] || '');
           const txDate = parseExcelDate(docStr);
-          const sellerInn = String(row[4] || '');
-          const sellerName = String(row[5] || '');
-          const amount = parseAmount(row[8]);
+          const sellerInn = String(row[cSellerInn] || '');
+          const sellerName = String(row[cSellerName] || '');
+          const amount = parseAmount(row[cAmount]);
 
           if (amount <= 0) continue;
 
@@ -343,6 +440,18 @@ export async function POST(req: Request) {
       }
 
       else if (formatType === 'GENERIC') {
+        // Uch qatorli «Cправка о работе счета» sarlavhasida bank nomi
+        // ko'rsatilmasligi mumkin - unda fayl bu yerga tushadi. Imzosi
+        // aniq (kontragent katagi «МФО:.. Счет:.. ИНН:..» ko'rinishida),
+        // shuning uchun universal qatlamdan oldin tekshiriladi: aks holda
+        // firma nomi o'rniga o'sha xizmat matni o'qilib qolardi.
+        const threeRow = parseThreeRowAccountReport(rawData);
+        if (threeRow) {
+          if (!detectedFormats.includes('ASBT_3ROW')) detectedFormats.push('ASBT_3ROW');
+          addStatement(threeRow, 'BANK');
+          return;
+        }
+
         // YANGI QATLAM: universal parser - kengaytirilgan shapka lug'ati va
         // statistik ustun tahlili bilan NOTANISH formatlarni o'qiydi.
         // Ishonchli natija topa olmasa null qaytaradi va quyidagi eski

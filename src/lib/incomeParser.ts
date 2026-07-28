@@ -25,6 +25,7 @@
 import * as XLSX from 'xlsx';
 import iconv from 'iconv-lite';
 import { createHash } from 'crypto';
+import { parseNewBankFormats } from './bankStatements';
 
 export type Cell = string | number | boolean | Date | null | undefined;
 
@@ -441,6 +442,17 @@ function findHeader(
 
 const TOTAL_ROW_RE = /(^|[^А-ЯЁA-Z])(ИТОГО|ЖАМИ|ВСЕГО|JAMI|TOTAL|ОБОРОТ ВСЕГО|ОБОРОТЫ ВСЕГО)([^А-ЯЁA-Z]|$)/;
 
+// Ba'zi ko'chirmalarda yakuniy qator «ИТОГО» emas, «Сумма оборотов» /
+// «Количество оборотов» / «Исходящий остаток» deb yoziladi. Bular oddiy
+// o'tkazma sifatida qo'shilib ketsa, yil summasi IKKI BARAVAR bo'lib
+// ketadi. Ibora FAQAT qator boshidan moslashtiriladi — «Комиссионные
+// доходы по дебетовым оборотам» kabi haqiqiy nomlar o'chib ketmasin.
+const FOOTER_ROW_RE = new RegExp(
+  '^(СУММА ОБОРОТОВ|КОЛИЧЕСТВО ОБОРОТОВ|ОБОРОТ(Ы)? (ВСЕГО|ЗА)|' +
+  'ВХОДЯЩИЙ ОСТАТОК|ИСХОДЯЩИЙ ОСТАТОК|ОСТАТОК (НА|ЗА)|САЛЬДО|' +
+  'БАНКОВСКАЯ СИСТЕМА|РУКОВОДИТЕЛЬ|ГЛАВНЫЙ|ИСПОЛНИТЕЛЬ)'
+);
+
 // Shu dasturning O'ZI chiqargan natija fayli qaytadan yuklanганини aniqlash.
 // Bunday fayl na bank ko'chirmasi, na faktura reestri - lekin jim o'tkazib
 // yuborilsa, foydalanuvchi haqiqiy oborotkani yuklamaganini sezmay qoladi.
@@ -470,7 +482,9 @@ function hasContent(rows: Cell[][]): boolean {
 function isTotalRow(row: Cell[]): boolean {
   for (let c = 0; c < Math.min(row.length, 4); c++) {
     const s = cellText(row[c]).toUpperCase();
-    if (s && TOTAL_ROW_RE.test(s)) return true;
+    if (!s) continue;
+    if (TOTAL_ROW_RE.test(s)) return true;
+    if (c < 2 && FOOTER_ROW_RE.test(s.replace(/\s+/g, ' '))) return true;
   }
   return false;
 }
@@ -798,6 +812,38 @@ export function analyzeIncome(files: InputFile[]): IncomeReport {
           prev.count += v.count;
           prev.amount += v.amount;
           skippedMap.set(status, prev);
+        }
+        continue;
+      }
+
+      // YANGI SHAKLLAR (ASBT «дебетовых/кредитовых оборотах» va uch
+      // qatorli «Справка о работе счета»). Bular quyidagi umumiy
+      // shapka-qidiruvidan OLDIN tekshiriladi: uch qatorli shaklda
+      // shapka topilsa ham kontragent nomi o'rniga «МФО:.. Счет:..»
+      // o'qilib qolar edi. Imzo mos kelmasa null qaytadi va hammasi
+      // avvalgidek davom etadi.
+      const newFormat = parseNewBankFormats(sd.rows);
+      if (newFormat) {
+        bankSheets.push(label);
+        if (!ownAccount && newFormat.ownAccount) ownAccount = newFormat.ownAccount;
+        if (ownInn === '-' && newFormat.ownInn) ownInn = newFormat.ownInn;
+        if (!ownName && newFormat.ownName) ownName = newFormat.ownName;
+
+        bankRowCount += newFormat.txs.length;
+        totalCreditRaw += newFormat.totalCredit;
+        totalDebitRaw += newFormat.totalDebit;
+
+        for (const tx of newFormat.txs) {
+          if (tx.credit <= 0) continue;
+          allPayments.push({
+            inn: tx.inn && isValidInn(tx.inn) ? tx.inn : '-',
+            name: tx.name,
+            account: tx.account,
+            date: tx.date,
+            amount: tx.credit,
+            doc: tx.doc,
+            purpose: tx.purpose,
+          });
         }
         continue;
       }
