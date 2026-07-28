@@ -8,6 +8,7 @@
 import React, { useMemo, useState } from "react";
 import NextLink from "next/link";
 import { buildIncomeWorkbook } from "@/lib/incomeExcel";
+import { authFetch } from "@/lib/authFetch";
 import { buildAktWorkbook } from "@/lib/aktSverki";
 import { saveAs } from "file-saver";
 import {
@@ -21,6 +22,7 @@ import {
   Download,
   FileSpreadsheet,
   FileText,
+  Hourglass,
   X,
   Loader2,
   Receipt,
@@ -32,6 +34,7 @@ import {
 } from "lucide-react";
 import SortHeader from "@/components/SortHeader";
 import ThemeToggle from "@/components/ThemeToggle";
+import { buildAging, BUCKET_KEYS, type BucketKey } from "@/lib/aging";
 
 interface PaymentRec {
   date: string | null;
@@ -113,7 +116,24 @@ function verdict(diff: number): { text: string; color: string } {
 type SortKey = "name" | "inn" | "credit" | "factura" | "diff";
 type SortDir = "asc" | "desc";
 type FilterKind = "ALL" | "DIFF" | "NO_FACTURA" | "UNPAID" | "EQUAL";
-type TabKey = "SVERKA" | "YEARS" | "MONTHLY" | "PAYMENTS" | "INVOICES";
+type TabKey = "SVERKA" | "YEARS" | "MONTHLY" | "PAYMENTS" | "INVOICES" | "AGING";
+
+// Қарздорлик ёши гуруҳлари
+const BUCKET_LABELS: Record<BucketKey, string> = {
+  d0_30: "0–30 кун",
+  d31_60: "31–60 кун",
+  d61_90: "61–90 кун",
+  d90plus: "90+ кун",
+  noDate: "Санасиз",
+};
+
+const BUCKET_COLORS: Record<BucketKey, string> = {
+  d0_30: "text-emerald-600 dark:text-emerald-400",
+  d31_60: "text-amber-600 dark:text-amber-400",
+  d61_90: "text-orange-600 dark:text-orange-400",
+  d90plus: "text-rose-600 dark:text-rose-400",
+  noDate: "text-slate-500",
+};
 
 const NO_DATE = "Санасиз";
 
@@ -172,7 +192,7 @@ export default function IncomeAuditPage() {
     files.forEach((f) => formData.append("files", f));
 
     try {
-      const res = await fetch("/api/income-audit", { method: "POST", body: formData });
+      const res = await authFetch("/api/income-audit", { method: "POST", body: formData });
       const data = await res.json();
       if (data.success) {
         const parsed = data as IncomeResponse;
@@ -251,6 +271,13 @@ export default function IncomeAuditPage() {
         { credit: 0, factura: 0, diff: 0 }
       ),
     [displayRows]
+  );
+
+  // ⏳ ҚАРЗДОРЛИК ЁШИ — фактураларни FIFO билан тўловларга ёпиб, қолдиқни ёшга ажратади.
+  // Ҳисоб санаси: даврнинг охирги куни (маълум бўлса), акс ҳолда бугун.
+  const aging = useMemo(
+    () => buildAging(displayRows, report?.meta.periodTo ?? null),
+    [displayRows, report]
   );
 
   const allShownSelected = rows.length > 0 && rows.every((p) => selectedKeys.includes(p.key));
@@ -344,6 +371,7 @@ export default function IncomeAuditPage() {
     { key: "MONTHLY" as TabKey, label: "Ойма-ой", icon: CalendarDays, count: monthlyRows.length },
     { key: "PAYMENTS" as TabKey, label: "Тўловлар", icon: Banknote, count: paymentRows.length },
     { key: "INVOICES" as TabKey, label: "Фактуралар", icon: Receipt, count: invoiceRows.length },
+    { key: "AGING" as TabKey, label: "Қарз ёши", icon: Hourglass, count: aging.parties.filter((p) => p.receivable > 0.01).length },
   ];
 
   // 📈 EXCEL EXPORT — 5 варақли ҳисобот (src/lib/kirimExcel.ts)
@@ -1002,6 +1030,88 @@ export default function IncomeAuditPage() {
                         </tr>
                       </tfoot>
                     </table>
+                  </div>
+                )}
+
+                {/* ===== ҚАРЗ ЁШИ (AGING) ===== */}
+                {tab === "AGING" && (
+                  <div className="anim-fade space-y-4">
+                    {/* Гуруҳлар бўйича умумий манзара */}
+                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+                      {BUCKET_KEYS.map((k) => (
+                        <div key={k} className="surface p-4 space-y-1">
+                          <p className="text-[11px] font-bold uppercase tracking-widest text-slate-500">{BUCKET_LABELS[k]}</p>
+                          <p className={`text-lg font-black tabular ${BUCKET_COLORS[k]}`}>{fmt(aging.totals.buckets[k])}</p>
+                        </div>
+                      ))}
+                    </div>
+
+                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                      Ҳисоб санаси: <span className="font-semibold">{fmtDate(aging.asOf)}</span> · Жами қарз:{" "}
+                      <span className="font-semibold text-rose-600 dark:text-rose-400">{fmt(aging.totals.receivable)}</span> · Аванс:{" "}
+                      <span className="font-semibold text-sky-600 dark:text-sky-400">{fmt(aging.totals.advance)}</span>
+                    </p>
+
+                    <div className="overflow-auto max-h-[70vh] w-full border border-slate-200 dark:border-slate-800 rounded-xl custom-scrollbar">
+                      <table className="w-full text-sm border-collapse">
+                        <thead className="sticky top-0 z-10 bg-slate-100 dark:bg-slate-900">
+                          <tr className="border-b border-slate-200 dark:border-slate-800 text-[11px] uppercase tracking-wider font-bold text-slate-500">
+                            <th className="p-3 text-left min-w-[240px]">Фирма номлари</th>
+                            <th className="p-3 text-center w-32">СТИР</th>
+                            <th className="p-3 text-right w-36">Қарз қолдиғи</th>
+                            {BUCKET_KEYS.map((k) => (
+                              <th key={k} className="p-3 text-right w-32">{BUCKET_LABELS[k]}</th>
+                            ))}
+                            <th className="p-3 text-right w-32">Аванс</th>
+                            <th className="p-3 text-center w-28">Энг эски</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-200 dark:divide-slate-800/70">
+                          {aging.parties.map((p) => (
+                            <tr key={p.key} className="hover:bg-rose-500/[0.04] transition-colors">
+                              <td className="p-3 text-left text-slate-900 dark:text-slate-100">{p.name}</td>
+                              <td className="p-3 text-center font-mono text-xs text-slate-500">{p.inn}</td>
+                              <td className="p-3 text-right tabular font-bold">
+                                {p.receivable > 0.01 ? fmt(p.receivable) : "—"}
+                              </td>
+                              {BUCKET_KEYS.map((k) => (
+                                <td key={k} className={`p-3 text-right tabular ${p.buckets[k] > 0.01 ? BUCKET_COLORS[k] : "text-slate-300 dark:text-slate-700"}`}>
+                                  {p.buckets[k] > 0.01 ? fmt(p.buckets[k]) : "—"}
+                                </td>
+                              ))}
+                              <td className="p-3 text-right tabular text-sky-600 dark:text-sky-400">
+                                {p.advance > 0.01 ? fmt(p.advance) : "—"}
+                              </td>
+                              <td className="p-3 text-center text-xs whitespace-nowrap">
+                                {p.oldestDays === null ? (
+                                  <span className="text-slate-400">—</span>
+                                ) : (
+                                  <span className={p.oldestDays > 90 ? "font-bold text-rose-600 dark:text-rose-400" : "text-slate-600 dark:text-slate-300"}>
+                                    {p.oldestDays} кун
+                                  </span>
+                                )}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                        <tfoot className="sticky bottom-0 bg-slate-100 dark:bg-slate-900 font-bold border-t-2 border-slate-300 dark:border-slate-700">
+                          <tr>
+                            <td colSpan={2} className="p-3 text-right uppercase tracking-wider text-[11px] text-slate-500">ЖАМИ:</td>
+                            <td className="p-3 text-right tabular">{fmt(aging.totals.receivable)}</td>
+                            {BUCKET_KEYS.map((k) => (
+                              <td key={k} className={`p-3 text-right tabular ${BUCKET_COLORS[k]}`}>{fmt(aging.totals.buckets[k])}</td>
+                            ))}
+                            <td className="p-3 text-right tabular text-sky-600 dark:text-sky-400">{fmt(aging.totals.advance)}</td>
+                            <td />
+                          </tr>
+                        </tfoot>
+                      </table>
+                    </div>
+
+                    <p className="text-[11px] text-slate-400 dark:text-slate-600">
+                      Ҳисоблаш усули: келган пул энг эски фактурадан бошлаб ёпилади (FIFO). Ёпилмай қолган қолдиқ
+                      фактура санасидан ҳисоб санасигача ўтган кунга қараб гуруҳланади. Фактурадан ортиқча келган пул — аванс.
+                    </p>
                   </div>
                 )}
               </div>

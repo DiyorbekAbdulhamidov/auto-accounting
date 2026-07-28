@@ -2,6 +2,7 @@
 
 import { useMemo, useState, type ChangeEvent, type FormEvent } from 'react';
 import ComingSoon from '@/components/ComingSoon';
+import { authFetch } from '@/lib/authFetch';
 import {
   ArrowDownCircle,
   ArrowUpCircle,
@@ -161,7 +162,7 @@ function AstatkaPageOriginal() {
       if (receivedFile) formData.append('received', receivedFile);
       if (sentFile) formData.append('sent', sentFile);
 
-      const res = await fetch('/api/calculate-astatka', { method: 'POST', body: formData });
+      const res = await authFetch('/api/calculate-astatka', { method: 'POST', body: formData });
       const json = (await res.json()) as AstatkaResponse;
       if (!res.ok || !json.success) {
         throw new Error(json.error ?? `So‘rov xatosi (${res.status})`);

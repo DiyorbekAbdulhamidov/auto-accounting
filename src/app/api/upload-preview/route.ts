@@ -10,6 +10,9 @@ import {
   sameEntity,
   type BankStatement,
 } from '@/lib/bankStatements';
+import { requireUser } from '@/lib/apiAuth';
+
+export const runtime = 'nodejs';
 
 // ============================================================
 // 1. Sanani xavfsiz va aniq o'girish
@@ -144,6 +147,9 @@ interface AggEntry {
 }
 
 export async function POST(req: Request) {
+  const auth = await requireUser(req);
+  if (!auth.ok) return auth.response;
+
   try {
     const formData = await req.formData();
     const files = formData.getAll('files') as File[];

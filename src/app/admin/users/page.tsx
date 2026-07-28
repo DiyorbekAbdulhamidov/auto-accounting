@@ -1,5 +1,6 @@
 "use client";
 import { useState } from "react";
+import { authFetch } from "@/lib/authFetch";
 
 export default function AdminUsersPage() {
   const [email, setEmail] = useState("");
@@ -18,7 +19,7 @@ export default function AdminUsersPage() {
     const timeoutId = setTimeout(() => controller.abort(), 10000);
 
     try {
-      const res = await fetch("/api/admin/create-user", {
+      const res = await authFetch("/api/admin/create-user", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password, role }),

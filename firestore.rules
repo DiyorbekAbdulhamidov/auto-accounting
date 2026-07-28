@@ -1,0 +1,55 @@
+rules_version = '2';
+
+// Firestore xavfsizlik qoidalari.
+//
+// Muhim: klient bu bazaga API'ni CHETLAB O'TIB, to'g'ridan-to'g'ri yozadi
+// (companies, sverka_reports). Ya'ni src/lib/apiAuth.ts dagi tekshiruv bu
+// yo'lga TA'SIR QILMAYDI — yagona himoya shu fayl.
+//
+// Qoida apiAuth.ts bilan bir xil: Firebase'da login bo'lish yetarli emas,
+// email `allowed_users` ro'yxatida va status "active" bo'lishi shart.
+//
+// Deploy:  firebase deploy --only firestore:rules
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function userDoc() {
+      return get(/databases/$(database)/documents/allowed_users/$(request.auth.token.email)).data;
+    }
+
+    function isAllowed() {
+      return request.auth != null
+        && request.auth.token.email != null
+        && exists(/databases/$(database)/documents/allowed_users/$(request.auth.token.email))
+        // status maydoni yo'q eski hujjatlar ham faol hisoblanadi (apiAuth.ts bilan bir xil)
+        && userDoc().get('status', 'active') == 'active';
+    }
+
+    function isAdmin() {
+      return isAllowed() && userDoc().get('role', 'user') == 'admin';
+    }
+
+    // Ruxsat ro'yxati: har kim faqat O'Z hujjatini o'qiy oladi (AuthContext shuni qiladi).
+    // Yozish faqat Admin SDK orqali — u qoidalarni chetlab o'tadi, shuning uchun bu yerda yopiq.
+    match /allowed_users/{email} {
+      allow read: if request.auth != null && request.auth.token.email == email;
+      allow write: if false;
+    }
+
+    match /companies/{companyId} {
+      allow read, create, update: if isAllowed();
+      allow delete: if isAdmin();
+    }
+
+    match /sverka_reports/{reportId} {
+      allow read, create: if isAllowed();
+      allow update, delete: if isAdmin();
+    }
+
+    // Qolgan hamma narsa yopiq
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

@@ -9,8 +9,14 @@
 
 import { NextResponse } from 'next/server';
 import { analyzeIncome, type InputFile } from '@/lib/incomeParser';
+import { requireUser } from '@/lib/apiAuth';
+
+export const runtime = 'nodejs';
 
 export async function POST(req: Request) {
+  const auth = await requireUser(req);
+  if (!auth.ok) return auth.response;
+
   try {
     const formData = await req.formData();
     const files = formData.getAll('files').filter((f): f is File => f instanceof File);

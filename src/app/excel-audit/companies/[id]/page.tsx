@@ -4,6 +4,7 @@ import React, { useState, use, useMemo, useEffect } from "react";
 // 🔥 FIREBASE IMPORTLARI
 import { collection, addDoc, serverTimestamp, query, where, getDocs } from "firebase/firestore";
 import { db } from "@/lib/firebase";
+import { authFetch } from "@/lib/authFetch";
 // 📊 EXCEL IMPORTLARI
 import ExcelJS from "exceljs";
 import { saveAs } from "file-saver";
@@ -144,7 +145,7 @@ export default function CompanyDetailPage({ params }: PageProps) {
     formData.append("companyId", companyId);
 
     try {
-      const res = await fetch("/api/upload-preview", {
+      const res = await authFetch("/api/upload-preview", {
         method: "POST",
         body: formData,
       });

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import * as XLSX from 'xlsx';
+import { requireUser, type AuthError } from '@/lib/apiAuth';
 
 export const runtime = 'nodejs';
 
@@ -100,7 +101,12 @@ function parseWorkbook(buffer: Buffer, type: InvoiceType): ParsedInvoice[] {
   return invoices;
 }
 
-export async function POST(request: NextRequest): Promise<NextResponse<AstatkaResponse>> {
+export async function POST(
+  request: NextRequest,
+): Promise<NextResponse<AstatkaResponse> | AuthError> {
+  const auth = await requireUser(request);
+  if (!auth.ok) return auth.response;
+
   try {
     const formData = await request.formData();
     const received = formData.get('received');
