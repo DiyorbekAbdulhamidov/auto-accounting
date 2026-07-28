@@ -8,6 +8,7 @@
 import React, { useMemo, useState } from "react";
 import NextLink from "next/link";
 import { buildIncomeWorkbook } from "@/lib/incomeExcel";
+import { buildAktWorkbook } from "@/lib/aktSverki";
 import { saveAs } from "file-saver";
 import {
   AlertTriangle,
@@ -19,6 +20,8 @@ import {
   CloudUpload,
   Download,
   FileSpreadsheet,
+  FileText,
+  X,
   Loader2,
   Receipt,
   Scale,
@@ -152,6 +155,9 @@ export default function IncomeAuditPage() {
   const [expanded, setExpanded] = useState<string[]>([]);
   const [selectedKeys, setSelectedKeys] = useState<string[]>([]);
   const [tab, setTab] = useState<TabKey>("SVERKA");
+
+  // 📄 АКТ СВЕРКИ — битта фирма учун (файлда фақат жадвал бўлади)
+  const [aktParty, setAktParty] = useState<PartyRow | null>(null);
 
   const handleUpload = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -318,6 +324,20 @@ export default function IncomeAuditPage() {
     return list;
   }, [displayRows]);
 
+  const openAkt = (p: PartyRow) => setAktParty(p);
+
+  const handleAktDownload = async () => {
+    if (!aktParty || !report) return;
+    const wb = buildAktWorkbook(aktParty, { ownName: report.meta.ownName || "Бизнинг корхона" });
+    const buffer = await wb.xlsx.writeBuffer();
+    const safe = aktParty.name.replace(/[^A-Za-zА-Яа-я0-9]+/g, "_").slice(0, 40);
+    saveAs(
+      new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }),
+      `Akt_sverki_${safe}.xlsx`
+    );
+    setAktParty(null);
+  };
+
   const TABS = [
     { key: "SVERKA" as TabKey, label: "Сверка", icon: Table2, count: displayRows.length },
     { key: "YEARS" as TabKey, label: "Йиллар", icon: CalendarRange, count: yearKeys.length },
@@ -374,8 +394,8 @@ export default function IncomeAuditPage() {
               <label className="w-full md:w-3/4 cursor-pointer">
                 <div
                   className={`flex items-center gap-3 p-4 border-2 border-dashed rounded-xl transition-all duration-300 ${files.length > 0
-                      ? "border-emerald-500/50 bg-emerald-500/5"
-                      : "border-slate-200 dark:border-slate-800 bg-slate-100 dark:bg-slate-950/50 hover:border-slate-400 dark:hover:border-slate-600"
+                    ? "border-emerald-500/50 bg-emerald-500/5"
+                    : "border-slate-200 dark:border-slate-800 bg-slate-100 dark:bg-slate-950/50 hover:border-slate-400 dark:hover:border-slate-600"
                     }`}
                 >
                   <div className="p-2.5 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 shrink-0">
@@ -538,11 +558,10 @@ export default function IncomeAuditPage() {
                     <button
                       key={t.key}
                       onClick={() => setTab(t.key)}
-                      className={`inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition-all duration-300 border ${
-                        active
+                      className={`inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition-all duration-300 border ${active
                           ? "bg-emerald-600 text-white border-emerald-600 shadow-lg shadow-emerald-600/25"
                           : "bg-white dark:bg-slate-900/60 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-800 hover:text-emerald-600 dark:hover:text-emerald-400 hover:border-emerald-500/40"
-                      }`}
+                        }`}
                     >
                       <Icon className="w-3.5 h-3.5" />
                       {t.label}
@@ -601,386 +620,459 @@ export default function IncomeAuditPage() {
               </div>
 
               <div className="p-4 md:p-5">
-              {tab === "SVERKA" && (
-                <div className="overflow-x-auto w-full border border-slate-200 dark:border-slate-800 rounded-xl custom-scrollbar">
-                  <table className="w-full text-sm table-auto border-collapse">
-                    <thead className="sticky top-0 z-20">
-                      <tr className="bg-slate-100 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800">
-                        <th className="p-3 w-12 text-center">
-                          <input
-                            type="checkbox"
-                            className="w-4 h-4 cursor-pointer accent-emerald-500"
-                            checked={allShownSelected}
-                            onChange={toggleAll}
-                          />
-                        </th>
-                        <th className="p-3 text-left"><SortHeader label="Фирма номлари" k="name" activeKey={sortKey} dir={sortDir} onToggle={toggleSort} /></th>
-                        <th className="p-3 w-32 text-center"><SortHeader label="СТИР" k="inn" align="center" activeKey={sortKey} dir={sortDir} onToggle={toggleSort} /></th>
-                        <th className="p-3 w-44 text-right"><SortHeader label="Келган пул жами" k="credit" align="right" activeKey={sortKey} dir={sortDir} onToggle={toggleSort} /></th>
-                        <th className="p-3 w-44 text-right"><SortHeader label="Юборилган счет-ф жами" k="factura" align="right" activeKey={sortKey} dir={sortDir} onToggle={toggleSort} /></th>
-                        <th className="p-3 w-40 text-right"><SortHeader label="Фарқи" k="diff" align="right" activeKey={sortKey} dir={sortDir} onToggle={toggleSort} /></th>
-                        <th className="p-3 w-52 text-left uppercase tracking-wider text-[11px] font-bold text-slate-500">Изоҳ</th>
-                        <th className="p-3 w-24 text-center uppercase tracking-wider text-[11px] font-bold text-slate-500">Ойлар</th>
-                      </tr>
-                    </thead>
-  
-                    <tbody className="divide-y divide-slate-200 dark:divide-slate-800/70">
-                      {rows.length === 0 ? (
-                        <tr>
-                          <td colSpan={8} className="text-center p-12 text-slate-500 font-medium">
-                            Маълумот топилмади... 🕵️‍♂️
-                          </td>
+                {tab === "SVERKA" && (
+                  <div className="overflow-x-auto w-full border border-slate-200 dark:border-slate-800 rounded-xl custom-scrollbar">
+                    <table className="w-full text-sm table-auto border-collapse">
+                      <thead className="sticky top-0 z-20">
+                        <tr className="bg-slate-100 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800">
+                          <th className="p-3 w-12 text-center">
+                            <input
+                              type="checkbox"
+                              className="w-4 h-4 cursor-pointer accent-emerald-500"
+                              checked={allShownSelected}
+                              onChange={toggleAll}
+                            />
+                          </th>
+                          <th className="p-3 text-left"><SortHeader label="Фирма номлари" k="name" activeKey={sortKey} dir={sortDir} onToggle={toggleSort} /></th>
+                          <th className="p-3 w-32 text-center"><SortHeader label="СТИР" k="inn" align="center" activeKey={sortKey} dir={sortDir} onToggle={toggleSort} /></th>
+                          <th className="p-3 w-44 text-right"><SortHeader label="Келган пул жами" k="credit" align="right" activeKey={sortKey} dir={sortDir} onToggle={toggleSort} /></th>
+                          <th className="p-3 w-44 text-right"><SortHeader label="Юборилган счет-ф жами" k="factura" align="right" activeKey={sortKey} dir={sortDir} onToggle={toggleSort} /></th>
+                          <th className="p-3 w-40 text-right"><SortHeader label="Фарқи" k="diff" align="right" activeKey={sortKey} dir={sortDir} onToggle={toggleSort} /></th>
+                          <th className="p-3 w-52 text-left uppercase tracking-wider text-[11px] font-bold text-slate-500">Изоҳ</th>
+                          <th className="p-3 w-24 text-center uppercase tracking-wider text-[11px] font-bold text-slate-500">Ойлар</th>
                         </tr>
-                      ) : (
-                        rows.map((p) => {
-                          const v = verdict(p.difference);
-                          const isOpen = expanded.includes(p.key);
-                          const isSelected = selectedKeys.includes(p.key);
-                          const periods = Object.keys(p.monthly).sort();
-  
-                          return (
-                            <React.Fragment key={p.key}>
-                              <tr className={`transition-colors ${isSelected ? "bg-emerald-500/[0.06]" : "hover:bg-slate-100 dark:hover:bg-slate-900/60"}`}>
-                                <td className="p-3 text-center">
-                                  <input
-                                    type="checkbox"
-                                    className="w-4 h-4 cursor-pointer accent-emerald-500"
-                                    checked={isSelected}
-                                    onChange={() => toggleSelection(p.key)}
-                                  />
-                                </td>
-                                <td className="p-3 text-left min-w-[260px]">
-                                  <div className="font-medium text-slate-900 dark:text-slate-100">{p.name}</div>
-                                  {p.aliases.length > 1 && (
-                                    <div className="text-[11px] text-slate-400 dark:text-slate-600 truncate max-w-[420px]">
-                                      {p.aliases.filter((a) => a !== p.name).join(" · ")}
-                                    </div>
-                                  )}
-                                </td>
-                                <td className="p-3 text-center">
-                                  <span className="font-mono text-xs text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-800 bg-slate-100 dark:bg-slate-950/60 px-2 py-0.5 rounded-md">
-                                    {p.inn}
-                                  </span>
-                                </td>
-                                <td className="p-3 text-right text-emerald-600 dark:text-emerald-400 font-semibold tabular">{fmt(p.bankCredit)}</td>
-                                <td className="p-3 text-right text-indigo-600 dark:text-indigo-400 font-semibold tabular">{fmt(p.facturaSent)}</td>
-                                <td className={`p-3 text-right font-bold tabular ${v.color}`}>{fmt(p.difference)}</td>
-                                <td className={`p-3 text-left text-xs font-semibold ${v.color}`}>{v.text}</td>
-                                <td className="p-3 text-center">
-                                  <button
-                                    onClick={() => toggleExpand(p.key)}
-                                    className={`inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-bold transition-all duration-300 border ${isOpen
-                                        ? "bg-emerald-600 text-white border-emerald-600 shadow-lg shadow-emerald-600/25"
-                                        : "bg-white dark:bg-slate-900/60 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-800 hover:text-emerald-600 dark:hover:text-emerald-400 hover:border-emerald-500/40"
-                                      }`}
-                                  >
-                                    {isOpen ? "Ёпиш" : "Очиш"}
-                                    <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-300 ${isOpen ? "rotate-180" : ""}`} />
-                                  </button>
-                                </td>
-                              </tr>
-  
-                              {isOpen && (
-                                <tr>
-                                  <td colSpan={8} className="p-0">
-                                    <div className="anim-fade bg-slate-100/70 dark:bg-slate-900/50 p-5 border-y border-emerald-500/10 space-y-5">
-                                      {/* Ойма-ой */}
-                                      <div>
-                                        <h4 className="font-bold text-emerald-700 dark:text-emerald-300 mb-3 text-sm">📅 Ойма-ой</h4>
-                                        <div className="overflow-hidden rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950/60">
-                                          <table className="w-full text-sm">
-                                            <thead className="bg-slate-100 dark:bg-slate-900/80 text-slate-500 dark:text-slate-400">
-                                              <tr>
-                                                <th className="p-2.5 text-left font-bold text-[11px] uppercase tracking-wider">Давр</th>
-                                                <th className="p-2.5 text-right font-bold text-[11px] uppercase tracking-wider">Келган пул</th>
-                                                <th className="p-2.5 text-right font-bold text-[11px] uppercase tracking-wider">Фактура</th>
-                                                <th className="p-2.5 text-right font-bold text-[11px] uppercase tracking-wider">Фарқ</th>
-                                              </tr>
-                                            </thead>
-                                            <tbody className="divide-y divide-slate-200 dark:divide-slate-800/60">
-                                              {periods.map((period) => {
-                                                const b = p.monthly[period];
-                                                const d = b.credit - b.factura;
-                                                return (
-                                                  <tr key={period}>
-                                                    <td className="p-2.5 font-semibold text-slate-700 dark:text-slate-300">{periodLabel(period)}</td>
-                                                    <td className="p-2.5 text-right tabular text-emerald-600 dark:text-emerald-400">{fmt(b.credit)}</td>
-                                                    <td className="p-2.5 text-right tabular text-indigo-600 dark:text-indigo-400">{fmt(b.factura)}</td>
-                                                    <td className={`p-2.5 text-right tabular font-bold ${verdict(d).color}`}>{fmt(d)}</td>
-                                                  </tr>
-                                                );
-                                              })}
-                                            </tbody>
-                                          </table>
-                                        </div>
+                      </thead>
+
+                      <tbody className="divide-y divide-slate-200 dark:divide-slate-800/70">
+                        {rows.length === 0 ? (
+                          <tr>
+                            <td colSpan={8} className="text-center p-12 text-slate-500 font-medium">
+                              Маълумот топилмади... 🕵️‍♂️
+                            </td>
+                          </tr>
+                        ) : (
+                          rows.map((p) => {
+                            const v = verdict(p.difference);
+                            const isOpen = expanded.includes(p.key);
+                            const isSelected = selectedKeys.includes(p.key);
+                            const periods = Object.keys(p.monthly).sort();
+
+                            return (
+                              <React.Fragment key={p.key}>
+                                <tr className={`transition-colors ${isSelected ? "bg-emerald-500/[0.06]" : "hover:bg-slate-100 dark:hover:bg-slate-900/60"}`}>
+                                  <td className="p-3 text-center">
+                                    <input
+                                      type="checkbox"
+                                      className="w-4 h-4 cursor-pointer accent-emerald-500"
+                                      checked={isSelected}
+                                      onChange={() => toggleSelection(p.key)}
+                                    />
+                                  </td>
+                                  <td className="p-3 text-left min-w-[260px]">
+                                    <div className="font-medium text-slate-900 dark:text-slate-100">{p.name}</div>
+                                    {p.aliases.length > 1 && (
+                                      <div className="text-[11px] text-slate-400 dark:text-slate-600 truncate max-w-[420px]">
+                                        {p.aliases.filter((a) => a !== p.name).join(" · ")}
                                       </div>
-  
-                                      {/* Ўтказмалар ва фактуралар */}
-                                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                                        <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950/60 overflow-hidden">
-                                          <div className="px-3 py-2 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 text-[11px] font-bold uppercase tracking-wider">
-                                            Банк ўтказмалари ({p.payments.length})
-                                          </div>
-                                          <div className="max-h-64 overflow-y-auto custom-scrollbar">
-                                            <table className="w-full text-xs">
-                                              <tbody className="divide-y divide-slate-200 dark:divide-slate-800/60">
-                                                {p.payments.length === 0 ? (
-                                                  <tr><td className="p-3 text-slate-500">Тўлов йўқ</td></tr>
-                                                ) : (
-                                                  p.payments.map((pay, i) => (
-                                                    <tr key={i} className="align-top">
-                                                      <td className="p-2.5 w-24 text-slate-500 whitespace-nowrap">{fmtDate(pay.date)}</td>
-                                                      <td className="p-2.5 text-right w-32 tabular font-semibold text-emerald-600 dark:text-emerald-400 whitespace-nowrap">{fmt(pay.amount)}</td>
-                                                      <td className="p-2.5 text-slate-500 dark:text-slate-400">{pay.purpose}</td>
-                                                    </tr>
-                                                  ))
-                                                )}
-                                              </tbody>
-                                            </table>
-                                          </div>
-                                        </div>
-  
-                                        <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950/60 overflow-hidden">
-                                          <div className="px-3 py-2 bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 text-[11px] font-bold uppercase tracking-wider">
-                                            Юборилган счёт-фактуралар ({p.invoices.length})
-                                          </div>
-                                          <div className="max-h-64 overflow-y-auto custom-scrollbar">
-                                            <table className="w-full text-xs">
-                                              <tbody className="divide-y divide-slate-200 dark:divide-slate-800/60">
-                                                {p.invoices.length === 0 ? (
-                                                  <tr><td className="p-3 text-slate-500">Фактура йўқ</td></tr>
-                                                ) : (
-                                                  p.invoices.map((inv, i) => (
-                                                    <tr key={i} className="align-top">
-                                                      <td className="p-2.5 w-24 text-slate-500 whitespace-nowrap">{fmtDate(inv.date)}</td>
-                                                      <td className="p-2.5 text-right w-32 tabular font-semibold text-indigo-600 dark:text-indigo-400 whitespace-nowrap">{fmt(inv.amount)}</td>
-                                                      <td className="p-2.5 text-slate-500 dark:text-slate-400">{inv.number}</td>
-                                                    </tr>
-                                                  ))
-                                                )}
-                                              </tbody>
-                                            </table>
-                                          </div>
-                                        </div>
-                                      </div>
+                                    )}
+                                  </td>
+                                  <td className="p-3 text-center">
+                                    <span className="font-mono text-xs text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-800 bg-slate-100 dark:bg-slate-950/60 px-2 py-0.5 rounded-md">
+                                      {p.inn}
+                                    </span>
+                                  </td>
+                                  <td className="p-3 text-right text-emerald-600 dark:text-emerald-400 font-semibold tabular">{fmt(p.bankCredit)}</td>
+                                  <td className="p-3 text-right text-indigo-600 dark:text-indigo-400 font-semibold tabular">{fmt(p.facturaSent)}</td>
+                                  <td className={`p-3 text-right font-bold tabular ${v.color}`}>{fmt(p.difference)}</td>
+                                  <td className={`p-3 text-left text-xs font-semibold ${v.color}`}>{v.text}</td>
+                                  <td className="p-3 text-center">
+                                    <div className="flex items-center justify-center gap-1.5">
+                                      <button
+                                        onClick={() => openAkt(p)}
+                                        title="Шу фирма учун Акт сверки юклаб олиш"
+                                        className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-bold border bg-white dark:bg-slate-900/60 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-800 transition-all duration-300 hover:text-indigo-600 dark:hover:text-indigo-400 hover:border-indigo-500/40"
+                                      >
+                                        <FileText className="w-3.5 h-3.5" /> Акт
+                                      </button>
+                                      <button
+                                        onClick={() => toggleExpand(p.key)}
+                                        className={`inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-bold transition-all duration-300 border ${isOpen
+                                          ? "bg-emerald-600 text-white border-emerald-600 shadow-lg shadow-emerald-600/25"
+                                          : "bg-white dark:bg-slate-900/60 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-800 hover:text-emerald-600 dark:hover:text-emerald-400 hover:border-emerald-500/40"
+                                          }`}
+                                      >
+                                        {isOpen ? "Ёпиш" : "Очиш"}
+                                        <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-300 ${isOpen ? "rotate-180" : ""}`} />
+                                      </button>
                                     </div>
                                   </td>
                                 </tr>
-                              )}
-                            </React.Fragment>
-                          );
-                        })
-                      )}
-                    </tbody>
-  
-                    {displayRows.length > 0 && (
-                      <tfoot className="sticky bottom-0 z-30 bg-slate-100 dark:bg-slate-900 font-bold border-t-2 border-slate-300 dark:border-slate-700">
-                        <tr>
-                          <td className="p-3 text-center text-emerald-600 dark:text-emerald-400">✓</td>
-                          <td colSpan={2} className="p-3 text-right uppercase tracking-wider text-[11px] text-slate-500">
-                            Жами танланганлар ({displayRows.length} та):
-                          </td>
-                          <td className="p-3 text-right text-base tabular text-slate-900 dark:text-white">{fmt(shown.credit)}</td>
-                          <td className="p-3 text-right text-base tabular text-slate-900 dark:text-white">{fmt(shown.factura)}</td>
-                          <td className={`p-3 text-right text-base tabular ${verdict(shown.diff).color}`}>{fmt(shown.diff)}</td>
-                          <td className={`p-3 text-left text-xs ${verdict(shown.diff).color}`}>{verdict(shown.diff).text}</td>
-                          <td className="p-3" />
-                        </tr>
-                      </tfoot>
-                    )}
-                  </table>
-                </div>
-              )}
 
-              {/* ===== ЙИЛЛАР ===== */}
-              {tab === "YEARS" && (
-                <div className="anim-fade overflow-x-auto w-full border border-slate-200 dark:border-slate-800 rounded-xl custom-scrollbar">
-                  <table className="w-full text-sm border-collapse">
-                    <thead className="bg-slate-100 dark:bg-slate-900">
-                      <tr className="border-b border-slate-200 dark:border-slate-800 text-[11px] uppercase tracking-wider font-bold text-slate-500">
-                        <th className="p-3 text-left sticky left-0 bg-slate-100 dark:bg-slate-900 min-w-[240px]">Фирма номлари</th>
-                        <th className="p-3 text-center">СТИР</th>
-                        {yearKeys.map((y) => (
-                          <React.Fragment key={y}>
-                            <th className="p-3 text-right whitespace-nowrap">{y} келган пул</th>
-                            <th className="p-3 text-right whitespace-nowrap">{y} счет-ф</th>
-                            <th className="p-3 text-right whitespace-nowrap border-r border-slate-200 dark:border-slate-800">{y} фарқи</th>
-                          </React.Fragment>
+                                {isOpen && (
+                                  <tr>
+                                    <td colSpan={8} className="p-0">
+                                      <div className="anim-fade bg-slate-100/70 dark:bg-slate-900/50 p-5 border-y border-emerald-500/10 space-y-5">
+                                        {/* Ойма-ой */}
+                                        <div>
+                                          <h4 className="font-bold text-emerald-700 dark:text-emerald-300 mb-3 text-sm">📅 Ойма-ой</h4>
+                                          <div className="overflow-hidden rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950/60">
+                                            <table className="w-full text-sm">
+                                              <thead className="bg-slate-100 dark:bg-slate-900/80 text-slate-500 dark:text-slate-400">
+                                                <tr>
+                                                  <th className="p-2.5 text-left font-bold text-[11px] uppercase tracking-wider">Давр</th>
+                                                  <th className="p-2.5 text-right font-bold text-[11px] uppercase tracking-wider">Келган пул</th>
+                                                  <th className="p-2.5 text-right font-bold text-[11px] uppercase tracking-wider">Фактура</th>
+                                                  <th className="p-2.5 text-right font-bold text-[11px] uppercase tracking-wider">Фарқ</th>
+                                                </tr>
+                                              </thead>
+                                              <tbody className="divide-y divide-slate-200 dark:divide-slate-800/60">
+                                                {periods.map((period) => {
+                                                  const b = p.monthly[period];
+                                                  const d = b.credit - b.factura;
+                                                  return (
+                                                    <tr key={period}>
+                                                      <td className="p-2.5 font-semibold text-slate-700 dark:text-slate-300">{periodLabel(period)}</td>
+                                                      <td className="p-2.5 text-right tabular text-emerald-600 dark:text-emerald-400">{fmt(b.credit)}</td>
+                                                      <td className="p-2.5 text-right tabular text-indigo-600 dark:text-indigo-400">{fmt(b.factura)}</td>
+                                                      <td className={`p-2.5 text-right tabular font-bold ${verdict(d).color}`}>{fmt(d)}</td>
+                                                    </tr>
+                                                  );
+                                                })}
+                                              </tbody>
+                                            </table>
+                                          </div>
+                                        </div>
+
+                                        {/* Ўтказмалар ва фактуралар */}
+                                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                                          <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950/60 overflow-hidden">
+                                            <div className="px-3 py-2 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 text-[11px] font-bold uppercase tracking-wider">
+                                              Банк ўтказмалари ({p.payments.length})
+                                            </div>
+                                            <div className="max-h-64 overflow-y-auto custom-scrollbar">
+                                              <table className="w-full text-xs">
+                                                <tbody className="divide-y divide-slate-200 dark:divide-slate-800/60">
+                                                  {p.payments.length === 0 ? (
+                                                    <tr><td className="p-3 text-slate-500">Тўлов йўқ</td></tr>
+                                                  ) : (
+                                                    p.payments.map((pay, i) => (
+                                                      <tr key={i} className="align-top">
+                                                        <td className="p-2.5 w-24 text-slate-500 whitespace-nowrap">{fmtDate(pay.date)}</td>
+                                                        <td className="p-2.5 text-right w-32 tabular font-semibold text-emerald-600 dark:text-emerald-400 whitespace-nowrap">{fmt(pay.amount)}</td>
+                                                        <td className="p-2.5 text-slate-500 dark:text-slate-400">{pay.purpose}</td>
+                                                      </tr>
+                                                    ))
+                                                  )}
+                                                </tbody>
+                                              </table>
+                                            </div>
+                                          </div>
+
+                                          <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950/60 overflow-hidden">
+                                            <div className="px-3 py-2 bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 text-[11px] font-bold uppercase tracking-wider">
+                                              Юборилган счёт-фактуралар ({p.invoices.length})
+                                            </div>
+                                            <div className="max-h-64 overflow-y-auto custom-scrollbar">
+                                              <table className="w-full text-xs">
+                                                <tbody className="divide-y divide-slate-200 dark:divide-slate-800/60">
+                                                  {p.invoices.length === 0 ? (
+                                                    <tr><td className="p-3 text-slate-500">Фактура йўқ</td></tr>
+                                                  ) : (
+                                                    p.invoices.map((inv, i) => (
+                                                      <tr key={i} className="align-top">
+                                                        <td className="p-2.5 w-24 text-slate-500 whitespace-nowrap">{fmtDate(inv.date)}</td>
+                                                        <td className="p-2.5 text-right w-32 tabular font-semibold text-indigo-600 dark:text-indigo-400 whitespace-nowrap">{fmt(inv.amount)}</td>
+                                                        <td className="p-2.5 text-slate-500 dark:text-slate-400">{inv.number}</td>
+                                                      </tr>
+                                                    ))
+                                                  )}
+                                                </tbody>
+                                              </table>
+                                            </div>
+                                          </div>
+                                        </div>
+                                      </div>
+                                    </td>
+                                  </tr>
+                                )}
+                              </React.Fragment>
+                            );
+                          })
+                        )}
+                      </tbody>
+
+                      {displayRows.length > 0 && (
+                        <tfoot className="sticky bottom-0 z-30 bg-slate-100 dark:bg-slate-900 font-bold border-t-2 border-slate-300 dark:border-slate-700">
+                          <tr>
+                            <td className="p-3 text-center text-emerald-600 dark:text-emerald-400">✓</td>
+                            <td colSpan={2} className="p-3 text-right uppercase tracking-wider text-[11px] text-slate-500">
+                              Жами танланганлар ({displayRows.length} та):
+                            </td>
+                            <td className="p-3 text-right text-base tabular text-slate-900 dark:text-white">{fmt(shown.credit)}</td>
+                            <td className="p-3 text-right text-base tabular text-slate-900 dark:text-white">{fmt(shown.factura)}</td>
+                            <td className={`p-3 text-right text-base tabular ${verdict(shown.diff).color}`}>{fmt(shown.diff)}</td>
+                            <td className={`p-3 text-left text-xs ${verdict(shown.diff).color}`}>{verdict(shown.diff).text}</td>
+                            <td className="p-3" />
+                          </tr>
+                        </tfoot>
+                      )}
+                    </table>
+                  </div>
+                )}
+
+                {/* ===== ЙИЛЛАР ===== */}
+                {tab === "YEARS" && (
+                  <div className="anim-fade overflow-x-auto w-full border border-slate-200 dark:border-slate-800 rounded-xl custom-scrollbar">
+                    <table className="w-full text-sm border-collapse">
+                      <thead className="bg-slate-100 dark:bg-slate-900">
+                        <tr className="border-b border-slate-200 dark:border-slate-800 text-[11px] uppercase tracking-wider font-bold text-slate-500">
+                          <th className="p-3 text-left sticky left-0 bg-slate-100 dark:bg-slate-900 min-w-[240px]">Фирма номлари</th>
+                          <th className="p-3 text-center">СТИР</th>
+                          {yearKeys.map((y) => (
+                            <React.Fragment key={y}>
+                              <th className="p-3 text-right whitespace-nowrap">{y} келган пул</th>
+                              <th className="p-3 text-right whitespace-nowrap">{y} счет-ф</th>
+                              <th className="p-3 text-right whitespace-nowrap border-r border-slate-200 dark:border-slate-800">{y} фарқи</th>
+                            </React.Fragment>
+                          ))}
+                          <th className="p-3 text-right whitespace-nowrap">ЖАМИ пул</th>
+                          <th className="p-3 text-right whitespace-nowrap">ЖАМИ счет-ф</th>
+                          <th className="p-3 text-right whitespace-nowrap">ЖАМИ фарқи</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-200 dark:divide-slate-800/70">
+                        {displayRows.map((p) => (
+                          <tr key={p.key} className="hover:bg-emerald-500/[0.04] transition-colors">
+                            <td className="p-3 text-left font-medium text-slate-900 dark:text-slate-100 sticky left-0 bg-white dark:bg-slate-950/95">{p.name}</td>
+                            <td className="p-3 text-center font-mono text-xs text-slate-500">{p.inn}</td>
+                            {yearKeys.map((y) => {
+                              const v = yearOf(p, y);
+                              return (
+                                <React.Fragment key={y}>
+                                  <td className="p-3 text-right tabular text-emerald-600 dark:text-emerald-400">{fmt(v.credit)}</td>
+                                  <td className="p-3 text-right tabular text-indigo-600 dark:text-indigo-400">{fmt(v.factura)}</td>
+                                  <td className={`p-3 text-right tabular font-bold border-r border-slate-200 dark:border-slate-800 ${verdict(v.diff).color}`}>{fmt(v.diff)}</td>
+                                </React.Fragment>
+                              );
+                            })}
+                            <td className="p-3 text-right tabular font-semibold">{fmt(p.bankCredit)}</td>
+                            <td className="p-3 text-right tabular font-semibold">{fmt(p.facturaSent)}</td>
+                            <td className={`p-3 text-right tabular font-bold ${verdict(p.difference).color}`}>{fmt(p.difference)}</td>
+                          </tr>
                         ))}
-                        <th className="p-3 text-right whitespace-nowrap">ЖАМИ пул</th>
-                        <th className="p-3 text-right whitespace-nowrap">ЖАМИ счет-ф</th>
-                        <th className="p-3 text-right whitespace-nowrap">ЖАМИ фарқи</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-200 dark:divide-slate-800/70">
-                      {displayRows.map((p) => (
-                        <tr key={p.key} className="hover:bg-emerald-500/[0.04] transition-colors">
-                          <td className="p-3 text-left font-medium text-slate-900 dark:text-slate-100 sticky left-0 bg-white dark:bg-slate-950/95">{p.name}</td>
-                          <td className="p-3 text-center font-mono text-xs text-slate-500">{p.inn}</td>
+                      </tbody>
+                      <tfoot className="bg-slate-100 dark:bg-slate-900 font-bold border-t-2 border-slate-300 dark:border-slate-700">
+                        <tr>
+                          <td className="p-3 uppercase tracking-wider text-[11px] text-slate-500 sticky left-0 bg-slate-100 dark:bg-slate-900">ЖАМИ</td>
+                          <td />
                           {yearKeys.map((y) => {
-                            const v = yearOf(p, y);
+                            const c = displayRows.reduce((a, p) => a + yearOf(p, y).credit, 0);
+                            const fa = displayRows.reduce((a, p) => a + yearOf(p, y).factura, 0);
                             return (
                               <React.Fragment key={y}>
-                                <td className="p-3 text-right tabular text-emerald-600 dark:text-emerald-400">{fmt(v.credit)}</td>
-                                <td className="p-3 text-right tabular text-indigo-600 dark:text-indigo-400">{fmt(v.factura)}</td>
-                                <td className={`p-3 text-right tabular font-bold border-r border-slate-200 dark:border-slate-800 ${verdict(v.diff).color}`}>{fmt(v.diff)}</td>
+                                <td className="p-3 text-right tabular">{fmt(c)}</td>
+                                <td className="p-3 text-right tabular">{fmt(fa)}</td>
+                                <td className={`p-3 text-right tabular border-r border-slate-200 dark:border-slate-800 ${verdict(c - fa).color}`}>{fmt(c - fa)}</td>
                               </React.Fragment>
                             );
                           })}
-                          <td className="p-3 text-right tabular font-semibold">{fmt(p.bankCredit)}</td>
-                          <td className="p-3 text-right tabular font-semibold">{fmt(p.facturaSent)}</td>
-                          <td className={`p-3 text-right tabular font-bold ${verdict(p.difference).color}`}>{fmt(p.difference)}</td>
+                          <td className="p-3 text-right tabular">{fmt(shown.credit)}</td>
+                          <td className="p-3 text-right tabular">{fmt(shown.factura)}</td>
+                          <td className={`p-3 text-right tabular ${verdict(shown.diff).color}`}>{fmt(shown.diff)}</td>
                         </tr>
-                      ))}
-                    </tbody>
-                    <tfoot className="bg-slate-100 dark:bg-slate-900 font-bold border-t-2 border-slate-300 dark:border-slate-700">
-                      <tr>
-                        <td className="p-3 uppercase tracking-wider text-[11px] text-slate-500 sticky left-0 bg-slate-100 dark:bg-slate-900">ЖАМИ</td>
-                        <td />
-                        {yearKeys.map((y) => {
-                          const c = displayRows.reduce((a, p) => a + yearOf(p, y).credit, 0);
-                          const fa = displayRows.reduce((a, p) => a + yearOf(p, y).factura, 0);
-                          return (
-                            <React.Fragment key={y}>
-                              <td className="p-3 text-right tabular">{fmt(c)}</td>
-                              <td className="p-3 text-right tabular">{fmt(fa)}</td>
-                              <td className={`p-3 text-right tabular border-r border-slate-200 dark:border-slate-800 ${verdict(c - fa).color}`}>{fmt(c - fa)}</td>
-                            </React.Fragment>
-                          );
-                        })}
-                        <td className="p-3 text-right tabular">{fmt(shown.credit)}</td>
-                        <td className="p-3 text-right tabular">{fmt(shown.factura)}</td>
-                        <td className={`p-3 text-right tabular ${verdict(shown.diff).color}`}>{fmt(shown.diff)}</td>
-                      </tr>
-                    </tfoot>
-                  </table>
-                </div>
-              )}
+                      </tfoot>
+                    </table>
+                  </div>
+                )}
 
-              {/* ===== ОЙМА-ОЙ ===== */}
-              {tab === "MONTHLY" && (
-                <div className="anim-fade overflow-auto max-h-[70vh] w-full border border-slate-200 dark:border-slate-800 rounded-xl custom-scrollbar">
-                  <table className="w-full text-sm border-collapse">
-                    <thead className="sticky top-0 z-10 bg-slate-100 dark:bg-slate-900">
-                      <tr className="border-b border-slate-200 dark:border-slate-800 text-[11px] uppercase tracking-wider font-bold text-slate-500">
-                        <th className="p-3 text-left">Фирма номлари</th>
-                        <th className="p-3 text-center w-32">СТИР</th>
-                        <th className="p-3 text-center w-20">Йил</th>
-                        <th className="p-3 text-center w-28">Ой</th>
-                        <th className="p-3 text-right w-40">Келган пул</th>
-                        <th className="p-3 text-right w-40">Юборилган счет-ф</th>
-                        <th className="p-3 text-right w-40">Фарқи</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-200 dark:divide-slate-800/70">
-                      {monthlyRows.map((m, i) => (
-                        <tr key={i} className="hover:bg-emerald-500/[0.04] transition-colors">
-                          <td className="p-3 text-left text-slate-900 dark:text-slate-100">{m.name}</td>
-                          <td className="p-3 text-center font-mono text-xs text-slate-500">{m.inn}</td>
-                          <td className="p-3 text-center font-semibold">{m.year}</td>
-                          <td className="p-3 text-center text-slate-600 dark:text-slate-300">{m.month}</td>
-                          <td className="p-3 text-right tabular text-emerald-600 dark:text-emerald-400">{fmt(m.credit)}</td>
-                          <td className="p-3 text-right tabular text-indigo-600 dark:text-indigo-400">{fmt(m.factura)}</td>
-                          <td className={`p-3 text-right tabular font-bold ${verdict(m.diff).color}`}>{fmt(m.diff)}</td>
+                {/* ===== ОЙМА-ОЙ ===== */}
+                {tab === "MONTHLY" && (
+                  <div className="anim-fade overflow-auto max-h-[70vh] w-full border border-slate-200 dark:border-slate-800 rounded-xl custom-scrollbar">
+                    <table className="w-full text-sm border-collapse">
+                      <thead className="sticky top-0 z-10 bg-slate-100 dark:bg-slate-900">
+                        <tr className="border-b border-slate-200 dark:border-slate-800 text-[11px] uppercase tracking-wider font-bold text-slate-500">
+                          <th className="p-3 text-left">Фирма номлари</th>
+                          <th className="p-3 text-center w-32">СТИР</th>
+                          <th className="p-3 text-center w-20">Йил</th>
+                          <th className="p-3 text-center w-28">Ой</th>
+                          <th className="p-3 text-right w-40">Келган пул</th>
+                          <th className="p-3 text-right w-40">Юборилган счет-ф</th>
+                          <th className="p-3 text-right w-40">Фарқи</th>
                         </tr>
-                      ))}
-                    </tbody>
-                    <tfoot className="sticky bottom-0 bg-slate-100 dark:bg-slate-900 font-bold border-t-2 border-slate-300 dark:border-slate-700">
-                      <tr>
-                        <td colSpan={4} className="p-3 text-right uppercase tracking-wider text-[11px] text-slate-500">ЖАМИ ({monthlyRows.length} қатор):</td>
-                        <td className="p-3 text-right tabular">{fmt(shown.credit)}</td>
-                        <td className="p-3 text-right tabular">{fmt(shown.factura)}</td>
-                        <td className={`p-3 text-right tabular ${verdict(shown.diff).color}`}>{fmt(shown.diff)}</td>
-                      </tr>
-                    </tfoot>
-                  </table>
-                </div>
-              )}
+                      </thead>
+                      <tbody className="divide-y divide-slate-200 dark:divide-slate-800/70">
+                        {monthlyRows.map((m, i) => (
+                          <tr key={i} className="hover:bg-emerald-500/[0.04] transition-colors">
+                            <td className="p-3 text-left text-slate-900 dark:text-slate-100">{m.name}</td>
+                            <td className="p-3 text-center font-mono text-xs text-slate-500">{m.inn}</td>
+                            <td className="p-3 text-center font-semibold">{m.year}</td>
+                            <td className="p-3 text-center text-slate-600 dark:text-slate-300">{m.month}</td>
+                            <td className="p-3 text-right tabular text-emerald-600 dark:text-emerald-400">{fmt(m.credit)}</td>
+                            <td className="p-3 text-right tabular text-indigo-600 dark:text-indigo-400">{fmt(m.factura)}</td>
+                            <td className={`p-3 text-right tabular font-bold ${verdict(m.diff).color}`}>{fmt(m.diff)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                      <tfoot className="sticky bottom-0 bg-slate-100 dark:bg-slate-900 font-bold border-t-2 border-slate-300 dark:border-slate-700">
+                        <tr>
+                          <td colSpan={4} className="p-3 text-right uppercase tracking-wider text-[11px] text-slate-500">ЖАМИ ({monthlyRows.length} қатор):</td>
+                          <td className="p-3 text-right tabular">{fmt(shown.credit)}</td>
+                          <td className="p-3 text-right tabular">{fmt(shown.factura)}</td>
+                          <td className={`p-3 text-right tabular ${verdict(shown.diff).color}`}>{fmt(shown.diff)}</td>
+                        </tr>
+                      </tfoot>
+                    </table>
+                  </div>
+                )}
 
-              {/* ===== ТЎЛОВЛАР ===== */}
-              {tab === "PAYMENTS" && (
-                <div className="anim-fade overflow-auto max-h-[70vh] w-full border border-slate-200 dark:border-slate-800 rounded-xl custom-scrollbar">
-                  <table className="w-full text-sm border-collapse">
-                    <thead className="sticky top-0 z-10 bg-slate-100 dark:bg-slate-900">
-                      <tr className="border-b border-slate-200 dark:border-slate-800 text-[11px] uppercase tracking-wider font-bold text-slate-500">
-                        <th className="p-3 text-center w-28">Сана</th>
-                        <th className="p-3 text-center w-20">Йил</th>
-                        <th className="p-3 text-center w-28">Ой</th>
-                        <th className="p-3 text-left">Фирма номлари</th>
-                        <th className="p-3 text-center w-32">СТИР</th>
-                        <th className="p-3 text-right w-40">Келган пул</th>
-                        <th className="p-3 text-center w-28">Ҳужжат №</th>
-                        <th className="p-3 text-left min-w-[320px]">Тўлов мақсади</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-200 dark:divide-slate-800/70">
-                      {paymentRows.map((r, i) => (
-                        <tr key={i} className="hover:bg-emerald-500/[0.04] transition-colors align-top">
-                          <td className="p-3 text-center whitespace-nowrap text-slate-600 dark:text-slate-300">{fmtDate(r.date)}</td>
-                          <td className="p-3 text-center font-semibold">{r.year}</td>
-                          <td className="p-3 text-center text-slate-600 dark:text-slate-300">{r.month}</td>
-                          <td className="p-3 text-left text-slate-900 dark:text-slate-100">{r.name}</td>
-                          <td className="p-3 text-center font-mono text-xs text-slate-500">{r.inn}</td>
-                          <td className="p-3 text-right tabular font-semibold text-emerald-600 dark:text-emerald-400">{fmt(r.amount)}</td>
-                          <td className="p-3 text-center font-mono text-xs text-slate-500">{r.doc}</td>
-                          <td className="p-3 text-left text-xs text-slate-500 dark:text-slate-400">{r.purpose}</td>
+                {/* ===== ТЎЛОВЛАР ===== */}
+                {tab === "PAYMENTS" && (
+                  <div className="anim-fade overflow-auto max-h-[70vh] w-full border border-slate-200 dark:border-slate-800 rounded-xl custom-scrollbar">
+                    <table className="w-full text-sm border-collapse">
+                      <thead className="sticky top-0 z-10 bg-slate-100 dark:bg-slate-900">
+                        <tr className="border-b border-slate-200 dark:border-slate-800 text-[11px] uppercase tracking-wider font-bold text-slate-500">
+                          <th className="p-3 text-center w-28">Сана</th>
+                          <th className="p-3 text-center w-20">Йил</th>
+                          <th className="p-3 text-center w-28">Ой</th>
+                          <th className="p-3 text-left">Фирма номлари</th>
+                          <th className="p-3 text-center w-32">СТИР</th>
+                          <th className="p-3 text-right w-40">Келган пул</th>
+                          <th className="p-3 text-center w-28">Ҳужжат №</th>
+                          <th className="p-3 text-left min-w-[320px]">Тўлов мақсади</th>
                         </tr>
-                      ))}
-                    </tbody>
-                    <tfoot className="sticky bottom-0 bg-slate-100 dark:bg-slate-900 font-bold border-t-2 border-slate-300 dark:border-slate-700">
-                      <tr>
-                        <td colSpan={5} className="p-3 text-right uppercase tracking-wider text-[11px] text-slate-500">ЖАМИ ({paymentRows.length} та ўтказма):</td>
-                        <td className="p-3 text-right tabular">{fmt(shown.credit)}</td>
-                        <td colSpan={2} />
-                      </tr>
-                    </tfoot>
-                  </table>
-                </div>
-              )}
+                      </thead>
+                      <tbody className="divide-y divide-slate-200 dark:divide-slate-800/70">
+                        {paymentRows.map((r, i) => (
+                          <tr key={i} className="hover:bg-emerald-500/[0.04] transition-colors align-top">
+                            <td className="p-3 text-center whitespace-nowrap text-slate-600 dark:text-slate-300">{fmtDate(r.date)}</td>
+                            <td className="p-3 text-center font-semibold">{r.year}</td>
+                            <td className="p-3 text-center text-slate-600 dark:text-slate-300">{r.month}</td>
+                            <td className="p-3 text-left text-slate-900 dark:text-slate-100">{r.name}</td>
+                            <td className="p-3 text-center font-mono text-xs text-slate-500">{r.inn}</td>
+                            <td className="p-3 text-right tabular font-semibold text-emerald-600 dark:text-emerald-400">{fmt(r.amount)}</td>
+                            <td className="p-3 text-center font-mono text-xs text-slate-500">{r.doc}</td>
+                            <td className="p-3 text-left text-xs text-slate-500 dark:text-slate-400">{r.purpose}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                      <tfoot className="sticky bottom-0 bg-slate-100 dark:bg-slate-900 font-bold border-t-2 border-slate-300 dark:border-slate-700">
+                        <tr>
+                          <td colSpan={5} className="p-3 text-right uppercase tracking-wider text-[11px] text-slate-500">ЖАМИ ({paymentRows.length} та ўтказма):</td>
+                          <td className="p-3 text-right tabular">{fmt(shown.credit)}</td>
+                          <td colSpan={2} />
+                        </tr>
+                      </tfoot>
+                    </table>
+                  </div>
+                )}
 
-              {/* ===== ФАКТУРАЛАР ===== */}
-              {tab === "INVOICES" && (
-                <div className="anim-fade overflow-auto max-h-[70vh] w-full border border-slate-200 dark:border-slate-800 rounded-xl custom-scrollbar">
-                  <table className="w-full text-sm border-collapse">
-                    <thead className="sticky top-0 z-10 bg-slate-100 dark:bg-slate-900">
-                      <tr className="border-b border-slate-200 dark:border-slate-800 text-[11px] uppercase tracking-wider font-bold text-slate-500">
-                        <th className="p-3 text-center w-28">Сана</th>
-                        <th className="p-3 text-center w-20">Йил</th>
-                        <th className="p-3 text-center w-28">Ой</th>
-                        <th className="p-3 text-left">Фирма номлари</th>
-                        <th className="p-3 text-center w-32">СТИР</th>
-                        <th className="p-3 text-right w-40">Сумма</th>
-                        <th className="p-3 text-left min-w-[240px]">Счёт-фактура</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-200 dark:divide-slate-800/70">
-                      {invoiceRows.map((r, i) => (
-                        <tr key={i} className="hover:bg-indigo-500/[0.04] transition-colors">
-                          <td className="p-3 text-center whitespace-nowrap text-slate-600 dark:text-slate-300">{fmtDate(r.date)}</td>
-                          <td className="p-3 text-center font-semibold">{r.year}</td>
-                          <td className="p-3 text-center text-slate-600 dark:text-slate-300">{r.month}</td>
-                          <td className="p-3 text-left text-slate-900 dark:text-slate-100">{r.name}</td>
-                          <td className="p-3 text-center font-mono text-xs text-slate-500">{r.inn}</td>
-                          <td className="p-3 text-right tabular font-semibold text-indigo-600 dark:text-indigo-400">{fmt(r.amount)}</td>
-                          <td className="p-3 text-left text-xs text-slate-500 dark:text-slate-400">{r.number}</td>
+                {/* ===== ФАКТУРАЛАР ===== */}
+                {tab === "INVOICES" && (
+                  <div className="anim-fade overflow-auto max-h-[70vh] w-full border border-slate-200 dark:border-slate-800 rounded-xl custom-scrollbar">
+                    <table className="w-full text-sm border-collapse">
+                      <thead className="sticky top-0 z-10 bg-slate-100 dark:bg-slate-900">
+                        <tr className="border-b border-slate-200 dark:border-slate-800 text-[11px] uppercase tracking-wider font-bold text-slate-500">
+                          <th className="p-3 text-center w-28">Сана</th>
+                          <th className="p-3 text-center w-20">Йил</th>
+                          <th className="p-3 text-center w-28">Ой</th>
+                          <th className="p-3 text-left">Фирма номлари</th>
+                          <th className="p-3 text-center w-32">СТИР</th>
+                          <th className="p-3 text-right w-40">Сумма</th>
+                          <th className="p-3 text-left min-w-[240px]">Счёт-фактура</th>
                         </tr>
-                      ))}
-                    </tbody>
-                    <tfoot className="sticky bottom-0 bg-slate-100 dark:bg-slate-900 font-bold border-t-2 border-slate-300 dark:border-slate-700">
-                      <tr>
-                        <td colSpan={5} className="p-3 text-right uppercase tracking-wider text-[11px] text-slate-500">ЖАМИ ({invoiceRows.length} та фактура):</td>
-                        <td className="p-3 text-right tabular">{fmt(shown.factura)}</td>
-                        <td />
-                      </tr>
-                    </tfoot>
-                  </table>
-                </div>
-              )}
+                      </thead>
+                      <tbody className="divide-y divide-slate-200 dark:divide-slate-800/70">
+                        {invoiceRows.map((r, i) => (
+                          <tr key={i} className="hover:bg-indigo-500/[0.04] transition-colors">
+                            <td className="p-3 text-center whitespace-nowrap text-slate-600 dark:text-slate-300">{fmtDate(r.date)}</td>
+                            <td className="p-3 text-center font-semibold">{r.year}</td>
+                            <td className="p-3 text-center text-slate-600 dark:text-slate-300">{r.month}</td>
+                            <td className="p-3 text-left text-slate-900 dark:text-slate-100">{r.name}</td>
+                            <td className="p-3 text-center font-mono text-xs text-slate-500">{r.inn}</td>
+                            <td className="p-3 text-right tabular font-semibold text-indigo-600 dark:text-indigo-400">{fmt(r.amount)}</td>
+                            <td className="p-3 text-left text-xs text-slate-500 dark:text-slate-400">{r.number}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                      <tfoot className="sticky bottom-0 bg-slate-100 dark:bg-slate-900 font-bold border-t-2 border-slate-300 dark:border-slate-700">
+                        <tr>
+                          <td colSpan={5} className="p-3 text-right uppercase tracking-wider text-[11px] text-slate-500">ЖАМИ ({invoiceRows.length} та фактура):</td>
+                          <td className="p-3 text-right tabular">{fmt(shown.factura)}</td>
+                          <td />
+                        </tr>
+                      </tfoot>
+                    </table>
+                  </div>
+                )}
               </div>
             </div>
           </>
         )}
       </div>
+
+      {/* 📄 АКТ СВЕРКИ ОЙНАСИ */}
+      {aktParty && report && (
+        <div className="anim-fade fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm" onClick={() => setAktParty(null)}>
+          <div className="anim-scale w-full max-w-lg p-6 surface glow-indigo space-y-4" onClick={(e) => e.stopPropagation()}>
+            <div className="flex justify-between items-start gap-3">
+              <div>
+                <h3 className="text-lg font-black tracking-tight flex items-center gap-2">
+                  <FileText className="w-5 h-5 text-indigo-600 dark:text-indigo-400" /> Акт сверки
+                </h3>
+                <p className="text-xs text-slate-500 mt-1">{aktParty.name} · СТИР {aktParty.inn}</p>
+              </div>
+              <button onClick={() => setAktParty(null)} className="p-1 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-500 transition-colors">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Ҳисоб-китоб хулосаси */}
+            <div className="grid grid-cols-3 gap-2 text-center">
+              <div className="p-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-100/60 dark:bg-slate-900/40">
+                <p className="text-[10px] uppercase tracking-wider font-bold text-indigo-600 dark:text-indigo-400">Дебет (фактура)</p>
+                <p className="text-sm font-black tabular mt-1">{fmt(aktParty.facturaSent)}</p>
+              </div>
+              <div className="p-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-100/60 dark:bg-slate-900/40">
+                <p className="text-[10px] uppercase tracking-wider font-bold text-emerald-600 dark:text-emerald-400">Кредит (тўлов)</p>
+                <p className="text-sm font-black tabular mt-1">{fmt(aktParty.bankCredit)}</p>
+              </div>
+              <div className="p-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-100/60 dark:bg-slate-900/40">
+                <p className="text-[10px] uppercase tracking-wider font-bold text-slate-500">Сальдо</p>
+                <p className={`text-sm font-black tabular mt-1 ${verdict(-(aktParty.facturaSent - aktParty.bankCredit)).color}`}>
+                  {fmt(Math.abs(aktParty.facturaSent - aktParty.bankCredit))}
+                </p>
+              </div>
+            </div>
+            <p className="text-[11px] text-slate-500">
+              {Math.abs(aktParty.difference) < 0.01
+                ? "Қарздорлик йўқ."
+                : aktParty.difference < 0
+                  ? `Қарз БИЗНИНГ фойдамизга — мижоз ${fmt(-aktParty.difference)} сўм тўламаган.`
+                  : `Қарз МИЖОЗ фойдасига — ${fmt(aktParty.difference)} сўм ортиқча тушган (аванс).`}
+            </p>
+
+            <p className="text-[11px] text-slate-400 dark:text-slate-600">
+              Файлда фақат жадвалнинг ўзи бўлади: Дата · Документ · Дебет · Кредит — икки томонлама,
+              Сальдо ва Обороты қаторлари билан.
+            </p>
+
+            <div className="flex justify-end gap-2 pt-1">
+              <button
+                onClick={() => setAktParty(null)}
+                className="px-4 py-2.5 rounded-xl text-xs font-bold border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-800 transition-all duration-300"
+              >
+                Бекор қилиш
+              </button>
+              <button
+                onClick={handleAktDownload}
+                className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold shadow-lg shadow-indigo-600/25 transition-all duration-300 flex items-center gap-2 active:scale-95"
+              >
+                <Download className="w-3.5 h-3.5" /> Excel юклаб олиш
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
