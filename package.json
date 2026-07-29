@@ -3,7 +3,11 @@
   "version": "0.1.0",
   "private": true,
   "engines": {
-    "node": "22.x"
+    "node": "24.x"
+  },
+  "comment:overrides": "jwks-rsa (firebase-admin ichida) `require('jose')` qiladi, jose@6 esa sof ESM — bu serverless muhitda ERR_REQUIRE_ESM beradi. jose@5 CommonJS'ni ham beradi va jwks-rsa ishlatadigan importJWK/exportSPKI o'zgarmagan.",
+  "overrides": {
+    "jose": "^5.10.0"
   },
   "scripts": {
     "dev": "next dev --turbo",
