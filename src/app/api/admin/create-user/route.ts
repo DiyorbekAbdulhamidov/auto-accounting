@@ -1,6 +1,4 @@
 import { NextResponse } from "next/server";
-import { getAuth } from "firebase-admin/auth";
-import { getFirestore } from "firebase-admin/firestore";
 import { requireAdmin } from "@/lib/apiAuth";
 
 export const runtime = "nodejs";
@@ -20,8 +18,8 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Роль нотўғри." }, { status: 400 });
     }
 
-    const adminAuth = getAuth();
-    const db = getFirestore();
+    // requireAdmin allaqachon ishga tushirgan xizmatlarni qayta ishlatamiz
+    const { auth: adminAuth, db } = auth.admin;
 
     // Promise.race orqali Firebase ulanishini 8 soniya bilan cheklaymiz
     const timeoutPromise = new Promise((_, reject) =>
