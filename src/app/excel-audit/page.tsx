@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { db } from "@/lib/firebase";
-import { collection, getDocs, query, orderBy, addDoc, serverTimestamp, doc, deleteDoc } from "firebase/firestore";
+import { collection, getDocs, query, orderBy, addDoc, serverTimestamp, doc, where, writeBatch } from "firebase/firestore";
 import NextLink from "next/link";
 import {
   Building2,
@@ -72,18 +72,26 @@ export default function ExcelAuditPage() {
     });
   };
 
-  const calculateFinancials = useCallback((reportsList: SverkaReport[], year: number) => {
-    let revenue = 0;
-    let expenses = 0;
-    reportsList.forEach((report) => {
-      const reportYear = report.savedAt?.toDate ? report.savedAt.toDate().getFullYear() : new Date().getFullYear();
-      if (reportYear === year && report.totals) {
-        revenue += Number(report.totals.credit) || 0;
-        expenses += Number(report.totals.debit) || 0;
-      }
-    });
-    setStats({ totalRevenue: revenue, totalExpenses: expenses, netProfit: revenue - expenses });
-  }, []);
+  // MUHIM: faqat MAVJUD firmalarning hisobotlari qo'shiladi. Firma o'chirilgan-u
+  // hisoboti qolib ketgan bo'lsa ("yetim" hisobot), u umumiy summaga kirmasligi kerak —
+  // aks holda ro'yxat bo'sh bo'lsa ham yuqorida raqam turaveradi.
+  const calculateFinancials = useCallback(
+    (reportsList: SverkaReport[], year: number, companiesList: Company[]) => {
+      const liveCompanyIds = new Set(companiesList.map((c) => c.id));
+      let revenue = 0;
+      let expenses = 0;
+      reportsList.forEach((report) => {
+        if (!liveCompanyIds.has(report.companyId)) return;
+        const reportYear = report.savedAt?.toDate ? report.savedAt.toDate().getFullYear() : new Date().getFullYear();
+        if (reportYear === year && report.totals) {
+          revenue += Number(report.totals.credit) || 0;
+          expenses += Number(report.totals.debit) || 0;
+        }
+      });
+      setStats({ totalRevenue: revenue, totalExpenses: expenses, netProfit: revenue - expenses });
+    },
+    []
+  );
 
   // Ma'lumotlarni Firestore'dan yuklash funksiyasi.
   // MUHIM: setLoading(true) bu yerda chaqirilmaydi (effect ichida sinxron
@@ -99,7 +107,7 @@ export default function ExcelAuditPage() {
       const reportsList = reportsSnapshot.docs.map((d) => ({ id: d.id, ...d.data() } as SverkaReport));
       setReports(reportsList);
 
-      calculateFinancials(reportsList, selectedYear);
+      calculateFinancials(reportsList, selectedYear, companiesList);
     } catch (err) {
       console.error("Xatolik:", err);
     } finally {
@@ -156,18 +164,43 @@ export default function ExcelAuditPage() {
     }
   };
 
-  // 🗑️ Firmani Firestore'dan o'chirish funksiyasi
+  // 🗑️ Firmani va uning BARCHA sverka hisobotlarini o'chirish.
+  //
+  // Firestore'da kaskad o'chirish YO'Q — firma hujjatini o'chirish uning
+  // `sverka_reports` yozuvlarini o'chirmaydi. Ular qolib ketsa, firma
+  // ro'yxatdan yo'qolgani bilan summalari tizimda osilib qoladi.
   const handleDeleteCompany = async (companyId: string, companyName: string) => {
-    if (confirm(`Ҳақиқатан ҳам "${companyName}" корхонасини тизимдан бутунлай ўчириб ташламоқчимисиз?`)) {
-      try {
-        setLoading(true);
-        await deleteDoc(doc(db, "companies", companyId));
-        await loadDashboardData();
-      } catch (error) {
-        console.error("O'chirishda xatolik:", error);
-        alert("O'chirish imkoni bo'lmadi, qayta urinib ko'ring.");
-        setLoading(false);
+    if (!confirm(`Ҳақиқатан ҳам "${companyName}" корхонасини ва унинг барча сверка ҳисоботларини бутунлай ўчириб ташламоқчимисиз?`)) {
+      return;
+    }
+
+    try {
+      setLoading(true);
+
+      const reportsSnap = await getDocs(
+        query(collection(db, "sverka_reports"), where("companyId", "==", companyId))
+      );
+
+      // Bitta batch'da 500 tagacha amal bo'ladi — bo'laklarga bo'lamiz
+      const refs = reportsSnap.docs.map((d) => d.ref);
+      const CHUNK = 450;
+      for (let i = 0; i < refs.length; i += CHUNK) {
+        const batch = writeBatch(db);
+        refs.slice(i, i + CHUNK).forEach((ref) => batch.delete(ref));
+        await batch.commit();
       }
+
+      // Hisobotlar o'chgandan keyingina firmaning o'zini o'chiramiz —
+      // oradan uzilib qolsa, yetim hisobot emas, qayta urinsa bo'ladigan holat qoladi
+      const finalBatch = writeBatch(db);
+      finalBatch.delete(doc(db, "companies", companyId));
+      await finalBatch.commit();
+
+      await loadDashboardData();
+    } catch (error) {
+      console.error("O'chirishda xatolik:", error);
+      alert("O'chirish imkoni bo'lmadi, qayta urinib ko'ring.");
+      setLoading(false);
     }
   };
 
