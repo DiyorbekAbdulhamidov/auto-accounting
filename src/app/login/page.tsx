@@ -5,8 +5,10 @@ import { Building2, Loader2, Lock, Mail, ShieldCheck } from "lucide-react";
 import ThemeToggle from "@/components/ThemeToggle";
 
 export default function LoginPage() {
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+  // Boshlang'ich qiymatlar hakamlar uchun kiritib qo'yildi
+  const [email, setEmail] = useState("webleaders.uz@gmail.com");
+  const [password, setPassword] = useState("12345678");
+  
   const { login } = useAuth();
   const [isSubmitting, setIsSubmitting] = useState(false);
 
