@@ -1,8 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { getAuth, onAuthStateChanged, signOut } from "firebase/auth";
 import Link from "next/link";
 import {
   ArrowDownToLine,
@@ -16,8 +15,8 @@ import {
   LogOut,
   Sparkles,
 } from "lucide-react";
-import { app } from "@/lib/firebase";
 import ThemeToggle from "@/components/ThemeToggle";
+import { useAuth } from "@/context/AuthContext";
 
 // Qulflangan modul kartasi (Tez kunda)
 function SoonCard({
@@ -53,31 +52,16 @@ function SoonCard({
 }
 
 export default function HubPage() {
-  const [loadingAuth, setLoadingAuth] = useState(true);
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const { user, loading, logout } = useAuth();
   const router = useRouter();
 
-  // 🔒 Foydalanuvchi login qilganini tekshirish
   useEffect(() => {
-    const auth = getAuth(app);
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      if (user) {
-        setIsAuthenticated(true);
-        setLoadingAuth(false);
-      } else {
-        router.push("/login");
-      }
-    });
+    if (!loading && !user) {
+      router.replace("/login");
+    }
+  }, [loading, user, router]);
 
-    return () => unsubscribe();
-  }, [router]);
-
-  const handleLogout = async () => {
-    await signOut(getAuth(app));
-    router.push("/login");
-  };
-
-  if (loadingAuth) {
+  if (loading || !user) {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-white">
         <div className="relative flex items-center justify-center mb-6">
@@ -90,8 +74,6 @@ export default function HubPage() {
       </div>
     );
   }
-
-  if (!isAuthenticated) return null;
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 px-4 md:px-8 pt-6 relative overflow-hidden flex flex-col">
@@ -113,7 +95,7 @@ export default function HubPage() {
         <div className="flex items-center gap-2">
         <ThemeToggle />
         <button
-          onClick={handleLogout}
+          onClick={logout}
           className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/60 text-slate-500 dark:text-slate-400 text-xs font-bold hover:text-rose-600 dark:hover:text-rose-400 hover:border-rose-500/30 transition-all duration-300"
           title="Тизимдан чиқиш"
         >

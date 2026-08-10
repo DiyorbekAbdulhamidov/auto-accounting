@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="uz">
+
+<head>
+  <meta charset="UTF-8">
+  <title>Auto-Accounting | Pitch Deck</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap"
+    rel="stylesheet">
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    @page {
+      size: A4 landscape;
+      margin: 0;
+    }
+
+    body {
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      background-color: #080c14;
+      color: #f1f5f9;
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
+    }
+
+    .slide {
+      width: 297mm;
+      height: 210mm;
+      page-break-after: always;
+      page-break-inside: avoid;
+      padding: 40px 50px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      position: relative;
+      background: #080c14 radial-gradient(circle at 80% 20%, rgba(99, 102, 241, 0.18) 0%, transparent 40%),
+        radial-gradient(circle at 10% 90%, rgba(16, 185, 129, 0.12) 0%, transparent 40%) !important;
+      overflow: hidden;
+    }
+
+    /* Print uchun maxsus CSS */
+    @media print {
+
+      body,
+      .slide {
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+      }
+    }
+
+    /* Header */
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding-bottom: 16px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-weight: 800;
+      font-size: 22px;
+      color: #ffffff;
+    }
+
+    .brand-icon {
+      width: 32px;
+      height: 32px;
+      background: linear-gradient(135deg, #6366f1, #10b981) !important;
+      border-radius: 8px;
+      display: grid;
+      place-items: center;
+      font-weight: bold;
+      color: white;
+      font-size: 18px;
+    }
+
+    .badge {
+      background: rgba(99, 102, 241, 0.2) !important;
+      border: 1px solid rgba(99, 102, 241, 0.4);
+      color: #a5b4fc;
+      padding: 6px 16px;
+      border-radius: 100px;
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    /* Typography & Components */
+    .slide-title {
+      font-size: 32px;
+      font-weight: 800;
+      color: #ffffff;
+    }
+
+    .grid-2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+    }
+
+    .grid-3 {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 20px;
+    }
+
+    .card {
+      background: rgba(255, 255, 255, 0.04) !important;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 16px;
+      padding: 24px;
+    }
+
+    .card-accent {
+      border-color: rgba(99, 102, 241, 0.4);
+      background: rgba(99, 102, 241, 0.08) !important;
+    }
+
+    .card-title {
+      font-size: 18px;
+      font-weight: 700;
+      color: #f8fafc;
+      margin-bottom: 10px;
+    }
+
+    .card-text {
+      font-size: 14px;
+      line-height: 1.6;
+      color: #cbd5e1;
+    }
+
+    /* Hero Slide */
+    .hero-content {
+      text-align: center;
+      max-width: 850px;
+      margin: auto;
+    }
+
+    .hero-title {
+      font-size: 46px;
+      font-weight: 800;
+      line-height: 1.2;
+      color: #ffffff;
+      margin-bottom: 16px;
+    }
+
+    .hero-sub {
+      font-size: 18px;
+      color: #94a3b8;
+      line-height: 1.5;
+    }
+
+    /* Footer */
+    .footer {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding-top: 16px;
+      border-top: 1px solid rgba(255, 255, 255, 0.1);
+      font-size: 12px;
+      color: #64748b;
+      font-weight: 600;
+    }
+  </style>
+</head>
+
+<body>
+
+  <!-- SLIDE 1 -->
+  <div class="slide">
+    <div class="header">
+      <div class="brand">
+        <div class="brand-icon">✓</div> Auto-Accounting
+      </div>
+      <div class="badge">PRESIDENT TECH AWARD 2026</div>
+    </div>
+    <div class="hero-content">
+      <div class="badge"
+        style="display: inline-block; margin-bottom: 16px; background: rgba(52, 211, 153, 0.15) !important; color: #34d399; border-color: rgba(52, 211, 153, 0.3);">
+        ● Ishchi MVP tayyor & Testdan o'tgan
+      </div>
+      <h1 class="hero-title">Buxgalteriya va Bank Sverkasini Avtomatlashtirish</h1>
+      <p class="hero-sub">Bank oborotkalari va E-fakturalarni 1 sekundda aqlli solishtiruvchi hamda FIFO bo'yicha
+        debitorlik qarzlarini tahlil qiluvchi SaaS platforma.</p>
+    </div>
+    <div class="footer">
+      <span>Taqdim etdi: Auto-Accounting Jamoasi</span>
+      <span>https://test-project.webleaders.uz</span>
+    </div>
+  </div>
+
+  <!-- SLIDE 2 -->
+  <div class="slide">
+    <div class="header">
+      <div class="brand">
+        <div class="brand-icon">✓</div> Auto-Accounting
+      </div>
+      <div class="slide-title">Mavjud Muammo va Og'riqlar</div>
+    </div>
+    <div class="grid-2">
+      <div class="card">
+        <div class="card-title" style="color: #fb7185;">⚠️ Katta Vaqt Yo'qotilishi</div>
+        <p class="card-text">
+          Buxgalterlar har oy bank ko'chirmalari (oborotka) hamda E-fakturalarni (Didox, Soliq) qo'lda solishtirishga
+          <strong style="color: #fff;">10-15 soatlab vaqt sarflaydi.</strong>
+        </p>
+      </div>
+      <div class="card">
+        <div class="card-title" style="color: #fb7185;">⚡ Inson Omili va Xatolar</div>
+        <p class="card-text">
+          To'lovlarning 1-to-N chalkashligi, tiyinlardagi farqlar va e'tiborsizlik oqibatida <strong
+            style="color: #fff;">yashirin debitorlik qarzlari</strong> kelib chiqadi.
+        </p>
+      </div>
+    </div>
+    <div class="card" style="margin-top: 16px;">
+      <div class="card-title" style="color: #facc15;">🧩 Formatlar Buzuqligi va Birlashtirilgan Kataklar</div>
+      <p class="card-text">
+        O'zbekiston banklarining fayllari (Kapitalbank, NBU va h.k.) har xil struktura va buzilgan HTML-xls shaklida
+        bo'ladi. Standard Excel ularni to'g'ri o'qiy olmaydi.
+      </p>
+    </div>
+    <div class="footer">
+      <span>President Tech Award 2026 — Inkubatsiya Treki</span>
+      <span>02 / 05</span>
+    </div>
+  </div>
+
+  <!-- SLIDE 3 -->
+  <div class="slide">
+    <div class="header">
+      <div class="brand">
+        <div class="brand-icon">✓</div> Auto-Accounting
+      </div>
+      <div class="slide-title">Innovatsion Yechim va Imkoniyatlar</div>
+    </div>
+    <div class="grid-3">
+      <div class="card card-accent">
+        <div class="card-title" style="color: #38bdf8;">🔍 Universal Parser</div>
+        <p class="card-text">
+          Barcha bank oborotkalari va Soliq/Didox e-fakturalarini xatosiz, bir zumda o'quvchi intellektual parse
+          muhandisligi.
+        </p>
+      </div>
+      <div class="card card-accent">
+        <div class="card-title" style="color: #38bdf8;">🧠 FIFO & Aging Engine</div>
+        <p class="card-text">
+          Pul va fakturalarni STIR bo'yicha bog'lab, qarzlar yoshini (0-30, 31-60, 90+ kun) avtomatik hisoblaydi.
+        </p>
+      </div>
+      <div class="card card-accent">
+        <div class="card-title" style="color: #38bdf8;">📄 1-Click "Akt Sverki"</div>
+        <p class="card-text">
+          1 sekundda 2 taraflama rasmiy "Akt Sverki" va 5 varaqli professional tahliliy Excel hisobotini generatsiya
+          qiladi.
+        </p>
+      </div>
+    </div>
+    <div class="footer">
+      <span>President Tech Award 2026 — Inkubatsiya Treki</span>
+      <span>03 / 05</span>
+    </div>
+  </div>
+
+  <!-- SLIDE 4 -->
+  <div class="slide">
+    <div class="header">
+      <div class="brand">
+        <div class="brand-icon">✓</div> Auto-Accounting
+      </div>
+      <div class="slide-title">Texnologik Stek & Amaliy Natija</div>
+    </div>
+    <div class="grid-2">
+      <div class="card">
+        <div class="card-title">🛠️ Zamonaviy Tech-Stack</div>
+        <ul style="list-style: none;">
+          <li style="margin-bottom: 10px;" class="card-text"><strong style="color: #38bdf8;">Frontend & API:</strong>
+            Next.js 16 (App Router), React 19, TypeScript</li>
+          <li style="margin-bottom: 10px;" class="card-text"><strong style="color: #38bdf8;">Database & Cloud:</strong>
+            Firebase Cloud Services, Prisma, Firestore</li>
+          <li class="card-text"><strong style="color: #38bdf8;">File Engine:</strong> ExcelJS, Streaming xlsx parser,
+            iconv-lite</li>
+        </ul>
+      </div>
+      <div class="card">
+        <div class="card-title">🚀 Hozirgi Holat (Traction)</div>
+        <ul style="list-style: none;">
+          <li style="margin-bottom: 10px;" class="card-text"><span style="color: #34d399; font-weight: 700;">✓ Ishchi
+              MVP:</span> Tizim to'liq ishga tushirilgan va online demo holatda (`test-project.webleaders.uz`).</li>
+          <li class="card-text"><span style="color: #34d399; font-weight: 700;">✓ Amaliy Sinov:</span> Buxgalteriya
+            autsorsing korxonalari tomonidan sinovdan o'tkazildi.</li>
+        </ul>
+      </div>
+    </div>
+    <div class="footer">
+      <span>President Tech Award 2026 — Inkubatsiya Treki</span>
+      <span>04 / 05</span>
+    </div>
+  </div>
+
+  <!-- SLIDE 5 -->
+  <div class="slide">
+    <div class="header">
+      <div class="brand">
+        <div class="brand-icon">✓</div> Auto-Accounting
+      </div>
+      <div class="slide-title">Loyiha Jamoasi</div>
+    </div>
+    <div class="grid-3">
+      <div class="card card-accent" style="text-align: center;">
+        <div style="font-size: 30px; margin-bottom: 8px;">👨‍💼</div>
+        <div style="font-size: 16px; font-weight: 700; color: #fff;">Diyorbek Abdulhamidov</div>
+        <div style="color: #38bdf8; font-size: 13px; font-weight: 600; margin: 4px 0 8px 0;">Product Manager / Team Lead
+        </div>
+        <div style="font-size: 12px; color: #94a3b8;">Cyber University of Uzbekistan</div>
+      </div>
+
+      <div class="card card-accent" style="text-align: center;">
+        <div style="font-size: 30px; margin-bottom: 8px;">💻</div>
+        <div style="font-size: 16px; font-weight: 700; color: #fff;">Og'abek Husanov</div>
+        <div style="color: #34d399; font-size: 13px; font-weight: 600; margin: 4px 0 8px 0;">Web Dasturchi</div>
+        <div style="font-size: 12px; color: #94a3b8;">Cyber University of Uzbekistan</div>
+      </div>
+
+      <div class="card card-accent" style="text-align: center;">
+        <div style="font-size: 30px; margin-bottom: 8px;">📊</div>
+        <div style="font-size: 16px; font-weight: 700; color: #fff;">Shahzodbek Turabiddinov</div>
+        <div style="color: #facc15; font-size: 13px; font-weight: 600; margin: 4px 0 8px 0;">Data Muhandis</div>
+        <div style="font-size: 12px; color: #94a3b8;">American University of Tech.</div>
+      </div>
+    </div>
+    <div class="footer">
+      <span>President Tech Award 2026 — Inkubatsiya Treki</span>
+      <span>05 / 05</span>
+    </div>
+  </div>
+
+</body>
+
+</html>
