@@ -53,6 +53,11 @@ export interface BankStatement {
   ownAccount: string;
   totalDebit: number;
   totalCredit: number;
+  /** Ko'chirmaning O'Z yakuniy qatoridagi summa («Итоговый оборот за
+   *  период»). O'qilgan qatorlar yig'indisi bunga teng bo'lmasa - fayl
+   *  to'liq o'qilmagan, chaqiruvchi buni foydalanuvchiga ko'rsatadi. */
+  footerDebit?: number;
+  footerCredit?: number;
   /** Har bo'lim uchun aniqlangan ustunlar — chaqiruvchi tomon
    *  eski mantiq bilan mos-nomosligini tekshirishi uchun. */
   layout: SectionLayout[];
@@ -155,14 +160,14 @@ export function parseDate(v: Cell): Date | null {
   return null;
 }
 
+// MUHIM: bu yerda STIR har doim ANIQ ma'lum ustundan yoki «ИНН: 123456789»
+// ko'rinishidagi yozuvdan olinadi, ya'ni uni telefon raqami bilan adashtirib
+// bo'lmaydi. Shuning uchun prefiks bo'yicha filtr YO'Q: YATTlarning haqiqiy
+// STIRi 55.. / 77.. bilan ham boshlanadi (masalan 551640304) va ilgari
+// bunday qatorlar jimgina tashlab yuborilardi.
 function cleanInn(v: Cell): string {
   const digits = text(v).replace(/\D/g, '');
   if (!/^\d{9}$/.test(digits) && !/^\d{14}$/.test(digits)) return '';
-  // 9 xonali "STIR" aslida mobil telefon raqami bo'lib qolmasin
-  if (digits.length === 9) {
-    const mobile = ['90', '91', '93', '94', '95', '97', '98', '99', '33', '88', '77', '55'];
-    if (mobile.includes(digits.slice(0, 2))) return '';
-  }
   return digits;
 }
 
@@ -353,6 +358,8 @@ export function parseTwoSidedTurnover(rows: Cell[][]): BankStatement | null {
   let ownName = '';
   let ownAccount = '';
   let dataRows = 0;
+  let footerDebit: number | undefined;
+  let footerCredit: number | undefined;
 
   for (let s = 0; s < headers.length; s++) {
     const h = headers[s];
@@ -385,9 +392,18 @@ export function parseTwoSidedTurnover(rows: Cell[][]): BankStatement | null {
     for (let i = start; i <= end; i++) {
       const row = rows[i];
       if (!row || row.length < 2) continue;
-      if (isFooterRow(row)) continue;
 
       const amount = parseAmount(row[h.amountCol]);
+
+      // «Итого за период:» - o'tkazma emas, lekin undagi summa o'qilgan
+      // qatorlar yig'indisini tekshirish uchun saqlanadi
+      if (isFooterRow(row)) {
+        if (amount > 0) {
+          if (direction === 'DEBIT') footerDebit = (footerDebit || 0) + amount;
+          else footerCredit = (footerCredit || 0) + amount;
+        }
+        continue;
+      }
       if (amount <= 0) continue;
 
       const name = text(row[other.name]);
@@ -429,7 +445,7 @@ export function parseTwoSidedTurnover(rows: Cell[][]): BankStatement | null {
 
   if (dataRows === 0) return null;
 
-  return { format: 'TWO_SIDED', txs, ownInn, ownName, ownAccount, totalDebit, totalCredit, layout };
+  return { format: 'TWO_SIDED', txs, ownInn, ownName, ownAccount, totalDebit, totalCredit, footerDebit, footerCredit, layout };
 }
 
 // ------------------------------------------------------------
@@ -567,9 +583,20 @@ export function parseThreeRowAccountReport(rows: Cell[][]): BankStatement | null
 // 3) COLUMNAR — «СПРАВКА ПО РАБОТЕ СЧЕТА» (har o'tkazma — bitta qator)
 // ------------------------------------------------------------
 
+// "20208000204168421009/203914760/ООО TEST" — ABS ko'chirmalarida
+// kontragentning hisobi, STIRi va nomi BITTA katakda keladi.
+const COMBINED_CELL_RE = /^\s*(\d{16,})\s*\/\s*(\d{9}|\d{14})\s*\/\s*(.+)$/;
+
+function splitCombined(v: Cell): { account: string; inn: string; name: string } | null {
+  const m = text(v).match(COMBINED_CELL_RE);
+  if (!m) return null;
+  return { account: m[1], inn: m[2], name: m[3].trim() };
+}
+
 export function parseColumnarStatement(rows: Cell[][]): BankStatement | null {
   let headerRow = -1;
-  let nameCol = -1, debitCol = -1, creditCol = -1, dateCol = -1, accCol = -1, docCol = -1, purposeCol = -1;
+  let nameCol = -1, debitCol = -1, creditCol = -1, dateCol = -1, accCol = -1;
+  let docCol = -1, purposeCol = -1, innCol = -1, combinedCol = -1, ownInnCol = -1;
 
   const limit = Math.min(40, rows.length);
   for (let r = 0; r < limit; r++) {
@@ -577,52 +604,83 @@ export function parseColumnarStatement(rows: Cell[][]): BankStatement | null {
     if (!row || row.length < 4) continue;
 
     let nm = -1, deb = -1, cred = -1, dt = -1, acc = -1, doc = -1, purp = -1;
+    let inn = -1, comb = -1, ownInn = -1;
     let hasSingleAmount = false;
 
     for (let c = 0; c < row.length; c++) {
       const t = up(row[c]);
       if (!t) continue;
       if (/^СУММА( ПЛАТЕЖА)?$/.test(t)) hasSingleAmount = true;
-      if (nm === -1 && /НАИМЕНОВАНИЕ|КОНТРАГЕНТ|НОМИ/.test(t)) nm = c;
-      else if (deb === -1 && /^ДЕБЕТ/.test(t)) deb = c;
-      else if (cred === -1 && /^КРЕДИТ/.test(t)) cred = c;
+
+      // «Cчет/ИНН» — hisob, STIR va nom bitta katakda
+      if (comb === -1 && /^(СЧ[ЕЁ]Т|C[ЧH][ЕЁ]Т)\s*\/\s*(ИНН|СТИР)/.test(t)) { comb = c; continue; }
+      // Hisob egasining O'Z ustuni — kontragent emas
+      if (ownInn === -1 && /(ИНН|СТИР).*(КЛИЕНТА|ВЛАДЕЛЬЦА|ЭГАСИ)/.test(t)) { ownInn = c; continue; }
+      if (/(СЧ[ЕЁ]Т|БАНК).*(КЛИЕНТА|ВЛАДЕЛЬЦА)/.test(t)) continue;
+
+      if (nm === -1 && /НАИМЕНОВАНИЕ|КОНТРАГЕНТ|НОМИ/.test(t) && !/БАНК/.test(t)) nm = c;
+      // «Оборот Дебет» / «Дебет» (ba'zi banklarda «Сумма дебет»)
+      else if (deb === -1 && /(^|\s)(ДЕБЕТ|ДЕБИТ)/.test(t)) deb = c;
+      else if (cred === -1 && /(^|\s)КРЕДИТ/.test(t)) cred = c;
+      else if (inn === -1 && /(^|\s)(ИНН|СТИР|ИНН?КОРР)/.test(t)) inn = c;
       else if (dt === -1 && /^ДАТА|^САНА/.test(t)) dt = c;
-      else if (acc === -1 && /^(СЧ[ЕЁ]Т|Р\/С|ЛИЦЕВОЙ СЧ[ЕЁ]Т)$/.test(t)) acc = c;
+      else if (acc === -1 && /^(РАСЧ[ЕЁ]ТНЫЙ СЧ[ЕЁ]Т|ЛИЦЕВОЙ СЧ[ЕЁ]Т|СЧ[ЕЁ]Т|Р\/С)/.test(t)) acc = c;
       else if (doc === -1 && /НОМЕР ДОК|№ ?ДОК|ДОК-ТА/.test(t)) doc = c;
       else if (purp === -1 && /НАЗНАЧЕНИЕ/.test(t)) purp = c;
     }
 
     // «Сумма платежа» bo'lsa — bu TWO_SIDED shakli, bu yerda emas.
     if (hasSingleAmount) continue;
-    if (nm !== -1 && deb !== -1 && cred !== -1) {
+    // Kontragentni aniqlash imkoni bo'lmasa (na nomi, na STIRi, na
+    // birlashgan katak) — bu ko'chirma emas
+    if (deb !== -1 && cred !== -1 && (nm !== -1 || comb !== -1 || inn !== -1)) {
       headerRow = r; nameCol = nm; debitCol = deb; creditCol = cred;
       dateCol = dt; accCol = acc; docCol = doc; purposeCol = purp;
+      innCol = inn; combinedCol = comb; ownInnCol = ownInn;
       break;
     }
   }
   if (headerRow === -1) return null;
 
-  // Hisob egasi — sarlavhadan
+  // Hisob egasi — sarlavhadan («Cчет: 20208.. FIRMA ИНН : 312548537»)
   let ownAccount = '';
+  let ownInnFromTitle = '';
   const ownName = findOwnName(rows, headerRow);
   for (let r = 0; r < headerRow; r++) {
     const line = (rows[r] || []).map((v) => text(v)).join(' ');
     if (!line) continue;
-    const m = line.match(/(?:СЧ[ЕЁ]ТА?|HISOB)\D{0,12}(\d{20})/i) || line.match(/\b(\d{20})\b/);
-    if (m) { ownAccount = m[1]; break; }
+    if (!ownAccount) {
+      const m = line.match(/(?:СЧ[ЕЁ]ТА?|HISOB)\D{0,12}(\d{20})/i) || line.match(/\b(\d{20})\b/);
+      if (m) ownAccount = m[1];
+    }
+    if (!ownInnFromTitle) {
+      const m = line.match(/(?:ИНН|СТИР)\s*:?\s*(\d{9}|\d{14})\b/i);
+      if (m) ownInnFromTitle = m[1];
+    }
   }
 
   const txs: BankTx[] = [];
   let totalDebit = 0;
   let totalCredit = 0;
+  let footerDebit: number | undefined;
+  let footerCredit: number | undefined;
 
   for (let i = headerRow + 1; i < rows.length; i++) {
     const row = rows[i];
     if (!row || row.length < 2) continue;
-    if (isFooterRow(row)) continue;
 
     const debit = parseAmount(row[debitCol]);
     const credit = parseAmount(row[creditCol]);
+
+    // Yakuniy qator: o'tkazma sifatida qo'shilmaydi, lekin undagi summa
+    // o'qilganini tekshirish uchun saqlanadi
+    if (isFooterRow(row)) {
+      if (footerDebit === undefined && (debit > 0 || credit > 0)) {
+        footerDebit = debit > 0 ? debit : 0;
+        footerCredit = credit > 0 ? credit : 0;
+      }
+      continue;
+    }
     if (debit <= 0 && credit <= 0) continue;
 
     // Shapkadan keyingi "1 2 3 4 ..." tartib qatori
@@ -633,14 +691,21 @@ export function parseColumnarStatement(rows: Cell[][]): BankStatement | null {
     });
     if (values.length >= 3 && smallInts.length === values.length) continue;
 
+    const combined = combinedCol >= 0 ? splitCombined(row[combinedCol]) : null;
+    const name = combined ? combined.name : (nameCol >= 0 ? text(row[nameCol]) : '');
+    const inn = combined ? combined.inn : (innCol >= 0 ? cleanInn(row[innCol]) : '');
+    const account = combined
+      ? combined.account
+      : (accCol >= 0 ? text(row[accCol]).replace(/\D/g, '') : '');
+
     if (debit > 0) totalDebit += debit;
     if (credit > 0) totalCredit += credit;
 
     txs.push({
       date: dateCol >= 0 ? parseDate(row[dateCol]) : null,
-      inn: '',
-      name: text(row[nameCol]),
-      account: accCol >= 0 ? text(row[accCol]).replace(/\D/g, '') : '',
+      inn,
+      name,
+      account,
       debit,
       credit,
       doc: docCol >= 0 ? text(row[docCol]) : '',
@@ -650,21 +715,31 @@ export function parseColumnarStatement(rows: Cell[][]): BankStatement | null {
 
   if (txs.length === 0) return null;
 
+  // Hisob egasining STIRi: sarlavhada bo'lmasa - «ИНН клиента» ustunida
+  // deyarli hamma qatorda takrorlangan qiymat
+  let ownInn = cleanInn(ownInnFromTitle);
+  if (!ownInn && ownInnCol >= 0) {
+    const dom = dominantValue(rows, headerRow + 1, rows.length - 1, ownInnCol);
+    if (dom.share >= 0.7) ownInn = dom.value;
+  }
+
   return {
     format: 'COLUMNAR',
     txs,
-    ownInn: '',
+    ownInn,
     ownName,
     ownAccount,
     totalDebit,
     totalCredit,
+    footerDebit,
+    footerCredit,
     layout: [{
       headerRow,
       amountCol: creditCol,
       dateCol,
       direction: 'CREDIT',
       counterpartyNameCol: nameCol,
-      counterpartyInnCol: -1,
+      counterpartyInnCol: innCol,
     }],
   };
 }
