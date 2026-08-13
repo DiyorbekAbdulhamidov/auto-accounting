@@ -5,9 +5,39 @@
 // Node'dan haqiqiy bank fayllariga qarshi test qilib bo'ladi.
 import { NextResponse } from 'next/server';
 import { auditFiles, type InputFile } from '@/lib/statementAudit';
+import type { LearnedFormat } from '@/lib/formatMemory';
 import { requireUser } from '@/lib/apiAuth';
+import type { Firestore } from 'firebase-admin/firestore';
 
 export const runtime = 'nodejs';
+
+// Bir marta o'qilgan eksport shakllari shu yerda saqlanadi. Keyingi
+// safar o'sha shapka kelganda ustunlar qaytadan taxmin qilinmaydi.
+const FORMATS_COLLECTION = 'excel_formats';
+
+async function loadKnownFormats(db: Firestore): Promise<LearnedFormat[]> {
+  try {
+    const snap = await db.collection(FORMATS_COLLECTION).get();
+    return snap.docs.map((d) => d.data() as LearnedFormat);
+  } catch (err) {
+    // Format xotirasi ishlamasa ham sverka ishlashi kerak
+    console.error('excel_formats o\'qilmadi:', err);
+    return [];
+  }
+}
+
+async function saveFormats(db: Firestore, formats: LearnedFormat[]): Promise<void> {
+  if (formats.length === 0) return;
+  try {
+    const batch = db.batch();
+    for (const fmt of formats) {
+      batch.set(db.collection(FORMATS_COLLECTION).doc(fmt.id), fmt, { merge: true });
+    }
+    await batch.commit();
+  } catch (err) {
+    console.error('excel_formats saqlanmadi:', err);
+  }
+}
 
 export async function POST(req: Request) {
   const auth = await requireUser(req);
@@ -27,7 +57,12 @@ export async function POST(req: Request) {
       inputs.push({ name: file.name, buffer: Buffer.from(bytes) });
     }
 
-    const result = auditFiles(inputs);
+    // «Ожидает подписи партнёра» фактураларни ҳам ҳисоблашми
+    const includePending = String(formData.get('includePending') || '') === 'true';
+
+    const knownFormats = await loadKnownFormats(auth.admin.db);
+    const result = auditFiles(inputs, { knownFormats, includePending });
+    await saveFormats(auth.admin.db, result.learnedFormats);
 
     if (result.data.length === 0) {
       return NextResponse.json({
@@ -44,6 +79,13 @@ export async function POST(req: Request) {
       warnings: result.warnings,
       sheets: result.sheets,
       totals: result.totals,
+      // Qaysi shakllar tanish bo'lgani/yangi o'rganilgani
+      formats: result.learnedFormats.map((f) => ({
+        id: f.id,
+        kind: f.kind,
+        label: f.label,
+        isNew: !knownFormats.some((k) => k.id === f.id),
+      })),
     });
   } catch (error) {
     console.error('EXCEL PARSE ERROR:', error);

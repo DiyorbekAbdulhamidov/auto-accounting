@@ -26,6 +26,7 @@ import * as XLSX from 'xlsx';
 import iconv from 'iconv-lite';
 import { createHash } from 'crypto';
 import { parseNewBankFormats } from './bankStatements';
+import { readWorkbookSmart } from './excelWorkbook';
 
 export type Cell = string | number | boolean | Date | null | undefined;
 
@@ -202,13 +203,13 @@ function cleanInn(v: Cell): string {
   return digits || '-';
 }
 
+// MUHIM: STIR har doim ANIQ ustundan yoki «hisob/STIR/nom» birlashgan
+// katakdan olinadi, ya'ni telefon raqami bilan adashtirib bo'lmaydi.
+// Shuning uchun prefiks bo'yicha filtr YO'Q: YATTlarning haqiqiy STIRi
+// 55.. bilan ham boshlanadi (masalan 551640304) va ilgari bunday
+// o'tkazmalar «STIRsiz» bo'lib bir uyumga tushib qolardi.
 function isValidInn(inn: string): boolean {
-  if (!/^\d{9}$/.test(inn) && !/^\d{14}$/.test(inn)) return false;
-  if (inn.length === 9) {
-    const mobile = ['90', '91', '93', '94', '95', '97', '98', '99', '33', '88', '77', '55'];
-    if (mobile.includes(inn.slice(0, 2))) return false;
-  }
-  return true;
+  return /^\d{9}$/.test(inn) || /^\d{14}$/.test(inn);
 }
 
 // ------------------------------------------------------------
@@ -380,26 +381,62 @@ function readSheets(input: InputFile): SheetData[] {
   }
 
   let wb: XLSX.WorkBook;
-  if (looksHtml) {
-    const charsetMatch = head.match(/charset\s*=\s*["']?([\w-]+)/i);
-    let charset = charsetMatch ? charsetMatch[1].toLowerCase() : 'windows-1251';
-    if (!iconv.encodingExists(charset)) charset = 'windows-1251';
-    wb = XLSX.read(iconv.decode(buffer, charset), { type: 'string', cellDates: false });
-  } else if (isZip || isBiff) {
-    wb = XLSX.read(buffer, { type: 'buffer', cellDates: false });
+  if (looksHtml || isZip || isBiff) {
+    // Umumiy o'quvchi: HTML-in-.xls ni to'g'ri kodirovkada va sanani
+    // AQSH tartibida buzmasdan o'qiydi (src/lib/excelWorkbook.ts)
+    wb = readWorkbookSmart(buffer);
   } else {
     // Kengaytmasi noto'g'ri CSV bo'lishi mumkin
     return [{ file: name, sheet: 'CSV', rows: parseDelimited(decodeText(buffer)) }];
   }
 
   const out: SheetData[] = [];
+  // ASBT/ABS eksportlari sarlavhani ALOHIDA varaqqa yozadi («Справка о
+  // кредитовых оборотах...» 3-varaqda, jadval 4-varaqda). Sarlavha
+  // qo'shib berilmasa, ko'chirmaning debet yoki kredit ekanligi
+  // yo'qoladi va kirim chiqim bo'lib hisoblanib qoladi.
+  let carriedTitle: Cell[][] = [];
   for (const sheetName of wb.SheetNames) {
     const ws = wb.Sheets[sheetName];
     if (!ws) continue;
     const rows = XLSX.utils.sheet_to_json(ws, { header: 1 }) as Cell[][];
-    if (rows.length) out.push({ file: name, sheet: sheetName, rows });
+    if (!rows.length) continue;
+
+    if (isStatementTitleSheet(rows)) {
+      carriedTitle = carriedTitle.concat(rows);
+      continue;
+    }
+
+    out.push({
+      file: name,
+      sheet: sheetName,
+      rows: carriedTitle.length ? [...carriedTitle, ...rows] : rows,
+    });
+    carriedTitle = [];
   }
   return out;
+}
+
+/** Faqat ko'chirma sarlavhasi turgan varaq (jadvalsiz). Shart qat'iy:
+ *  tanish sarlavha matni bo'lishi VA hech bir qatorda 4 tadan ortiq
+ *  to'ldirilgan katak bo'lmasligi kerak - aks holda 2-3 o'tkazmali
+ *  haqiqiy varaq ham sarlavha deb tashlab yuborilishi mumkin edi. */
+const STATEMENT_TITLE_RE = /СПРАВКА|СВЕДЕНИЯ О РАБОТЕ|ОБОРОТАХ ПО СЧ[ЕЁ]ТУ|БАНКОВСКАЯ СИСТЕМА|ВЫПИСКА/i;
+
+function isStatementTitleSheet(rows: Cell[][]): boolean {
+  if (rows.length > 8) return false;
+  let hasTitle = false;
+  for (const row of rows) {
+    let filled = 0;
+    for (const v of row || []) {
+      const s = v === null || v === undefined ? '' : String(v).trim();
+      if (!s) continue;
+      filled++;
+      if (STATEMENT_TITLE_RE.test(s)) hasTitle = true;
+    }
+    if (filled > 4) return false;
+  }
+  return hasTitle;
 }
 
 // ------------------------------------------------------------
@@ -426,6 +463,11 @@ function findHeader(
     for (let c = 0; c < Math.min(row.length, 60); c++) {
       const text = cellText(row[c]).toUpperCase();
       if (!text) continue;
+      // Shapka katagi - qisqa yorliq. Ko'chirmaning tepasidagi uzun
+      // sarlavha satrlari shapka bo'lib qolmasligi kerak: masalan
+      // «ТОШКЕНТ Ш., "МИКРОКРЕДИТБАНК" АТБ БОШ ОФИСИ» ichida КРЕДИТ,
+      // «ABS/Клиент-Банк» ichida КЛИЕНТ so'zi bor.
+      if (text.length > 40) continue;
       for (const { role, re } of spec) {
         if (cols[role] === undefined && re.test(text)) {
           cols[role] = c;
@@ -433,7 +475,9 @@ function findHeader(
         }
       }
     }
-    if (required.every((role) => cols[role] !== undefined)) {
+    // Haqiqiy shapkada kamida uchta tanish ustun bo'ladi. Bitta-ikkita
+    // tasodifiy moslik - bu shapka emas.
+    if (Object.keys(cols).length >= 3 && required.every((role) => cols[role] !== undefined)) {
       return { rowIndex: r, cols };
     }
   }
@@ -449,6 +493,10 @@ const TOTAL_ROW_RE = /(^|[^А-ЯЁA-Z])(ИТОГО|ЖАМИ|ВСЕГО|JAMI|TOTA
 // доходы по дебетовым оборотам» kabi haqiqiy nomlar o'chib ketmasin.
 const FOOTER_ROW_RE = new RegExp(
   '^(СУММА ОБОРОТОВ|КОЛИЧЕСТВО ОБОРОТОВ|ОБОРОТ(Ы)? (ВСЕГО|ЗА)|' +
+  // «Итоговый оборот за период:» — ИТОГО дан keyin harf turgani uchun
+  // TOTAL_ROW_RE uni tutmaydi, natijada butun oborotka summasi yana bir
+  // marta o'tkazma bo'lib qo'shilib ketardi (yil summasi 2 baravar)
+  'ИТОГОВ|' +
   'ВХОДЯЩИЙ ОСТАТОК|ИСХОДЯЩИЙ ОСТАТОК|ОСТАТОК (НА|ЗА)|САЛЬДО|' +
   'БАНКОВСКАЯ СИСТЕМА|РУКОВОДИТЕЛЬ|ГЛАВНЫЙ|ИСПОЛНИТЕЛЬ)'
 );

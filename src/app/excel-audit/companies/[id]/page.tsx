@@ -46,6 +46,14 @@ interface AggregatedTx {
   openingSaldo?: number;
 }
 
+/** Тизим таниган (ёки шу сафар ўрганиб олган) экспорт шакллари */
+interface KnownFormat {
+  id: string;
+  kind: "BANK" | "FAKTURA";
+  label: string;
+  isNew: boolean;
+}
+
 /** Ҳар бир файл/варақ қандай ўқилгани — «жимгина хато» бўлмаслиги учун */
 interface SheetReport {
   file: string;
@@ -163,19 +171,22 @@ export default function CompanyDetailPage({ params }: PageProps) {
   const [detectedFormats, setDetectedFormats] = useState<string[]>([]);
   const [warnings, setWarnings] = useState<string[]>([]);
   const [sheetReports, setSheetReports] = useState<SheetReport[]>([]);
+  const [knownFormats, setKnownFormats] = useState<KnownFormat[]>([]);
   const [showReport, setShowReport] = useState(false);
 
   // 📅 Давр кесими
   const [yearFilter, setYearFilter] = useState<YearFilter>("ALL");
   const [monthFilter, setMonthFilter] = useState<MonthFilter>("ALL");
   const [cumulative, setCumulative] = useState(true);
+  // «Ожидает подписи партнёра» — имзоланмаган фактура одатда ҳисобланмайди
+  const [includePending, setIncludePending] = useState(false);
 
   const [selectedInns, setSelectedInns] = useState<string[]>([]);
   const [expandedInns, setExpandedInns] = useState<string[]>([]);
   const [isSaving, setIsSaving] = useState(false);
 
   const [searchTerm, setSearchTerm] = useState("");
-  const [filterType, setFilterType] = useState<"ALL" | "DIFF" | "EQUAL">("DIFF");
+  const [filterType, setFilterType] = useState<"ALL" | "DIFF" | "EQUAL">("ALL");
 
   // 🔽 Jadval sortlash holati
   const [sortKey, setSortKey] = useState<SortKey>("name");
@@ -224,10 +235,12 @@ export default function CompanyDetailPage({ params }: PageProps) {
     setDetectedFormats([]);
     setWarnings([]);
     setSheetReports([]);
+    setKnownFormats([]);
     const formData = new FormData();
 
     files.forEach((f) => formData.append("files", f));
     formData.append("companyId", companyId);
+    formData.append("includePending", includePending ? "true" : "false");
 
     try {
       const res = await authFetch("/api/upload-preview", {
@@ -246,6 +259,7 @@ export default function CompanyDetailPage({ params }: PageProps) {
         setDetectedFormats(data.detectedFormats || []);
         setWarnings(data.warnings || []);
         setSheetReports(data.sheets || []);
+        setKnownFormats(data.formats || []);
         // Огоҳлантириш бўлса — ҳисобот панели дарҳол очиқ турсин
         setShowReport((data.warnings || []).length > 0);
 
@@ -253,8 +267,10 @@ export default function CompanyDetailPage({ params }: PageProps) {
         setYearFilter("ALL");
         setMonthFilter("ALL");
 
-        const diffData = correctedData.filter((item: AggregatedTx) => Math.abs(item.difference) > 0.01);
-        setSelectedInns(diffData.map((d: AggregatedTx) => rowKey(d)));
+        // HAMMA контрагент белгиланади: акс ҳолда Excel экспорт ва
+        // жадвал остидаги «ЖАМИ» фақат фарқи борларни қўшади ва
+        // умумий сумма ҳақиқийдан кичик кўринади.
+        setSelectedInns(correctedData.map((d: AggregatedTx) => rowKey(d)));
       } else {
         setWarnings(data.warnings || []);
         setSheetReports(data.sheets || []);
@@ -407,6 +423,22 @@ export default function CompanyDetailPage({ params }: PageProps) {
     },
     { debit: 0, credit: 0, diff: 0, saldo: 0 }
   );
+
+  // ҲАММА контрагент бўйича якун — фильтр ва птичкадан қатъи назар.
+  // Пастдаги «Жами танланганлар» фақат белгиланганларни қўшади, шу
+  // сабабли фойдаланувчи «фактура камайиб қолди» деб ўйлаши мумкин эди.
+  const periodTotals = useMemo(() => {
+    const t = { debit: 0, credit: 0, diff: 0, count: 0, withDiff: 0 };
+    for (const tx of periodData) {
+      if (yearFilter !== "ALL" && tx.totalDebit === 0 && tx.totalCredit === 0) continue;
+      t.debit += tx.totalDebit;
+      t.credit += tx.totalCredit;
+      t.count++;
+      if (Math.abs(tx.difference) > 0.01) t.withDiff++;
+    }
+    t.diff = t.debit - t.credit;
+    return t;
+  }, [periodData, yearFilter]);
 
   // Давр танланганда «ўтган даврдан сальдо» устуни қўшилади
   const showSaldo = yearFilter !== "ALL";
@@ -641,6 +673,19 @@ export default function CompanyDetailPage({ params }: PageProps) {
             </button>
           </div>
 
+          <label className="flex items-center gap-2.5 text-sm text-slate-600 dark:text-slate-300 cursor-pointer select-none w-fit">
+            <input
+              type="checkbox"
+              className="w-4 h-4 accent-indigo-500 cursor-pointer"
+              checked={includePending}
+              onChange={(e) => setIncludePending(e.target.checked)}
+            />
+            <span>
+              «Ожидает подписи партнёра» фактураларни ҳам ҳисоблаш
+              <span className="text-slate-400 dark:text-slate-500"> — одатда ҳисобланмайди (имзоланмаган фактура кучга кирмаган)</span>
+            </span>
+          </label>
+
           {/* Aniqlangan formatlar */}
           {(detectedFormats.length > 0 || sheetReports.length > 0) && (
             <div className="anim-fade flex flex-wrap items-center gap-2">
@@ -648,6 +693,15 @@ export default function CompanyDetailPage({ params }: PageProps) {
               {detectedFormats.map((f) => (
                 <span key={f} className="px-2.5 py-1 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400 text-xs font-bold">
                   {FORMAT_LABELS[f] || f}
+                </span>
+              ))}
+              {knownFormats.filter((f) => f.isNew).map((f) => (
+                <span
+                  key={f.id}
+                  title={f.label}
+                  className="px-2.5 py-1 rounded-lg bg-sky-500/10 border border-sky-500/25 text-sky-700 dark:text-sky-400 text-xs font-bold"
+                >
+                  🧠 Янги шакл ўрганилди
                 </span>
               ))}
               {sheetReports.length > 0 && (
@@ -704,6 +758,23 @@ export default function CompanyDetailPage({ params }: PageProps) {
                   </tbody>
                 </table>
               </div>
+              {knownFormats.length > 0 && (
+                <div className="border-t border-slate-200 dark:border-slate-800 p-3">
+                  <p className="text-[11px] uppercase tracking-wider font-bold text-slate-500 mb-2">
+                    Тизим таниган экспорт шакллари ({knownFormats.length} та)
+                  </p>
+                  <ul className="space-y-1">
+                    {knownFormats.map((f) => (
+                      <li key={f.id} className="text-xs text-slate-600 dark:text-slate-300 flex gap-2">
+                        <span className={f.isNew ? "text-sky-600 dark:text-sky-400 font-bold shrink-0" : "text-slate-400 shrink-0"}>
+                          {f.isNew ? "янги" : "таниш"}
+                        </span>
+                        <span className="truncate">{f.label}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
               {warnings.length > 0 && (
                 <ul className="border-t border-amber-500/20 bg-amber-500/5 p-3 space-y-1.5">
                   {warnings.map((w, i) => (
@@ -814,6 +885,32 @@ export default function CompanyDetailPage({ params }: PageProps) {
               </button>
             </div>
           </div>
+
+          {/* УМУМИЙ ЯКУН — фильтрдан қатъи назар, ҳамма контрагент бўйича */}
+          <div className="mb-4 grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950/60 p-4">
+              <p className="text-[11px] uppercase tracking-wider font-bold text-slate-500">Жами чиққан пул</p>
+              <p className="text-xl font-bold text-slate-900 dark:text-white tabular mt-1">{formatNum(periodTotals.debit)}</p>
+            </div>
+            <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950/60 p-4">
+              <p className="text-[11px] uppercase tracking-wider font-bold text-slate-500">Жами келган счёт-фактура</p>
+              <p className="text-xl font-bold text-slate-900 dark:text-white tabular mt-1">{formatNum(periodTotals.credit)}</p>
+            </div>
+            <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950/60 p-4">
+              <p className="text-[11px] uppercase tracking-wider font-bold text-slate-500">Фарқи ({periodTitle})</p>
+              <p className={`text-xl font-bold tabular mt-1 ${periodTotals.diff < 0 ? "text-rose-600 dark:text-rose-400" : periodTotals.diff > 0 ? "text-amber-600 dark:text-amber-400" : "text-emerald-600 dark:text-emerald-400"}`}>
+                {formatNum(periodTotals.diff)}
+              </p>
+            </div>
+          </div>
+
+          <p className="text-xs text-slate-500 mb-3">
+            Жами <b className="text-slate-700 dark:text-slate-300">{periodTotals.count}</b> контрагент,
+            шундан <b className="text-slate-700 dark:text-slate-300">{periodTotals.withDiff}</b> тасида фарқ бор.
+            Қуйидаги жадвалда <b className="text-slate-700 dark:text-slate-300">
+              {filterType === "DIFF" ? "фақат фарқи борлар" : filterType === "EQUAL" ? "фақат тенг бўлганлар" : "барчаси"}
+            </b> кўрсатилмоқда, жадвал остидаги «Жами танланганлар» эса фақат ✓ белгиланганларни қўшади.
+          </p>
 
           {/* JADVAL */}
           <div className="overflow-x-auto w-full border border-slate-200 dark:border-slate-800 rounded-xl pb-0 custom-scrollbar">

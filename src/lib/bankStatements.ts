@@ -61,6 +61,11 @@ export interface BankStatement {
   /** Har bo'lim uchun aniqlangan ustunlar — chaqiruvchi tomon
    *  eski mantiq bilan mos-nomosligini tekshirishi uchun. */
   layout: SectionLayout[];
+  /** Shapka qatori va undan aniqlangan ustunlar xaritasi — format
+   *  xotirasiga (src/lib/formatMemory.ts) yozib qo'yish uchun.
+   *  Bir varaqda bir nechta bo'lim bo'lsa berilmaydi. */
+  headerLabels?: Cell[];
+  columns?: Record<string, number>;
 }
 
 export interface SectionLayout {
@@ -445,7 +450,24 @@ export function parseTwoSidedTurnover(rows: Cell[][]): BankStatement | null {
 
   if (dataRows === 0) return null;
 
-  return { format: 'TWO_SIDED', txs, ownInn, ownName, ownAccount, totalDebit, totalCredit, footerDebit, footerCredit, layout };
+  // Format xotirasi uchun: faqat varaqda BITTA bo'lim bo'lsa, ustun
+  // xaritasi bir ma'noli bo'ladi
+  let headerLabels: Cell[] | undefined;
+  let columns: Record<string, number> | undefined;
+  if (headers.length === 1 && layout.length === 1) {
+    const h = headers[0];
+    const dir = layout[0].direction;
+    const own = dir === 'DEBIT' ? h.payer : h.receiver;
+    const other = dir === 'DEBIT' ? h.receiver : h.payer;
+    headerLabels = rows[h.row];
+    columns = {};
+    const put = (k: string, v: number) => { if (v >= 0) columns![k] = v; };
+    put('amount', h.amountCol); put('date', h.dateCol); put('purpose', h.purposeCol);
+    put('doc', h.docCol); put('name', other.name); put('inn', other.inn);
+    put('account', other.account); put('ownInn', own.inn);
+  }
+
+  return { format: 'TWO_SIDED', txs, ownInn, ownName, ownAccount, totalDebit, totalCredit, footerDebit, footerCredit, headerLabels, columns, layout };
 }
 
 // ------------------------------------------------------------
@@ -723,6 +745,13 @@ export function parseColumnarStatement(rows: Cell[][]): BankStatement | null {
     if (dom.share >= 0.7) ownInn = dom.value;
   }
 
+  const columns: Record<string, number> = {};
+  const put = (k: string, v: number) => { if (v >= 0) columns[k] = v; };
+  put('date', dateCol); put('debit', debitCol); put('credit', creditCol);
+  put('name', nameCol); put('inn', innCol); put('account', accCol);
+  put('doc', docCol); put('purpose', purposeCol);
+  put('combined', combinedCol); put('ownInn', ownInnCol);
+
   return {
     format: 'COLUMNAR',
     txs,
@@ -733,6 +762,8 @@ export function parseColumnarStatement(rows: Cell[][]): BankStatement | null {
     totalCredit,
     footerDebit,
     footerCredit,
+    headerLabels: rows[headerRow],
+    columns,
     layout: [{
       headerRow,
       amountCol: creditCol,

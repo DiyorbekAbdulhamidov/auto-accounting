@@ -31,6 +31,11 @@ export interface UniversalTx {
 export interface UniversalResult {
   rows: UniversalTx[];
   method: 'HEADER' | 'STATISTICAL';
+  /** Shapka usulida topilgan ustunlar va shapka qatori - format
+   *  xotirasiga yozib qo'yish uchun (src/lib/formatMemory.ts).
+   *  Statistik usulda shapka yo'q, shuning uchun berilmaydi. */
+  map?: ColumnMap;
+  headerRow?: number;
 }
 
 interface ColumnMap {
@@ -229,9 +234,9 @@ function isIndexRow(row: Cell[]): boolean {
   return intCount / vals.length >= 0.8;
 }
 
-function detectHeaderMapping(rawData: Cell[][]): { map: ColumnMap; dataStart: number } | null {
+function detectHeaderMapping(rawData: Cell[][]): { map: ColumnMap; dataStart: number; headerRow: number } | null {
   const limit = Math.min(45, rawData.length);
-  let best: { map: ColumnMap; dataStart: number; score: number } | null = null;
+  let best: { map: ColumnMap; dataStart: number; score: number; headerRow: number } | null = null;
 
   for (let r = 0; r < limit; r++) {
     const row = rawData[r];
@@ -274,7 +279,7 @@ function detectHeaderMapping(rawData: Cell[][]): { map: ColumnMap; dataStart: nu
       if (twoRows) score -= 0.5; // teng bo'lsa bitta qatorli shapka afzal
 
       if (!best || score > best.score) {
-        best = { map, dataStart: r + (twoRows ? 2 : 1), score };
+        best = { map, dataStart: r + (twoRows ? 2 : 1), score, headerRow: r };
       }
     }
   }
@@ -284,7 +289,7 @@ function detectHeaderMapping(rawData: Cell[][]): { map: ColumnMap; dataStart: nu
   const idxRow = rawData[best.dataStart];
   if (idxRow && isIndexRow(idxRow)) best.dataStart++;
 
-  return { map: best.map, dataStart: best.dataStart };
+  return { map: best.map, dataStart: best.dataStart, headerRow: best.headerRow };
 }
 
 // ------------------------------------------------------------
@@ -563,7 +568,7 @@ export function parseUniversal(rawData: Cell[][]): UniversalResult | null {
   if (viaHeader) {
     const { rows, candidates } = extractRows(rawData, viaHeader.map, viaHeader.dataStart);
     if (rows.length >= 3 && rows.length / Math.max(1, candidates) >= 0.3) {
-      return { rows, method: 'HEADER' };
+      return { rows, method: 'HEADER', map: viaHeader.map, headerRow: viaHeader.headerRow };
     }
   }
 

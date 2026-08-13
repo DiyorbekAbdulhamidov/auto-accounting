@@ -16,6 +16,13 @@ import * as XLSX from 'xlsx';
 import { readWorkbookSmart } from './excelWorkbook';
 import { parseUniversal } from './universalParser';
 import {
+  fingerprint,
+  makeLearnedFormat,
+  matchKnownFormat,
+  readBankWithFormat,
+  type LearnedFormat,
+} from './formatMemory';
+import {
   parseTwoSidedTurnover,
   parseThreeRowAccountReport,
   parseColumnarStatement,
@@ -76,6 +83,10 @@ export interface AuditResult {
   detectedFormats: string[];
   warnings: string[];
   sheets: SheetReport[];
+  /** Shu yuklashda YANGI o'rganilgan yoki qayta ishlatilgan shakllar.
+   *  Chaqiruvchi (route) ularni Firestore'ga yozib qo'yadi - keyingi
+   *  safar shu shapka kelsa, ustunlar taxmin qilinmaydi. */
+  learnedFormats: LearnedFormat[];
   skippedInvoices: Array<{ status: string; count: number; amount: number }>;
   totals: { debit: number; credit: number; difference: number };
 }
@@ -238,6 +249,13 @@ function findFakturaLayout(rows: Cell[][]): FakturaLayout | null {
 
 const CONFIRMED_RE = /ПОДТВЕРЖД|ТАСДИҚ|ТАСДИК|TASDIQ/;
 
+// BEKOR QILINGAN fakturalar - faqat shular hisobga olinmaydi.
+// «Ожидает подписи партнёра» (imzo kutilmoqda) HISOBLANADI: faktura
+// yozib berilgan va buxgalter uni sverkada hisobga oladi. Buni
+// IMANMAX iyun fayli isbotladi - KAFESOFT bo'yicha qo'lda chiqarilgan
+// 27 001 500 aynan imzo kutilayotgan 3 062 500 bilan birga to'g'ri keladi.
+const REJECTED_RE = /ОТМЕН|ОТКАЗ|НЕДЕЙСТВ|АННУЛИР|BEKOR|RAD ET/;
+
 interface FakturaRow {
   inn: string;
   name: string;
@@ -254,6 +272,8 @@ interface FakturaRow {
 interface FakturaResult {
   rows: FakturaRow[];
   skipped: Map<string, { count: number; amount: number }>;
+  /** Hisoblangan, lekin hali tasdiqlanmagan (imzo kutilayotgan) */
+  pending: Map<string, { count: number; amount: number }>;
   ownInn: string;
   direction: 'RECEIVED' | 'SENT' | 'UNKNOWN';
   total: number;
@@ -275,9 +295,10 @@ function dominantInn(rows: Cell[][], from: number, col: number): { value: string
   return { value: best, share: total ? bestN / total : 0 };
 }
 
-function parseFakturaSheet(rows: Cell[][], L: FakturaLayout): FakturaResult {
+function parseFakturaSheet(rows: Cell[][], L: FakturaLayout, includePending: boolean): FakturaResult {
   const out: FakturaRow[] = [];
   const skipped = new Map<string, { count: number; amount: number }>();
+  const pending = new Map<string, { count: number; amount: number }>();
 
   // Qaysi tomon BIZ? Kelgan fakturada xaridor ustuni bir xil STIRni
   // takrorlaydi, sotuvchi esa har xil bo'ladi (yuborilganda - aksincha).
@@ -328,13 +349,28 @@ function parseFakturaSheet(rows: Cell[][], L: FakturaLayout): FakturaResult {
     if (!inn && !name) continue;
     if (amount <= 0) continue;
 
-    if (hasStatuses && !CONFIRMED_RE.test(status)) {
+    // Bekor qilingan / rad etilgan - hisobga olinmaydi
+    if (REJECTED_RE.test(status)) {
       const key = statusRaw || 'Статуссиз';
       const prev = skipped.get(key) || { count: 0, amount: 0 };
       prev.count++;
       prev.amount += amount;
       skipped.set(key, prev);
       continue;
+    }
+    // Tasdiqlanmagan, lekin bekor ham qilinmagan («Ожидает подписи
+    // партнёра»). Buxgalteriya qoidasi bo'yicha bunday faktura hali
+    // kuchga kirmagan - shuning uchun ODATDA hisoblanmaydi. Ba'zi
+    // buxgalterlar sverkaga qo'shadi, shuning uchun sahifada uni
+    // yoqish tugmasi bor.
+    if (hasStatuses && !CONFIRMED_RE.test(status)) {
+      const key = statusRaw || 'Статуссиз';
+      const bucket = includePending ? pending : skipped;
+      const prev = bucket.get(key) || { count: 0, amount: 0 };
+      prev.count++;
+      prev.amount += amount;
+      bucket.set(key, prev);
+      if (!includePending) continue;
     }
 
     // Takroriy faktura (bir necha fayl qisman ustma-ust tushsa).
@@ -357,14 +393,52 @@ function parseFakturaSheet(rows: Cell[][], L: FakturaLayout): FakturaResult {
     total += amount;
   }
 
-  return { rows: out, skipped, ownInn, direction, total };
+  return { rows: out, skipped, pending, ownInn, direction, total };
 }
 
 // ------------------------------------------------------------
 // Asosiy: fayllarni o'qib, kontragentlar kesimida yig'ish
 // ------------------------------------------------------------
 
-export function auditFiles(files: InputFile[]): AuditResult {
+export interface AuditOptions {
+  /** Ilgari o'rganilgan shakllar (Firestore `excel_formats`) */
+  knownFormats?: LearnedFormat[];
+  /** «Ожидает подписи партнёра» holatidagi fakturalarni ham hisoblash.
+   *  Standart holatda YO'Q: imzolanmagan faktura hali kuchga kirmagan. */
+  includePending?: boolean;
+}
+
+export function auditFiles(files: InputFile[], options: AuditOptions = {}): AuditResult {
+  const includePending = options.includePending === true;
+  const known = new Map<string, LearnedFormat>();
+  for (const f of options.knownFormats || []) known.set(f.id, f);
+  const learned = new Map<string, LearnedFormat>();
+
+  /** Muvaffaqiyatli o'qilgan shaklni xotiraga yozib qo'yish */
+  function remember(
+    kind: 'BANK' | 'FAKTURA',
+    parser: string,
+    headerLabels: Cell[] | undefined,
+    columns: Record<string, number> | undefined,
+    sampleFile: string,
+    direction?: 'DEBIT' | 'CREDIT'
+  ) {
+    if (!headerLabels || !columns) return;
+    const id = fingerprint(headerLabels);
+    if (!id) return;
+    const existing = known.get(id);
+    if (existing) {
+      // Tanish shakl - faqat ishlatilish sonini yangilaymiz
+      learned.set(id, { ...existing, uses: (existing.uses || 0) + 1, updatedAt: new Date().toISOString() });
+      return;
+    }
+    const fmt = makeLearnedFormat({ kind, parser, headerLabels, columns, direction, sampleFile });
+    if (fmt) {
+      learned.set(id, fmt);
+      known.set(id, fmt);
+    }
+  }
+
   const agg: Record<string, AggEntry> = {};
   const detectedFormats: string[] = [];
   const warnings: string[] = [];
@@ -541,7 +615,7 @@ export function auditFiles(files: InputFile[]): AuditResult {
       // 2) Faktura reestri
       const fakturaLayout = findFakturaLayout(sd.rows);
       if (fakturaLayout) {
-        const res = parseFakturaSheet(sd.rows, fakturaLayout);
+        const res = parseFakturaSheet(sd.rows, fakturaLayout, includePending);
         if (res.rows.length > 0) {
           noteFormat('FAKTURA');
           let added = 0, sum = 0, dup = 0;
@@ -551,6 +625,9 @@ export function auditFiles(files: InputFile[]): AuditResult {
             addTx(inv.name, inv.inn, inv.date, 0, inv.amount, 'FAKTURA', label, inv.doc);
             added++;
             sum += inv.amount;
+          }
+          for (const [status, v] of res.pending) {
+            warnings.push(`«${label}» — «${status}» ҳолатидаги ${v.count} та фактура (${MONEY_FMT(v.amount)}) ҲИСОБГА ОЛИНДИ (фактура ёзиб берилган, фақат имзо кутилмоқда).`);
           }
           for (const [status, v] of res.skipped) {
             const prev = skippedInvoices.get(status) || { count: 0, amount: 0 };
@@ -564,18 +641,57 @@ export function auditFiles(files: InputFile[]): AuditResult {
           if (dup > 0) {
             warnings.push(`«${label}» — ${dup} та фактура олдинги файлда аллақачон бор эди, такрор ҳисобланмади.`);
           }
+          // Faktura shaklini ham xotiraga yozib qo'yamiz
+          remember('FAKTURA', 'FAKTURA', sd.rows[fakturaLayout.headerRow], {
+            status: fakturaLayout.status, doc: fakturaLayout.doc, id: fakturaLayout.id,
+            sellerInn: fakturaLayout.sellerInn, sellerName: fakturaLayout.sellerName,
+            buyerInn: fakturaLayout.buyerInn, buyerName: fakturaLayout.buyerName,
+            amount: fakturaLayout.amount,
+          }, file.name);
+
           sheets.push({ file: file.name, sheet: sd.sheet, format: 'FAKTURA', rows: added, debit: 0, credit: sum, note: dup ? `${dup} та такрор` : undefined });
           carriedTitle = [];
           continue;
         }
       }
 
-      // 3) Bank ko'chirmalari - imzosiga qarab
+      // 3) Bank ko'chirmalari
       let st: BankStatement | null = null;
       let fmt = '';
+
+      // (a) Avval tekshirilgan parserlar - ular ko'chirmaning debet yoki
+      //     kredit ekanini SARLAVHAdan aniqlaydi, buni esa shapka izi
+      //     bilan bilib bo'lmaydi (ASBT'da ikkala varaqning shapkasi
+      //     AYNAN bir xil). Shuning uchun format xotirasi ularni
+      //     HECH QACHON bosib o'tmaydi.
       if ((st = parseThreeRowAccountReport(rowsWithTitle))) fmt = 'BANK_3ROW';
       else if ((st = parseColumnarStatement(rowsWithTitle))) fmt = 'BANK_COLUMNAR';
       else if ((st = parseTwoSidedTurnover(rowsWithTitle))) fmt = 'BANK_TURNOVER';
+
+      if (st && st.headerLabels && st.columns) {
+        remember(
+          'BANK',
+          st.format,
+          st.headerLabels,
+          st.columns,
+          file.name,
+          st.layout.length === 1 ? st.layout[0].direction : undefined
+        );
+      }
+
+      // (b) Parserlar tanimadi - lekin bu shapka ilgari bir marta
+      //     o'qilgan bo'lishi mumkin. Shunda ustunlar qaytadan taxmin
+      //     qilinmaydi: saqlangan xarita bo'yicha o'qiladi.
+      if (!st) {
+        const hit = matchKnownFormat(rowsWithTitle, known);
+        if (hit && hit.format.kind === 'BANK') {
+          st = readBankWithFormat(rowsWithTitle, hit.format, hit.headerRow);
+          if (st) {
+            fmt = 'TANISH_SHAKL';
+            remember('BANK', hit.format.parser, rowsWithTitle[hit.headerRow], hit.format.columns, file.name, hit.format.direction);
+          }
+        }
+      }
 
       if (st) {
         noteFormat(fmt);
@@ -620,8 +736,30 @@ export function auditFiles(files: InputFile[]): AuditResult {
           debit += tx.debit;
           credit += tx.credit;
         }
-        sheets.push({ file: file.name, sheet: sd.sheet, format: `UNIVERSAL/${universal.method}`, rows, debit, credit, note: 'Формат нотаниш — статистик усулда ўқилди, текшириб кўринг' });
-        warnings.push(`«${label}» — формат танилмади, универсал ўқувчи ишлатилди (${universal.method}). Рақамларни файл билан солиштириб кўринг.`);
+        // NOTANISH FORMATNI O'RGANIB QO'YISH: shapka topilgan bo'lsa,
+        // ustun xaritasi saqlanadi va keyingi safar shu shapka kelganda
+        // qaytadan taxmin qilinmaydi.
+        let learnedNow = false;
+        if (universal.map && universal.headerRow !== undefined) {
+          const cols: Record<string, number> = {};
+          for (const [role, idx] of Object.entries(universal.map)) {
+            if (typeof idx === 'number' && idx >= 0) cols[role] = idx;
+          }
+          const before = learned.size;
+          remember('BANK', 'UNIVERSAL', sd.rows[universal.headerRow], cols, file.name);
+          learnedNow = learned.size > before;
+        }
+
+        sheets.push({
+          file: file.name, sheet: sd.sheet, format: `UNIVERSAL/${universal.method}`,
+          rows, debit, credit,
+          note: learnedNow ? 'Нотаниш формат ЎРГАНИБ ОЛИНДИ — текшириб кўринг' : 'Формат нотаниш — статистик усулда ўқилди, текшириб кўринг',
+        });
+        warnings.push(
+          `«${label}» — формат танилмади, универсал ўқувчи ишлатилди (${universal.method}). ` +
+          (learnedNow ? 'Устунлар хаританинг эсида сақланди — кейинги сафар шу шакл тўғридан-тўғри ўқилади. ' : '') +
+          'Рақамларни файл билан солиштириб кўринг.'
+        );
         carriedTitle = [];
         continue;
       }
@@ -639,7 +777,7 @@ export function auditFiles(files: InputFile[]): AuditResult {
   }
 
   for (const [status, v] of skippedInvoices) {
-    warnings.push(`«${status}» ҳолатидаги ${v.count} та фактура (${MONEY_FMT(v.amount)}) ҳисобга олинмади — фақат тасдиқлангани ҳисобланади.`);
+    warnings.push(`«${status}» ҳолатидаги ${v.count} та фактура (${MONEY_FMT(v.amount)}) ҳисобга ОЛИНМАДИ.`);
   }
 
   const data = Object.values(agg).map((item) => {
@@ -663,6 +801,7 @@ export function auditFiles(files: InputFile[]): AuditResult {
     detectedFormats,
     warnings,
     sheets,
+    learnedFormats: [...learned.values()],
     skippedInvoices: [...skippedInvoices].map(([status, v]) => ({ status, ...v })),
     totals,
   };
