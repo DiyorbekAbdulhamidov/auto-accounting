@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import SortHeader from "@/components/SortHeader";
 import ThemeToggle from "@/components/ThemeToggle";
+import { CATEGORY_LABELS, type Category } from "@/lib/counterpartyCategory";
 
 interface MonthlyBucket {
   debit: number;
@@ -44,6 +45,19 @@ interface AggregatedTx {
   difference: number;
   /** Танланган даврдан ОЛДИНГИ фарқлар йиғиндиси (нарастающий) */
   openingSaldo?: number;
+  /** Коммунал/бюджет/банк тўловларини асосий сверкадан ажратиш учун.
+   *  Стандарт ҳар доим «korxona» — src/lib/counterpartyCategory.ts */
+  category?: Category;
+  categorySource?: "standart" | "seed" | "user";
+  categoryLabel?: string;
+  /** Ном бўйича ТАХМИН. Қаторни ЯШИРМАЙДИ, фақат белгиси чиқади. */
+  categoryHint?: Category;
+  categoryHintLabel?: string;
+}
+
+/** Эски сақланган ҳисоботларда тоифа йўқ — улар «korxona» ҳисобланади */
+function catOf(tx: AggregatedTx): Category {
+  return tx.category || "korxona";
 }
 
 /** Тизим таниган (ёки шу сафар ўрганиб олган) экспорт шакллари */
@@ -187,6 +201,11 @@ export default function CompanyDetailPage({ params }: PageProps) {
 
   const [searchTerm, setSearchTerm] = useState("");
   const [filterType, setFilterType] = useState<"ALL" | "DIFF" | "EQUAL">("ALL");
+  // 🏭 Тоифа фильтри. Стандарт — фақат корхоналар: коммунал, бюджет ва
+  // банк комиссияси асосий сверкани чалғитади. Улар ЙЎҚОЛМАЙДИ —
+  // тепадаги «ЖАМИ» карточкаси ҳар доим тўлиқ суммани кўрсатади.
+  const [categoryFilter, setCategoryFilter] = useState<"KORXONA" | "BOSHQA" | "ALL">("KORXONA");
+  const [savingCategory, setSavingCategory] = useState<string | null>(null);
 
   // 🔽 Jadval sortlash holati
   const [sortKey, setSortKey] = useState<SortKey>("name");
@@ -215,7 +234,7 @@ export default function CompanyDetailPage({ params }: PageProps) {
               difference: item.totalDebit - item.totalCredit,
             }));
             setParsedData(correctedData);
-            setSelectedInns(correctedData.map((d) => rowKey(d)));
+            setSelectedInns(correctedData.filter((d) => catOf(d) === "korxona").map((d) => rowKey(d)));
           }
         }
       } catch (error) {
@@ -267,10 +286,16 @@ export default function CompanyDetailPage({ params }: PageProps) {
         setYearFilter("ALL");
         setMonthFilter("ALL");
 
-        // HAMMA контрагент белгиланади: акс ҳолда Excel экспорт ва
-        // жадвал остидаги «ЖАМИ» фақат фарқи борларни қўшади ва
-        // умумий сумма ҳақиқийдан кичик кўринади.
-        setSelectedInns(correctedData.map((d: AggregatedTx) => rowKey(d)));
+        // Ҳамма КОРХОНА белгиланади: акс ҳолда Excel экспорт ва жадвал
+        // остидаги «ЖАМИ» фақат фарқи борларни қўшади ва умумий сумма
+        // ҳақиқийдан кичик кўринади. Коммунал/бюджет белгиланмайди —
+        // улар жадвалда ҳам кўринмайди, лекин тепадаги «ЖАМИ»
+        // карточкаси уларни ҳам ҳисоблайверади.
+        setSelectedInns(
+          correctedData
+            .filter((d: AggregatedTx) => catOf(d) === "korxona")
+            .map((d: AggregatedTx) => rowKey(d))
+        );
       } else {
         setWarnings(data.warnings || []);
         setSheetReports(data.sheets || []);
@@ -352,6 +377,10 @@ export default function CompanyDetailPage({ params }: PageProps) {
       // Танланган даврда ҳаракат бўлмаган контрагент рўйхатда керак эмас
       if (yearFilter !== "ALL" && item.totalDebit === 0 && item.totalCredit === 0) return false;
 
+      // Тоифа: фақат КЎРИНИШНИ ўзгартиради, ҳисобни эмас
+      if (categoryFilter === "KORXONA" && catOf(item) !== "korxona") return false;
+      if (categoryFilter === "BOSHQA" && catOf(item) === "korxona") return false;
+
       if (filterType === "DIFF") return Math.abs(item.difference) > 0.01;
       if (filterType === "EQUAL") return Math.abs(item.difference) <= 0.01;
       return true;
@@ -375,7 +404,7 @@ export default function CompanyDetailPage({ params }: PageProps) {
       }
     });
     return result;
-  }, [periodData, searchTerm, filterType, sortKey, sortDir, yearFilter]);
+  }, [periodData, searchTerm, filterType, categoryFilter, sortKey, sortDir, yearFilter]);
 
   const displayData = useMemo(() =>
     filteredData.filter((tx) => selectedInns.includes(rowKey(tx))),
@@ -413,6 +442,62 @@ export default function CompanyDetailPage({ params }: PageProps) {
     }
   };
 
+  // 🏭 Контрагент тоифасини ўзгартириш. Қарор шу КОРХОНА учун
+  // сақланади — бошқа мижозда бу ташкилот асосий контрагент бўлиши
+  // мумкин. «Корхона» ни танлаш тизимнинг бошланғич рўйхатини ҳам
+  // бекор қилади, яъни контрагент асосий сверкага қайтади.
+  const handleCategoryChange = async (tx: AggregatedTx, category: Category) => {
+    const key = rowKey(tx);
+    const prevCat = catOf(tx);
+    if (prevCat === category) return;
+
+    setSavingCategory(key);
+    // Оптимистик: жадвалда дарҳол кўринади
+    setParsedData((prev) =>
+      prev.map((r) =>
+        rowKey(r) === key
+          ? { ...r, category, categorySource: "user" as const, categoryHint: undefined, categoryHintLabel: undefined }
+          : r
+      )
+    );
+    // Птичка жадвал билан мос турсин: корхонага қайтса белгиланади,
+    // коммуналга ўтса белгидан чиқади (акс ҳолда пастдаги «Жами
+    // танланганлар» кўринмаётган қаторни ҳам қўшиб юборарди).
+    setSelectedInns((prev) =>
+      category === "korxona"
+        ? Array.from(new Set([...prev, key]))
+        : prev.filter((k) => k !== key)
+    );
+
+    try {
+      const res = await authFetch("/api/counterparty-category", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ companyId, key, inn: tx.inn, name: tx.name, category }),
+      });
+      const data = await res.json();
+      if (!data.success) throw new Error(data.error || "Номаълум хато");
+    } catch (error) {
+      // Сақланмаса — эски ҳолатга қайтарамиз, акс ҳолда экранда
+      // сақланган бўлиб кўринарди
+      setParsedData((prev) =>
+        prev.map((r) =>
+          rowKey(r) === key
+            ? { ...r, category: prevCat, categorySource: tx.categorySource, categoryHint: tx.categoryHint, categoryHintLabel: tx.categoryHintLabel }
+            : r
+        )
+      );
+      setSelectedInns((prev) =>
+        prevCat === "korxona"
+          ? Array.from(new Set([...prev, key]))
+          : prev.filter((k) => k !== key)
+      );
+      alert("Тоифани сақлаб бўлмади: " + (error instanceof Error ? error.message : String(error)));
+    } finally {
+      setSavingCategory(null);
+    }
+  };
+
   const grandTotals = displayData.reduce(
     (acc, curr) => {
       acc.debit += curr.totalDebit;
@@ -428,13 +513,32 @@ export default function CompanyDetailPage({ params }: PageProps) {
   // Пастдаги «Жами танланганлар» фақат белгиланганларни қўшади, шу
   // сабабли фойдаланувчи «фактура камайиб қолди» деб ўйлаши мумкин эди.
   const periodTotals = useMemo(() => {
-    const t = { debit: 0, credit: 0, diff: 0, count: 0, withDiff: 0 };
+    const t = {
+      debit: 0, credit: 0, diff: 0, count: 0, withDiff: 0,
+      // Корхоналар кесими — асосий сверка шу
+      korxonaDebit: 0, korxonaCredit: 0, korxonaCount: 0,
+      // Коммунал + бюджет + банк + хизмат
+      boshqaDebit: 0, boshqaCredit: 0, boshqaCount: 0,
+      // Ном бўйича «коммуналга ўхшайди» деб ТАХМИН қилинганлар. Улар
+      // жадвалда ҚОЛАДИ — фақат текшириб кўриш учун саналади.
+      hintCount: 0,
+    };
     for (const tx of periodData) {
       if (yearFilter !== "ALL" && tx.totalDebit === 0 && tx.totalCredit === 0) continue;
       t.debit += tx.totalDebit;
       t.credit += tx.totalCredit;
       t.count++;
       if (Math.abs(tx.difference) > 0.01) t.withDiff++;
+      if (catOf(tx) === "korxona") {
+        t.korxonaDebit += tx.totalDebit;
+        t.korxonaCredit += tx.totalCredit;
+        t.korxonaCount++;
+        if (tx.categoryHint) t.hintCount++;
+      } else {
+        t.boshqaDebit += tx.totalDebit;
+        t.boshqaCredit += tx.totalCredit;
+        t.boshqaCount++;
+      }
     }
     t.diff = t.debit - t.credit;
     return t;
@@ -442,7 +546,8 @@ export default function CompanyDetailPage({ params }: PageProps) {
 
   // Давр танланганда «ўтган даврдан сальдо» устуни қўшилади
   const showSaldo = yearFilter !== "ALL";
-  const colCount = showSaldo ? 9 : 8;
+  // + «Тоифа» устуни
+  const colCount = showSaldo ? 10 : 9;
   const periodTitle =
     yearFilter === "ALL"
       ? "Барча давр"
@@ -708,11 +813,10 @@ export default function CompanyDetailPage({ params }: PageProps) {
                 <button
                   type="button"
                   onClick={() => setShowReport((v) => !v)}
-                  className={`ml-auto px-3 py-1 rounded-lg text-xs font-bold border transition-colors ${
-                    warnings.length > 0
-                      ? "bg-amber-500/10 border-amber-500/30 text-amber-700 dark:text-amber-400"
-                      : "bg-slate-500/10 border-slate-500/20 text-slate-600 dark:text-slate-300"
-                  }`}
+                  className={`ml-auto px-3 py-1 rounded-lg text-xs font-bold border transition-colors ${warnings.length > 0
+                    ? "bg-amber-500/10 border-amber-500/30 text-amber-700 dark:text-amber-400"
+                    : "bg-slate-500/10 border-slate-500/20 text-slate-600 dark:text-slate-300"
+                    }`}
                 >
                   {warnings.length > 0 ? `⚠ ${warnings.length} та эслатма` : "✓ Ўқиш ҳисоботи"} · {showReport ? "яшириш" : "кўриш"}
                 </button>
@@ -864,6 +968,18 @@ export default function CompanyDetailPage({ params }: PageProps) {
                   <option value="EQUAL" className="bg-slate-100 dark:bg-slate-900">Тенг бўлганлар</option>
                 </select>
               </div>
+
+              {/* 🏭 ТОИФА — фақат кўринишни ўзгартиради, ҳисобни эмас */}
+              <select
+                value={categoryFilter}
+                onChange={(e) => setCategoryFilter(e.target.value as "KORXONA" | "BOSHQA" | "ALL")}
+                title="Коммунал, бюджет ва банк комиссияси асосий сверкани чалғитади. Улар йўқолмайди — тепадаги «ЖАМИ» ҳар доим тўлиқ."
+                className="px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950/70 font-semibold text-sm text-slate-700 dark:text-slate-200 outline-none cursor-pointer focus:border-indigo-500"
+              >
+                <option value="KORXONA" className="bg-slate-100 dark:bg-slate-900">Фақат корхоналар ({periodTotals.korxonaCount})</option>
+                <option value="BOSHQA" className="bg-slate-100 dark:bg-slate-900">Коммунал/бюджет ({periodTotals.boshqaCount})</option>
+                <option value="ALL" className="bg-slate-100 dark:bg-slate-900">Ҳаммаси ({periodTotals.count})</option>
+              </select>
             </div>
 
             <div className="flex flex-col sm:flex-row gap-2 w-full md:w-auto">
@@ -886,23 +1002,46 @@ export default function CompanyDetailPage({ params }: PageProps) {
             </div>
           </div>
 
-          {/* УМУМИЙ ЯКУН — фильтрдан қатъи назар, ҳамма контрагент бўйича */}
+          {/* УМУМИЙ ЯКУН — фильтрдан қатъи назар, ҳамма контрагент бўйича.
+              Катта рақам ҳар доим ТЎЛИҚ: у файлнинг ўз «Итого» қаторига
+              тенг бўлиши керак, шунинг учун ундан коммунал ҳам
+              чиқарилмайди. Остидаги кичик қатор эса корхоналар кесими. */}
           <div className="mb-4 grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950/60 p-4">
               <p className="text-[11px] uppercase tracking-wider font-bold text-slate-500">Жами чиққан пул</p>
               <p className="text-xl font-bold text-slate-900 dark:text-white tabular mt-1">{formatNum(periodTotals.debit)}</p>
+              <p className="text-[11px] text-slate-500 tabular mt-1">
+                корхоналар: <b className="text-slate-700 dark:text-slate-300">{formatNum(periodTotals.korxonaDebit)}</b>
+                {periodTotals.boshqaCount > 0 && <> · коммунал/бюджет: {formatNum(periodTotals.boshqaDebit)}</>}
+              </p>
             </div>
             <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950/60 p-4">
               <p className="text-[11px] uppercase tracking-wider font-bold text-slate-500">Жами келган счёт-фактура</p>
               <p className="text-xl font-bold text-slate-900 dark:text-white tabular mt-1">{formatNum(periodTotals.credit)}</p>
+              <p className="text-[11px] text-slate-500 tabular mt-1">
+                корхоналар: <b className="text-slate-700 dark:text-slate-300">{formatNum(periodTotals.korxonaCredit)}</b>
+                {periodTotals.boshqaCount > 0 && <> · коммунал/бюджет: {formatNum(periodTotals.boshqaCredit)}</>}
+              </p>
             </div>
             <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950/60 p-4">
               <p className="text-[11px] uppercase tracking-wider font-bold text-slate-500">Фарқи ({periodTitle})</p>
               <p className={`text-xl font-bold tabular mt-1 ${periodTotals.diff < 0 ? "text-rose-600 dark:text-rose-400" : periodTotals.diff > 0 ? "text-amber-600 dark:text-amber-400" : "text-emerald-600 dark:text-emerald-400"}`}>
                 {formatNum(periodTotals.diff)}
               </p>
+              <p className="text-[11px] text-slate-500 tabular mt-1">
+                корхоналар: <b className="text-slate-700 dark:text-slate-300">{formatNum(periodTotals.korxonaDebit - periodTotals.korxonaCredit)}</b>
+              </p>
             </div>
           </div>
+
+          {periodTotals.hintCount > 0 && (
+            <div className="mb-3 rounded-xl border border-amber-300/70 dark:border-amber-700/50 bg-amber-50 dark:bg-amber-950/30 px-4 py-2.5 text-xs text-amber-900 dark:text-amber-200">
+              <b>{periodTotals.hintCount}</b> та контрагент коммуналга ўхшайди (номи бўйича ёки
+              бошқа корхоналар шундай белгилагани учун), лекин улар
+              <b> ҳисобдан чиқарилмаган</b> — жадвалда «?» белгиси билан турибди.
+              Текшириб, тоифасини ўзгартиринг. Тизим ўзи ҳеч қачон яшириб қўймайди.
+            </div>
+          )}
 
           <p className="text-xs text-slate-500 mb-3">
             Жами <b className="text-slate-700 dark:text-slate-300">{periodTotals.count}</b> контрагент,
@@ -927,6 +1066,7 @@ export default function CompanyDetailPage({ params }: PageProps) {
                   </th>
                   <th className="p-3 text-left"><SortHeader label="Фирма номлари" k="name" activeKey={sortKey} dir={sortDir} onToggle={toggleSort} /></th>
                   <th className="p-3 w-32 text-center"><SortHeader label="СТИР" k="inn" align="center" activeKey={sortKey} dir={sortDir} onToggle={toggleSort} /></th>
+                  <th className="p-3 w-32 text-center uppercase tracking-wider text-[11px] font-bold text-slate-500 dark:text-slate-400">Тоифа</th>
                   {showSaldo && (
                     <th className="p-3 w-36 text-right uppercase tracking-wider text-[11px] font-bold text-slate-500 dark:text-slate-400">Ўтган даврдан</th>
                   )}
@@ -973,6 +1113,35 @@ export default function CompanyDetailPage({ params }: PageProps) {
                           <td className="p-3 text-center">
                             <span className="font-mono text-xs text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-800 bg-slate-100 dark:bg-slate-950/60 px-2 py-0.5 rounded-md">{tx.inn}</span>
                           </td>
+                          {/* 🏭 ТОИФА. Тахмин («?») қаторни ЯШИРМАЙДИ —
+                              фойдаланувчи ўзи тасдиқлайди. */}
+                          <td className="p-3 text-center">
+                            <select
+                              value={catOf(tx)}
+                              disabled={savingCategory === key}
+                              onChange={(e) => handleCategoryChange(tx, e.target.value as Category)}
+                              title={
+                                tx.categoryLabel
+                                  ? `${tx.categoryLabel}${tx.categorySource === "user" ? " (сиз белгилагансиз)" : ""}`
+                                  : tx.categoryHintLabel
+                                    ? `${tx.categoryHintLabel} — текширинг`
+                                    : "Контрагент тоифаси"
+                              }
+                              className={`w-full max-w-[110px] text-[11px] font-semibold rounded-md border px-1.5 py-1 outline-none cursor-pointer disabled:opacity-50 ${catOf(tx) === "korxona"
+                                ? tx.categoryHint
+                                  ? "border-amber-400 dark:border-amber-600 bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300"
+                                  : "border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950/60 text-slate-500 dark:text-slate-400"
+                                : "border-sky-300 dark:border-sky-800 bg-sky-50 dark:bg-sky-950/40 text-sky-800 dark:text-sky-300"
+                                }`}
+                            >
+                              {(Object.keys(CATEGORY_LABELS) as Category[]).map((c) => (
+                                <option key={c} value={c} className="bg-slate-100 dark:bg-slate-900 text-slate-900 dark:text-slate-100">
+                                  {CATEGORY_LABELS[c]}
+                                  {c === "korxona" && tx.categoryHint ? " ?" : ""}
+                                </option>
+                              ))}
+                            </select>
+                          </td>
                           {showSaldo && (
                             <td className={`p-3 text-right tabular text-xs ${(tx.openingSaldo || 0) === 0 ? "text-slate-400 dark:text-slate-600" : "text-slate-500 dark:text-slate-400"}`}>
                               {formatNum(tx.openingSaldo || 0)}
@@ -985,11 +1154,10 @@ export default function CompanyDetailPage({ params }: PageProps) {
                           <td className="p-3 text-center">
                             <button
                               onClick={() => toggleExpand(key)}
-                              className={`inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-bold transition-all duration-300 border ${
-                                isExpanded
-                                  ? "bg-indigo-600 text-white border-indigo-600 shadow-lg shadow-indigo-600/25"
-                                  : "bg-white dark:bg-slate-900/60 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-800 hover:text-indigo-600 dark:hover:text-indigo-400 hover:border-indigo-500/40"
-                              }`}
+                              className={`inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-bold transition-all duration-300 border ${isExpanded
+                                ? "bg-indigo-600 text-white border-indigo-600 shadow-lg shadow-indigo-600/25"
+                                : "bg-white dark:bg-slate-900/60 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-800 hover:text-indigo-600 dark:hover:text-indigo-400 hover:border-indigo-500/40"
+                                }`}
                             >
                               {isExpanded ? "Ёпиш" : "Очиш"}
                               <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-300 ${isExpanded ? "rotate-180" : ""}`} />
@@ -1069,7 +1237,7 @@ export default function CompanyDetailPage({ params }: PageProps) {
                 <tfoot className="sticky bottom-0 z-30 bg-slate-100 dark:bg-slate-900 font-bold border-t-2 border-slate-300 dark:border-slate-700">
                   <tr>
                     <td className="p-3 text-center text-indigo-600 dark:text-indigo-400">✓</td>
-                    <td colSpan={2} className="p-3 text-right uppercase tracking-wider text-[11px] text-slate-500 dark:text-slate-400">Жами танланганлар:</td>
+                    <td colSpan={3} className="p-3 text-right uppercase tracking-wider text-[11px] text-slate-500 dark:text-slate-400">Жами танланганлар:</td>
                     {showSaldo && (
                       <td className="p-3 text-right text-xs text-slate-500 dark:text-slate-400 tabular">{formatNum(grandTotals.saldo)}</td>
                     )}

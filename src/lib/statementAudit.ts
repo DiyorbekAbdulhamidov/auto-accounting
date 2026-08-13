@@ -23,6 +23,13 @@ import {
   type LearnedFormat,
 } from './formatMemory';
 import {
+  resolveCategory,
+  CATEGORY_LABELS,
+  type Category,
+  type CategorySource,
+  type GlobalHint,
+} from './counterpartyCategory';
+import {
   parseTwoSidedTurnover,
   parseThreeRowAccountReport,
   parseColumnarStatement,
@@ -54,11 +61,23 @@ export interface AggEntry {
   key: string;
   inn: string;
   name: string;
+  /** Kontragentning hisob raqami (bank ko'chirmasida bo'lsa). Toifani
+   *  hududiy ro'yxatsiz aniqlash uchun ishlatiladi — ғазначилик
+   *  (23402...) ва банк (452...) ҳисоблари бутун мамлакатда бир хил. */
+  account?: string;
   monthlyData: Record<string, MonthlyBucket>;
   transactions: TxRecord[];
   totalDebit: number;
   totalCredit: number;
   difference?: number;
+  /** Kommunal/byudjet/bank to'lovlarini asosiy sverkadan ajratish
+   *  uchun. Standart har doim 'korxona' — src/lib/counterpartyCategory.ts */
+  category: Category;
+  categorySource: CategorySource;
+  categoryLabel?: string;
+  /** Nom bo'yicha taxmin. Qatorni YASHIRMAYDI, faqat belgisi chiqadi. */
+  categoryHint?: Category;
+  categoryHintLabel?: string;
 }
 
 export interface SheetReport {
@@ -89,6 +108,10 @@ export interface AuditResult {
   learnedFormats: LearnedFormat[];
   skippedInvoices: Array<{ status: string; count: number; amount: number }>;
   totals: { debit: number; credit: number; difference: number };
+  /** Toifalar kesimi. `totals` esa HAR DOIM to'liq qoladi — u
+   *  faylning o'z «Итого» qatoriga teng bo'lishi kerak, shuning
+   *  uchun undan hech narsa chiqarilmaydi. */
+  categoryTotals: Record<Category, { debit: number; credit: number; count: number }>;
 }
 
 export interface InputFile {
@@ -406,10 +429,19 @@ export interface AuditOptions {
   /** «Ожидает подписи партнёра» holatidagi fakturalarni ham hisoblash.
    *  Standart holatda YO'Q: imzolanmagan faktura hali kuchga kirmagan. */
   includePending?: boolean;
+  /** Foydalanuvchi qo'lda belgilagan toifalar (STIR yoki kalit bo'yicha).
+   *  Korxona darajasida saqlanadi — bir mijoz uchun kommunal bo'lgan
+   *  tashkilot boshqasi uchun asosiy kontragent bo'lishi mumkin. */
+  categoryOverrides?: Record<string, Category>;
+  /** Boshqa korxonalar shu STIRni qanday belgilagani. Bu HECH QACHON
+   *  toifa bo'lib qo'llanmaydi — faqat «?» belgisi chiqaradi. */
+  categoryGlobalHints?: Record<string, GlobalHint>;
 }
 
 export function auditFiles(files: InputFile[], options: AuditOptions = {}): AuditResult {
   const includePending = options.includePending === true;
+  const categoryOverrides = options.categoryOverrides;
+  const categoryGlobalHints = options.categoryGlobalHints;
   const known = new Map<string, LearnedFormat>();
   for (const f of options.knownFormats || []) known.set(f.id, f);
   const learned = new Map<string, LearnedFormat>();
@@ -482,6 +514,10 @@ export function auditFiles(files: InputFile[], options: AuditOptions = {}): Audi
         transactions: [],
         totalDebit: 0,
         totalCredit: 0,
+        // Haqiqiy toifa oxirida, nom to'liq aniqlangandan keyin
+        // qo'yiladi (nom bir necha faylda to'liqroq bo'lishi mumkin).
+        category: 'korxona',
+        categorySource: 'standart',
       };
     }
     if (inn && e.inn === '-') e.inn = inn;
@@ -501,10 +537,12 @@ export function auditFiles(files: InputFile[], options: AuditOptions = {}): Audi
     docType: string,
     source: string,
     doc?: string,
-    purpose?: string
+    purpose?: string,
+    account?: string
   ) {
     if (debit <= 0 && credit <= 0) return;
     const e = entryFor(cleanInn(inn), name);
+    if (account && !e.account) e.account = account;
 
     // Sanasi yo'q o'tkazma bugungi oyga tushib, hisobotni buzmasligi
     // uchun alohida «sanasiz» guruhga yig'iladi
@@ -556,7 +594,7 @@ export function auditFiles(files: InputFile[], options: AuditOptions = {}): Audi
         ownCredit += tx.credit > 0 ? tx.credit : 0;
         continue;
       }
-      addTx(tx.name, tx.inn, tx.date, tx.debit, tx.credit, 'BANK', source, tx.doc, tx.purpose);
+      addTx(tx.name, tx.inn, tx.date, tx.debit, tx.credit, 'BANK', source, tx.doc, tx.purpose, tx.account);
       rows++;
       debit += tx.debit > 0 ? tx.debit : 0;
       credit += tx.credit > 0 ? tx.credit : 0;
@@ -783,18 +821,118 @@ export function auditFiles(files: InputFile[], options: AuditOptions = {}): Audi
   const data = Object.values(agg).map((item) => {
     item.difference = item.totalDebit - item.totalCredit;
     item.transactions.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
+
+    // Toifa endi qo'yiladi: shu paytga kelib nom eng to'liq holatda
+    // (bir necha faylda turlicha yozilgan bo'lishi mumkin edi).
+    const cat = resolveCategory(
+      item.inn, item.key, item.name, categoryOverrides, item.account, categoryGlobalHints
+    );
+    item.category = cat.category;
+    item.categorySource = cat.source;
+    item.categoryLabel = cat.label;
+    item.categoryHint = cat.hint;
+    item.categoryHintLabel = cat.hintLabel;
     return item;
   });
+
+  const categoryTotals = {
+    korxona: { debit: 0, credit: 0, count: 0 },
+    kommunal: { debit: 0, credit: 0, count: 0 },
+    byudjet: { debit: 0, credit: 0, count: 0 },
+    bank: { debit: 0, credit: 0, count: 0 },
+    xizmat: { debit: 0, credit: 0, count: 0 },
+  } as Record<Category, { debit: number; credit: number; count: number }>;
 
   const totals = data.reduce(
     (acc, it) => {
       acc.debit += it.totalDebit;
       acc.credit += it.totalCredit;
+      const c = categoryTotals[it.category];
+      c.debit += it.totalDebit;
+      c.credit += it.totalCredit;
+      c.count++;
       return acc;
     },
     { debit: 0, credit: 0, difference: 0 }
   );
   totals.difference = totals.debit - totals.credit;
+
+  // ------------------------------------------------------------
+  // HIMOYA QOIDASI: toifalash pul yo'qotishига олиб келмаслиги учун
+  //
+  // Коммунал ташкилот билан ҳисоб-китоб ОДАТДА тиқ-тиқ ёпилади:
+  // тўлайсиз — фактура келади — фарқ нолга тенг. Агар асосий
+  // сверкадан чиқарилган контрагентда ФАКТУРА ҲАМ БОР ва ФАРҚ ҲАМ
+  // бор бўлса — у ўзини ҳақиқий контрагентдек тутяпти. Айнан шу
+  // ҳолатда уни яшириш пулга тушарди, шунинг учун ЎҚИШ ҲИСОБОТИДА
+  // алоҳида айтилади (фильтрдан қатъи назар кўринади).
+  // ------------------------------------------------------------
+  // Кичик фарқ коммуналда ОДДИЙ ҳол: июль фактураси августда келади,
+  // тўлов эса ойма-ой сурилади. Шунинг учун ҳар қандай тийин эмас,
+  // фақат СЕЗИЛАРЛИ фарқ айтилади — акс ҳолда огоҳлантириш шовқинга
+  // айланиб, ҳеч ким ўқимай қўяди. Айнан шу нисбат тўлов умуман
+  // йўқ ҳолатни ҳам ушлайди (фарқ айланманинг 100% и бўлади).
+  const MATERIAL_SHARE = 0.25; // фарқ ўз айланмасига нисбатан
+  /** Умумий айланмадаги улуш чегараси — тоифага қараб ҳар хил.
+   *  СОЛИҚ табиатан катта бўлади: ҳақиқий файлларда ғазначилик улуши
+   *  1,0% дан 10,3% гача чиққан, шунинг учун унга 2% чегара қўйилса
+   *  ҳар сафар бекорга огоҳлантирарди. Коммунал ва хизмат эса ҳеч
+   *  қачон бунча катта бўлмайди (энг каттаси 0,3%). */
+  const BIG_PLAYER_SHARE: Record<Category, number> = {
+    korxona: Infinity,
+    kommunal: 0.02,
+    xizmat: 0.02,
+    bank: 0.02,
+    byudjet: 0.15,
+  };
+  const grandTurnover = Math.max(totals.debit, totals.credit);
+
+  for (const it of data) {
+    if (it.category === 'korxona') continue;
+    const own = Math.max(it.totalDebit, it.totalCredit);
+
+    // (a) БЮДЖЕТ + ФАКТУРА = зиддият. Ғазначиликка ҳисоб-фактура
+    //     ёзилмайди — солиқ тўловида контрагент сифатида фирма эмас,
+    //     ғазна ҳисобварағи туради. Демак фактураси бор бўлса, бу
+    //     бюджет тўлови эмас, ўлчамидан қатъи назар.
+    if (it.category === 'byudjet' && it.totalCredit > 0.01) {
+      warnings.push(
+        `«${it.name}» (СТИР ${it.inn}) «Бюджет» деб белгиланган, ЛЕКИН унда ҳисоб-фактура бор ` +
+        `(${MONEY_FMT(it.totalCredit)}). Ғазначиликка фактура ёзилмайди — текширинг: ` +
+        `балки у ҳақиқий контрагентдир.`
+      );
+      continue;
+    }
+
+    // (b) ЎЛЧОВ. Коммунал тўлов бизнес айланмасининг арзимас қисми
+    //     бўлади. Агар «коммунал» деб белгиланган контрагент умумий
+    //     айланманинг сезиларли улушини эгалласа — у коммунал эмас.
+    //     Айнан шу қоида йирик етказиб берувчини адашиб белгилашдан
+    //     сақлайди (фарқи кичик бўлса ҳам).
+    if (grandTurnover > 0 && own / grandTurnover >= BIG_PLAYER_SHARE[it.category]) {
+      const pct = ((own / grandTurnover) * 100).toFixed(1);
+      warnings.push(
+        `«${it.name}» (СТИР ${it.inn}) «${CATEGORY_LABELS[it.category]}» деб белгиланган ва асосий ` +
+        `сверкада кўринмайди, ЛЕКИН у умумий айланманинг ${pct}% ини (${MONEY_FMT(own)}) ташкил ` +
+        `қилади — бу коммунал учун жуда катта. Текширинг: балки у ҳақиқий контрагентдир.`
+      );
+      continue;
+    }
+
+    // (c) ХУЛҚ. Коммунал билан ҳисоб-китоб одатда ёпилади: тўлайсиз —
+    //     фактура келади. Фактураси бор, лекин сезиларли фарқи қолган
+    //     бўлса — у ўзини контрагентдек тутяпти.
+    if (it.totalCredit <= 0) continue; // фактураси йўқ — оддий тўлов
+    const diff = it.totalDebit - it.totalCredit;
+    if (Math.abs(diff) <= 0.01) continue; // тиқ-тиқ ёпилган — нормал
+    if (own <= 0 || Math.abs(diff) / own < MATERIAL_SHARE) continue;
+    const pct = Math.round((Math.abs(diff) / own) * 100);
+    warnings.push(
+      `«${it.name}» (СТИР ${it.inn}) «${CATEGORY_LABELS[it.category]}» деб белгиланган ва асосий ` +
+      `сверкада кўринмайди, ЛЕКИН унда фактура бор ва фарқи ${MONEY_FMT(diff)} — айланмасининг ` +
+      `${pct}% и. Текширинг: балки у ҳақиқий контрагентдир.`
+    );
+  }
 
   return {
     data,
@@ -804,5 +942,6 @@ export function auditFiles(files: InputFile[], options: AuditOptions = {}): Audi
     learnedFormats: [...learned.values()],
     skippedInvoices: [...skippedInvoices].map(([status, v]) => ({ status, ...v })),
     totals,
+    categoryTotals,
   };
 }
