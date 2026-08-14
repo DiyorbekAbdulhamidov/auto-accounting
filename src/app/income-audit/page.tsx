@@ -34,6 +34,8 @@ import {
 } from "lucide-react";
 import SortHeader from "@/components/SortHeader";
 import ThemeToggle from "@/components/ThemeToggle";
+import LanguageToggle from "@/components/LanguageToggle";
+import { useT } from "@/context/LanguageContext";
 import { buildAging, BUCKET_KEYS, type BucketKey } from "@/lib/aging";
 
 interface PaymentRec {
@@ -163,6 +165,7 @@ function yearOf(p: PartyRow, year: string) {
 }
 
 export default function IncomeAuditPage() {
+  const t = useT();
   const [files, setFiles] = useState<File[]>([]);
   const [loading, setLoading] = useState(false);
   const [report, setReport] = useState<IncomeResponse | null>(null);
@@ -182,7 +185,7 @@ export default function IncomeAuditPage() {
   const handleUpload = async (e: React.FormEvent) => {
     e.preventDefault();
     if (files.length === 0) {
-      setError("Камида битта файл танланг: банк кўчирмаси ва/ёки юборилган фактуралар реестри.");
+      setError(t("Камида битта файл танланг: банк кўчирмаси ва/ёки юборилган фактуралар реестри."));
       return;
     }
 
@@ -201,11 +204,11 @@ export default function IncomeAuditPage() {
         setSelectedKeys(parsed.parties.map((p) => p.key));
       } else {
         setReport(null);
-        setError(data.error || "Номаълум хатолик юз берди.");
+        setError(data.error || t("Номаълум хатолик юз берди."));
       }
     } catch (err) {
       console.error(err);
-      setError("Сервер билан уланишда хатолик!");
+      setError(t("Сервер билан уланишда хатолик!"));
     } finally {
       setLoading(false);
     }
@@ -366,18 +369,18 @@ export default function IncomeAuditPage() {
   };
 
   const TABS = [
-    { key: "SVERKA" as TabKey, label: "Сверка", icon: Table2, count: displayRows.length },
-    { key: "YEARS" as TabKey, label: "Йиллар", icon: CalendarRange, count: yearKeys.length },
-    { key: "MONTHLY" as TabKey, label: "Ойма-ой", icon: CalendarDays, count: monthlyRows.length },
-    { key: "PAYMENTS" as TabKey, label: "Тўловлар", icon: Banknote, count: paymentRows.length },
-    { key: "INVOICES" as TabKey, label: "Фактуралар", icon: Receipt, count: invoiceRows.length },
-    { key: "AGING" as TabKey, label: "Қарз ёши", icon: Hourglass, count: aging.parties.filter((p) => p.receivable > 0.01).length },
+    { key: "SVERKA" as TabKey, label: t("Сверка"), icon: Table2, count: displayRows.length },
+    { key: "YEARS" as TabKey, label: t("Йиллар"), icon: CalendarRange, count: yearKeys.length },
+    { key: "MONTHLY" as TabKey, label: t("Ойма-ой"), icon: CalendarDays, count: monthlyRows.length },
+    { key: "PAYMENTS" as TabKey, label: t("Тўловлар"), icon: Banknote, count: paymentRows.length },
+    { key: "INVOICES" as TabKey, label: t("Фактуралар"), icon: Receipt, count: invoiceRows.length },
+    { key: "AGING" as TabKey, label: t("Қарз ёши"), icon: Hourglass, count: aging.parties.filter((p) => p.receivable > 0.01).length },
   ];
 
   // 📈 EXCEL EXPORT — 5 варақли ҳисобот (src/lib/kirimExcel.ts)
   const handleExport = async () => {
     if (!report || displayRows.length === 0) {
-      setError("Рўйхат бўш. Камида битта контрагентни белгиланг!");
+      setError(t("Рўйхат бўш. Камида битта контрагентни белгиланг!"));
       return;
     }
     const today = new Date().toLocaleDateString("ru-RU");
@@ -407,14 +410,13 @@ export default function IncomeAuditPage() {
             </NextLink>
             <div>
               <h1 className="text-2xl font-black tracking-tight text-slate-900 dark:text-white">
-                📥 Кирим Сверкаси
+                📥 {t("Кирим Сверкаси")}
               </h1>
               <p className="text-sm text-slate-500">
-                Жами келган пул (кредит) ↔ биз юборган счёт-фактуралар. Банк кўчирмаси ва
-                E-фактурадан юкланган «юборилган фактуралар» файлини бирга танланг.
+                {t("Ҳисобингизга ТУШГАН пул ↔ сиз ЁЗГАН фактуралар. Банк кўчирмаси ва E-фактурадан юкланган «юборилган фактуралар» файлини бирга танланг.")}
               </p>
             </div>
-            <div className="ml-auto"><ThemeToggle /></div>
+            <div className="ml-auto flex items-center gap-2"><LanguageToggle /><ThemeToggle /></div>
           </div>
 
           <form onSubmit={handleUpload} className="flex flex-col gap-4 mt-6">
@@ -431,12 +433,12 @@ export default function IncomeAuditPage() {
                   </div>
                   <div className="min-w-0">
                     <p className="text-sm font-bold text-slate-700 dark:text-slate-200 truncate">
-                      {files.length > 0 ? `${files.length} та файл танланди` : "Банк кўчирмаси + фактура реестрини танланг"}
+                      {files.length > 0 ? `${files.length} ${t("та файл танланди")}` : t("Банк кўчирмаси + фактура реестрини танланг")}
                     </p>
                     <p className="text-xs text-slate-500 truncate">
                       {files.length > 0
                         ? files.map((f) => f.name).join(", ")
-                        : ".xls, .xlsx, .csv — бир нечта файлни бирга юкласа бўлади"}
+                        : t(".xls, .xlsx, .csv — бир нечта файлни бирга юкласа бўлади")}
                     </p>
                   </div>
                 </div>
@@ -454,7 +456,7 @@ export default function IncomeAuditPage() {
                 className="w-full md:w-1/4 px-8 py-3 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-60 text-white font-bold rounded-xl shadow-lg shadow-emerald-600/25 transition-all duration-300 flex items-center justify-center gap-2 hover:-translate-y-0.5 active:scale-95"
               >
                 {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileSpreadsheet className="w-4 h-4" />}
-                {loading ? "Ўқилмоқда..." : "Ҳисоблаш"}
+                {loading ? t("Ўқилмоқда...") : t("Ҳисоблаш")}
               </button>
             </div>
 
@@ -479,12 +481,12 @@ export default function IncomeAuditPage() {
                 ))}
                 {report.meta.ownInn !== "-" && (
                   <span className="px-2.5 py-1 rounded-lg bg-slate-500/10 border border-slate-500/20 text-slate-500 font-bold font-mono">
-                    Ўз СТИР: {report.meta.ownInn}
+                    {t("Ўз СТИР")}: {report.meta.ownInn}
                   </span>
                 )}
                 {report.meta.periodFrom && (
                   <span className="px-2.5 py-1 rounded-lg bg-slate-500/10 border border-slate-500/20 text-slate-500 font-bold">
-                    Давр: {fmtDate(report.meta.periodFrom)} — {fmtDate(report.meta.periodTo)}
+                    {t("Давр")}: {fmtDate(report.meta.periodFrom)} — {fmtDate(report.meta.periodTo)}
                   </span>
                 )}
               </div>
@@ -510,12 +512,12 @@ export default function IncomeAuditPage() {
               <div className="anim-fade-up delay-1 surface p-6 flex items-center justify-between transition-all duration-300 hover:border-emerald-500/30 hover:-translate-y-1">
                 <div className="space-y-1.5">
                   <p className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-widest">
-                    Жами келган пул (Кредит)
+                    {t("Жами тушган пул")}
                   </p>
                   <h3 className="text-2xl font-black text-slate-900 dark:text-white tabular">
                     {fmt(totals.bankCredit)} <span className="text-sm text-slate-500 font-bold">UZS</span>
                   </h3>
-                  <p className="text-[11px] text-slate-500">{report.meta.bankRowCount} та банк ўтказмаси</p>
+                  <p className="text-[11px] text-slate-500">{report.meta.bankRowCount} {t("та банк ўтказмаси")}</p>
                 </div>
                 <div className="p-3.5 rounded-2xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
                   <TrendingUp className="w-5 h-5" />
@@ -525,12 +527,12 @@ export default function IncomeAuditPage() {
               <div className="anim-fade-up delay-2 surface p-6 flex items-center justify-between transition-all duration-300 hover:border-indigo-500/30 hover:-translate-y-1">
                 <div className="space-y-1.5">
                   <p className="text-[11px] font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-widest">
-                    Жами юборилган счёт-фактура
+                    {t("Жами ёзилган фактура")}
                   </p>
                   <h3 className="text-2xl font-black text-slate-900 dark:text-white tabular">
                     {fmt(totals.facturaSent)} <span className="text-sm text-slate-500 font-bold">UZS</span>
                   </h3>
-                  <p className="text-[11px] text-slate-500">{report.meta.invoiceCount} та тасдиқланган фактура</p>
+                  <p className="text-[11px] text-slate-500">{report.meta.invoiceCount} {t("та тасдиқланган фактура")}</p>
                 </div>
                 <div className="p-3.5 rounded-2xl bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20">
                   <Receipt className="w-5 h-5" />
@@ -539,7 +541,7 @@ export default function IncomeAuditPage() {
 
               <div className="anim-fade-up delay-3 surface p-6 flex items-center justify-between transition-all duration-300 hover:border-amber-500/30 hover:-translate-y-1">
                 <div className="space-y-1.5">
-                  <p className="text-[11px] font-bold text-amber-600 dark:text-amber-400 uppercase tracking-widest">Фарқи</p>
+                  <p className="text-[11px] font-bold text-amber-600 dark:text-amber-400 uppercase tracking-widest">{t("Фарқи")}</p>
                   <h3
                     className={`text-2xl font-black tabular ${
                       Math.abs(totals.difference) <= 0.01
@@ -552,7 +554,7 @@ export default function IncomeAuditPage() {
                     {fmt(totals.difference)} <span className="text-sm text-slate-500 font-bold">UZS</span>
                   </h3>
                   <p className={`text-[11px] font-semibold ${verdict(totals.difference).color}`}>
-                    {verdict(totals.difference).text}
+                    {t(verdict(totals.difference).text)}
                   </p>
                 </div>
                 <div className="p-3.5 rounded-2xl bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
@@ -564,14 +566,14 @@ export default function IncomeAuditPage() {
             {/* Ҳисобга олинмаган фактуралар */}
             {report.meta.skippedInvoices.length > 0 && (
               <div className="anim-fade surface p-4 flex flex-wrap items-center gap-3 text-xs">
-                <span className="font-bold uppercase tracking-wider text-slate-500">Ҳисобга олинмади:</span>
+                <span className="font-bold uppercase tracking-wider text-slate-500">{t("Ҳисобга олинмади:")}</span>
                 {report.meta.skippedInvoices.map((s) => (
                   <span key={s.status} className="px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-100 dark:bg-slate-900/60 font-semibold text-slate-600 dark:text-slate-300">
-                    {s.status}: {s.count} та — <span className="tabular">{fmt(s.amount)}</span>
+                    {t(s.status)}: {s.count} — <span className="tabular">{fmt(s.amount)}</span>
                   </span>
                 ))}
                 <span className="text-slate-400 dark:text-slate-600">
-                  (фақат «Тасдиқланган» фактуралар ҳисобланади)
+                  {t("(фақат «Тасдиқланган» фактуралар ҳисобланади)")}
                 </span>
               </div>
             )}
@@ -604,7 +606,7 @@ export default function IncomeAuditPage() {
                   disabled={displayRows.length === 0}
                   className="ml-auto bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white px-4 py-2 rounded-xl text-xs font-bold shadow-lg shadow-emerald-600/20 transition-all duration-300 flex items-center gap-2 hover:-translate-y-0.5 active:scale-95"
                 >
-                  <Download className="w-3.5 h-3.5" /> Excel юклаш (5 варақ)
+                  <Download className="w-3.5 h-3.5" /> {t("Excel юклаш (5 варақ)")}
                 </button>
               </div>
 
@@ -614,7 +616,7 @@ export default function IncomeAuditPage() {
                   <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500 w-4 h-4" />
                   <input
                     type="text"
-                    placeholder="Контрагент номи ёки СТИР бўйича қидирув..."
+                    placeholder={t("Контрагент номи ёки СТИР бўйича қидирув...")}
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
                     className="pl-10 pr-4 py-2.5 w-full rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950/70 text-sm text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-600 outline-none transition-all duration-300 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20"
@@ -627,22 +629,22 @@ export default function IncomeAuditPage() {
                     onChange={(e) => setFilterKind(e.target.value as FilterKind)}
                     className="pl-10 pr-8 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950/70 font-semibold text-sm text-slate-700 dark:text-slate-200 outline-none cursor-pointer transition-all duration-300 focus:border-emerald-500 appearance-none"
                   >
-                    <option value="ALL" className="bg-slate-100 dark:bg-slate-900">Барчаси ({report.parties.length})</option>
-                    <option value="DIFF" className="bg-slate-100 dark:bg-slate-900">Фарқи борлар</option>
-                    <option value="NO_FACTURA" className="bg-slate-100 dark:bg-slate-900">Пул келган, фактура йўқ</option>
-                    <option value="UNPAID" className="bg-slate-100 dark:bg-slate-900">Фактура бор, пул келмаган</option>
-                    <option value="EQUAL" className="bg-slate-100 dark:bg-slate-900">Тенг бўлганлар</option>
+                    <option value="ALL" className="bg-slate-100 dark:bg-slate-900">{t("Барчаси")} ({report.parties.length})</option>
+                    <option value="DIFF" className="bg-slate-100 dark:bg-slate-900">{t("Фарқи борлар")}</option>
+                    <option value="NO_FACTURA" className="bg-slate-100 dark:bg-slate-900">{t("Пул келган, фактура йўқ")}</option>
+                    <option value="UNPAID" className="bg-slate-100 dark:bg-slate-900">{t("Фактура бор, пул келмаган")}</option>
+                    <option value="EQUAL" className="bg-slate-100 dark:bg-slate-900">{t("Тенг бўлганлар")}</option>
                   </select>
                 </div>
                 <div className="sm:ml-auto flex items-center gap-4 text-xs font-bold">
                   <span className="text-emerald-600 dark:text-emerald-400">
-                    Келган пул: <span className="tabular">{fmt(shown.credit)}</span>
+                    {t("Келган пул")}: <span className="tabular">{fmt(shown.credit)}</span>
                   </span>
                   <span className="text-indigo-600 dark:text-indigo-400">
-                    Счет-ф: <span className="tabular">{fmt(shown.factura)}</span>
+                    {t("Счет-ф")}: <span className="tabular">{fmt(shown.factura)}</span>
                   </span>
                   <span className={verdict(shown.diff).color}>
-                    Фарқ: <span className="tabular">{fmt(shown.diff)}</span>
+                    {t("Фарқ")}: <span className="tabular">{fmt(shown.diff)}</span>
                   </span>
                 </div>
               </div>
@@ -661,13 +663,13 @@ export default function IncomeAuditPage() {
                               onChange={toggleAll}
                             />
                           </th>
-                          <th className="p-3 text-left"><SortHeader label="Фирма номлари" k="name" activeKey={sortKey} dir={sortDir} onToggle={toggleSort} /></th>
-                          <th className="p-3 w-32 text-center"><SortHeader label="СТИР" k="inn" align="center" activeKey={sortKey} dir={sortDir} onToggle={toggleSort} /></th>
-                          <th className="p-3 w-44 text-right"><SortHeader label="Келган пул жами" k="credit" align="right" activeKey={sortKey} dir={sortDir} onToggle={toggleSort} /></th>
-                          <th className="p-3 w-44 text-right"><SortHeader label="Юборилган счет-ф жами" k="factura" align="right" activeKey={sortKey} dir={sortDir} onToggle={toggleSort} /></th>
-                          <th className="p-3 w-40 text-right"><SortHeader label="Фарқи" k="diff" align="right" activeKey={sortKey} dir={sortDir} onToggle={toggleSort} /></th>
-                          <th className="p-3 w-52 text-left uppercase tracking-wider text-[11px] font-bold text-slate-500">Изоҳ</th>
-                          <th className="p-3 w-24 text-center uppercase tracking-wider text-[11px] font-bold text-slate-500">Ойлар</th>
+                          <th className="p-3 text-left"><SortHeader label={t("Фирма номлари")} k="name" activeKey={sortKey} dir={sortDir} onToggle={toggleSort} /></th>
+                          <th className="p-3 w-32 text-center"><SortHeader label={t("СТИР")} k="inn" align="center" activeKey={sortKey} dir={sortDir} onToggle={toggleSort} /></th>
+                          <th className="p-3 w-44 text-right"><SortHeader label={t("Келган пул жами")} k="credit" align="right" activeKey={sortKey} dir={sortDir} onToggle={toggleSort} /></th>
+                          <th className="p-3 w-44 text-right"><SortHeader label={t("Ёзилган фактура")} k="factura" align="right" activeKey={sortKey} dir={sortDir} onToggle={toggleSort} /></th>
+                          <th className="p-3 w-40 text-right"><SortHeader label={t("Фарқи")} k="diff" align="right" activeKey={sortKey} dir={sortDir} onToggle={toggleSort} /></th>
+                          <th className="p-3 w-52 text-left uppercase tracking-wider text-[11px] font-bold text-slate-500">{t("Изоҳ")}</th>
+                          <th className="p-3 w-24 text-center uppercase tracking-wider text-[11px] font-bold text-slate-500">{t("Ойлар")}</th>
                         </tr>
                       </thead>
 
@@ -675,7 +677,7 @@ export default function IncomeAuditPage() {
                         {rows.length === 0 ? (
                           <tr>
                             <td colSpan={8} className="text-center p-12 text-slate-500 font-medium">
-                              Маълумот топилмади... 🕵️‍♂️
+                              {t("Маълумот топилмади... 🕵️‍♂️")}
                             </td>
                           </tr>
                         ) : (
@@ -712,15 +714,15 @@ export default function IncomeAuditPage() {
                                   <td className="p-3 text-right text-emerald-600 dark:text-emerald-400 font-semibold tabular">{fmt(p.bankCredit)}</td>
                                   <td className="p-3 text-right text-indigo-600 dark:text-indigo-400 font-semibold tabular">{fmt(p.facturaSent)}</td>
                                   <td className={`p-3 text-right font-bold tabular ${v.color}`}>{fmt(p.difference)}</td>
-                                  <td className={`p-3 text-left text-xs font-semibold ${v.color}`}>{v.text}</td>
+                                  <td className={`p-3 text-left text-xs font-semibold ${v.color}`}>{t(v.text)}</td>
                                   <td className="p-3 text-center">
                                     <div className="flex items-center justify-center gap-1.5">
                                       <button
                                         onClick={() => openAkt(p)}
-                                        title="Шу фирма учун Акт сверки юклаб олиш"
+                                        title={t("Шу фирма учун Акт сверки юклаб олиш")}
                                         className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-bold border bg-white dark:bg-slate-900/60 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-800 transition-all duration-300 hover:text-indigo-600 dark:hover:text-indigo-400 hover:border-indigo-500/40"
                                       >
-                                        <FileText className="w-3.5 h-3.5" /> Акт
+                                        <FileText className="w-3.5 h-3.5" /> {t("Акт")}
                                       </button>
                                       <button
                                         onClick={() => toggleExpand(p.key)}
@@ -729,7 +731,7 @@ export default function IncomeAuditPage() {
                                           : "bg-white dark:bg-slate-900/60 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-800 hover:text-emerald-600 dark:hover:text-emerald-400 hover:border-emerald-500/40"
                                           }`}
                                       >
-                                        {isOpen ? "Ёпиш" : "Очиш"}
+                                        {isOpen ? t("Ёпиш") : t("Очиш")}
                                         <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-300 ${isOpen ? "rotate-180" : ""}`} />
                                       </button>
                                     </div>
@@ -742,15 +744,15 @@ export default function IncomeAuditPage() {
                                       <div className="anim-fade bg-slate-100/70 dark:bg-slate-900/50 p-5 border-y border-emerald-500/10 space-y-5">
                                         {/* Ойма-ой */}
                                         <div>
-                                          <h4 className="font-bold text-emerald-700 dark:text-emerald-300 mb-3 text-sm">📅 Ойма-ой</h4>
+                                          <h4 className="font-bold text-emerald-700 dark:text-emerald-300 mb-3 text-sm">{t("📅 Ойма-ой")}</h4>
                                           <div className="overflow-hidden rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950/60">
                                             <table className="w-full text-sm">
                                               <thead className="bg-slate-100 dark:bg-slate-900/80 text-slate-500 dark:text-slate-400">
                                                 <tr>
-                                                  <th className="p-2.5 text-left font-bold text-[11px] uppercase tracking-wider">Давр</th>
-                                                  <th className="p-2.5 text-right font-bold text-[11px] uppercase tracking-wider">Келган пул</th>
-                                                  <th className="p-2.5 text-right font-bold text-[11px] uppercase tracking-wider">Фактура</th>
-                                                  <th className="p-2.5 text-right font-bold text-[11px] uppercase tracking-wider">Фарқ</th>
+                                                  <th className="p-2.5 text-left font-bold text-[11px] uppercase tracking-wider">{t("Давр")}</th>
+                                                  <th className="p-2.5 text-right font-bold text-[11px] uppercase tracking-wider">{t("Келган пул")}</th>
+                                                  <th className="p-2.5 text-right font-bold text-[11px] uppercase tracking-wider">{t("Фактура")}</th>
+                                                  <th className="p-2.5 text-right font-bold text-[11px] uppercase tracking-wider">{t("Фарқ")}</th>
                                                 </tr>
                                               </thead>
                                               <tbody className="divide-y divide-slate-200 dark:divide-slate-800/60">
@@ -775,13 +777,13 @@ export default function IncomeAuditPage() {
                                         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                                           <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950/60 overflow-hidden">
                                             <div className="px-3 py-2 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 text-[11px] font-bold uppercase tracking-wider">
-                                              Банк ўтказмалари ({p.payments.length})
+                                              {t("Банк ўтказмалари")} ({p.payments.length})
                                             </div>
                                             <div className="max-h-64 overflow-y-auto custom-scrollbar">
                                               <table className="w-full text-xs">
                                                 <tbody className="divide-y divide-slate-200 dark:divide-slate-800/60">
                                                   {p.payments.length === 0 ? (
-                                                    <tr><td className="p-3 text-slate-500">Тўлов йўқ</td></tr>
+                                                    <tr><td className="p-3 text-slate-500">{t("Тўлов йўқ")}</td></tr>
                                                   ) : (
                                                     p.payments.map((pay, i) => (
                                                       <tr key={i} className="align-top">
@@ -798,13 +800,13 @@ export default function IncomeAuditPage() {
 
                                           <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950/60 overflow-hidden">
                                             <div className="px-3 py-2 bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 text-[11px] font-bold uppercase tracking-wider">
-                                              Юборилган счёт-фактуралар ({p.invoices.length})
+                                              {t("Ёзилган фактуралар")} ({p.invoices.length})
                                             </div>
                                             <div className="max-h-64 overflow-y-auto custom-scrollbar">
                                               <table className="w-full text-xs">
                                                 <tbody className="divide-y divide-slate-200 dark:divide-slate-800/60">
                                                   {p.invoices.length === 0 ? (
-                                                    <tr><td className="p-3 text-slate-500">Фактура йўқ</td></tr>
+                                                    <tr><td className="p-3 text-slate-500">{t("Фактура йўқ")}</td></tr>
                                                   ) : (
                                                     p.invoices.map((inv, i) => (
                                                       <tr key={i} className="align-top">
@@ -834,12 +836,12 @@ export default function IncomeAuditPage() {
                           <tr>
                             <td className="p-3 text-center text-emerald-600 dark:text-emerald-400">✓</td>
                             <td colSpan={2} className="p-3 text-right uppercase tracking-wider text-[11px] text-slate-500">
-                              Жами танланганлар ({displayRows.length} та):
+                              {t("Жами танланганлар:")} ({displayRows.length})
                             </td>
                             <td className="p-3 text-right text-base tabular text-slate-900 dark:text-white">{fmt(shown.credit)}</td>
                             <td className="p-3 text-right text-base tabular text-slate-900 dark:text-white">{fmt(shown.factura)}</td>
                             <td className={`p-3 text-right text-base tabular ${verdict(shown.diff).color}`}>{fmt(shown.diff)}</td>
-                            <td className={`p-3 text-left text-xs ${verdict(shown.diff).color}`}>{verdict(shown.diff).text}</td>
+                            <td className={`p-3 text-left text-xs ${verdict(shown.diff).color}`}>{t(verdict(shown.diff).text)}</td>
                             <td className="p-3" />
                           </tr>
                         </tfoot>
@@ -854,18 +856,18 @@ export default function IncomeAuditPage() {
                     <table className="w-full text-sm border-collapse">
                       <thead className="bg-slate-100 dark:bg-slate-900">
                         <tr className="border-b border-slate-200 dark:border-slate-800 text-[11px] uppercase tracking-wider font-bold text-slate-500">
-                          <th className="p-3 text-left sticky left-0 bg-slate-100 dark:bg-slate-900 min-w-[240px]">Фирма номлари</th>
-                          <th className="p-3 text-center">СТИР</th>
+                          <th className="p-3 text-left sticky left-0 bg-slate-100 dark:bg-slate-900 min-w-[240px]">{t("Фирма номлари")}</th>
+                          <th className="p-3 text-center">{t("СТИР")}</th>
                           {yearKeys.map((y) => (
                             <React.Fragment key={y}>
-                              <th className="p-3 text-right whitespace-nowrap">{y} келган пул</th>
-                              <th className="p-3 text-right whitespace-nowrap">{y} счет-ф</th>
-                              <th className="p-3 text-right whitespace-nowrap border-r border-slate-200 dark:border-slate-800">{y} фарқи</th>
+                              <th className="p-3 text-right whitespace-nowrap">{y} {t("келган пул")}</th>
+                              <th className="p-3 text-right whitespace-nowrap">{y} {t("фактура")}</th>
+                              <th className="p-3 text-right whitespace-nowrap border-r border-slate-200 dark:border-slate-800">{y} {t("фарқи")}</th>
                             </React.Fragment>
                           ))}
-                          <th className="p-3 text-right whitespace-nowrap">ЖАМИ пул</th>
-                          <th className="p-3 text-right whitespace-nowrap">ЖАМИ счет-ф</th>
-                          <th className="p-3 text-right whitespace-nowrap">ЖАМИ фарқи</th>
+                          <th className="p-3 text-right whitespace-nowrap">{t("ЖАМИ пул")}</th>
+                          <th className="p-3 text-right whitespace-nowrap">{t("ЖАМИ фактура")}</th>
+                          <th className="p-3 text-right whitespace-nowrap">{t("ЖАМИ фарқи")}</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-200 dark:divide-slate-800/70">
@@ -891,7 +893,7 @@ export default function IncomeAuditPage() {
                       </tbody>
                       <tfoot className="bg-slate-100 dark:bg-slate-900 font-bold border-t-2 border-slate-300 dark:border-slate-700">
                         <tr>
-                          <td className="p-3 uppercase tracking-wider text-[11px] text-slate-500 sticky left-0 bg-slate-100 dark:bg-slate-900">ЖАМИ</td>
+                          <td className="p-3 uppercase tracking-wider text-[11px] text-slate-500 sticky left-0 bg-slate-100 dark:bg-slate-900">{t("ЖАМИ")}</td>
                           <td />
                           {yearKeys.map((y) => {
                             const c = displayRows.reduce((a, p) => a + yearOf(p, y).credit, 0);
@@ -919,13 +921,13 @@ export default function IncomeAuditPage() {
                     <table className="w-full text-sm border-collapse">
                       <thead className="sticky top-0 z-10 bg-slate-100 dark:bg-slate-900">
                         <tr className="border-b border-slate-200 dark:border-slate-800 text-[11px] uppercase tracking-wider font-bold text-slate-500">
-                          <th className="p-3 text-left">Фирма номлари</th>
-                          <th className="p-3 text-center w-32">СТИР</th>
-                          <th className="p-3 text-center w-20">Йил</th>
-                          <th className="p-3 text-center w-28">Ой</th>
-                          <th className="p-3 text-right w-40">Келган пул</th>
-                          <th className="p-3 text-right w-40">Юборилган счет-ф</th>
-                          <th className="p-3 text-right w-40">Фарқи</th>
+                          <th className="p-3 text-left">{t("Фирма номлари")}</th>
+                          <th className="p-3 text-center w-32">{t("СТИР")}</th>
+                          <th className="p-3 text-center w-20">{t("Йил")}</th>
+                          <th className="p-3 text-center w-28">{t("Ой")}</th>
+                          <th className="p-3 text-right w-40">{t("Келган пул")}</th>
+                          <th className="p-3 text-right w-40">{t("Ёзилган фактура")}</th>
+                          <th className="p-3 text-right w-40">{t("Фарқи")}</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-200 dark:divide-slate-800/70">
@@ -943,7 +945,7 @@ export default function IncomeAuditPage() {
                       </tbody>
                       <tfoot className="sticky bottom-0 bg-slate-100 dark:bg-slate-900 font-bold border-t-2 border-slate-300 dark:border-slate-700">
                         <tr>
-                          <td colSpan={4} className="p-3 text-right uppercase tracking-wider text-[11px] text-slate-500">ЖАМИ ({monthlyRows.length} қатор):</td>
+                          <td colSpan={4} className="p-3 text-right uppercase tracking-wider text-[11px] text-slate-500">{t("ЖАМИ")} ({monthlyRows.length}):</td>
                           <td className="p-3 text-right tabular">{fmt(shown.credit)}</td>
                           <td className="p-3 text-right tabular">{fmt(shown.factura)}</td>
                           <td className={`p-3 text-right tabular ${verdict(shown.diff).color}`}>{fmt(shown.diff)}</td>
@@ -959,14 +961,14 @@ export default function IncomeAuditPage() {
                     <table className="w-full text-sm border-collapse">
                       <thead className="sticky top-0 z-10 bg-slate-100 dark:bg-slate-900">
                         <tr className="border-b border-slate-200 dark:border-slate-800 text-[11px] uppercase tracking-wider font-bold text-slate-500">
-                          <th className="p-3 text-center w-28">Сана</th>
-                          <th className="p-3 text-center w-20">Йил</th>
-                          <th className="p-3 text-center w-28">Ой</th>
-                          <th className="p-3 text-left">Фирма номлари</th>
-                          <th className="p-3 text-center w-32">СТИР</th>
-                          <th className="p-3 text-right w-40">Келган пул</th>
-                          <th className="p-3 text-center w-28">Ҳужжат №</th>
-                          <th className="p-3 text-left min-w-[320px]">Тўлов мақсади</th>
+                          <th className="p-3 text-center w-28">{t("Сана")}</th>
+                          <th className="p-3 text-center w-20">{t("Йил")}</th>
+                          <th className="p-3 text-center w-28">{t("Ой")}</th>
+                          <th className="p-3 text-left">{t("Фирма номлари")}</th>
+                          <th className="p-3 text-center w-32">{t("СТИР")}</th>
+                          <th className="p-3 text-right w-40">{t("Келган пул")}</th>
+                          <th className="p-3 text-center w-28">{t("Ҳужжат №")}</th>
+                          <th className="p-3 text-left min-w-[320px]">{t("Тўлов мақсади")}</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-200 dark:divide-slate-800/70">
@@ -985,7 +987,7 @@ export default function IncomeAuditPage() {
                       </tbody>
                       <tfoot className="sticky bottom-0 bg-slate-100 dark:bg-slate-900 font-bold border-t-2 border-slate-300 dark:border-slate-700">
                         <tr>
-                          <td colSpan={5} className="p-3 text-right uppercase tracking-wider text-[11px] text-slate-500">ЖАМИ ({paymentRows.length} та ўтказма):</td>
+                          <td colSpan={5} className="p-3 text-right uppercase tracking-wider text-[11px] text-slate-500">{t("ЖАМИ")} ({paymentRows.length}):</td>
                           <td className="p-3 text-right tabular">{fmt(shown.credit)}</td>
                           <td colSpan={2} />
                         </tr>
@@ -1000,13 +1002,13 @@ export default function IncomeAuditPage() {
                     <table className="w-full text-sm border-collapse">
                       <thead className="sticky top-0 z-10 bg-slate-100 dark:bg-slate-900">
                         <tr className="border-b border-slate-200 dark:border-slate-800 text-[11px] uppercase tracking-wider font-bold text-slate-500">
-                          <th className="p-3 text-center w-28">Сана</th>
-                          <th className="p-3 text-center w-20">Йил</th>
-                          <th className="p-3 text-center w-28">Ой</th>
-                          <th className="p-3 text-left">Фирма номлари</th>
-                          <th className="p-3 text-center w-32">СТИР</th>
-                          <th className="p-3 text-right w-40">Сумма</th>
-                          <th className="p-3 text-left min-w-[240px]">Счёт-фактура</th>
+                          <th className="p-3 text-center w-28">{t("Сана")}</th>
+                          <th className="p-3 text-center w-20">{t("Йил")}</th>
+                          <th className="p-3 text-center w-28">{t("Ой")}</th>
+                          <th className="p-3 text-left">{t("Фирма номлари")}</th>
+                          <th className="p-3 text-center w-32">{t("СТИР")}</th>
+                          <th className="p-3 text-right w-40">{t("Сумма")}</th>
+                          <th className="p-3 text-left min-w-[240px]">{t("Счёт-фактура")}</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-200 dark:divide-slate-800/70">
@@ -1024,7 +1026,7 @@ export default function IncomeAuditPage() {
                       </tbody>
                       <tfoot className="sticky bottom-0 bg-slate-100 dark:bg-slate-900 font-bold border-t-2 border-slate-300 dark:border-slate-700">
                         <tr>
-                          <td colSpan={5} className="p-3 text-right uppercase tracking-wider text-[11px] text-slate-500">ЖАМИ ({invoiceRows.length} та фактура):</td>
+                          <td colSpan={5} className="p-3 text-right uppercase tracking-wider text-[11px] text-slate-500">{t("ЖАМИ")} ({invoiceRows.length}):</td>
                           <td className="p-3 text-right tabular">{fmt(shown.factura)}</td>
                           <td />
                         </tr>
@@ -1047,7 +1049,7 @@ export default function IncomeAuditPage() {
                     </div>
 
                     <p className="text-xs text-slate-500 dark:text-slate-400">
-                      Ҳисоб санаси: <span className="font-semibold">{fmtDate(aging.asOf)}</span> · Жами қарз:{" "}
+                      {t("Ҳисоб санаси:")} <span className="font-semibold">{fmtDate(aging.asOf)}</span> · Жами қарз:{" "}
                       <span className="font-semibold text-rose-600 dark:text-rose-400">{fmt(aging.totals.receivable)}</span> · Аванс:{" "}
                       <span className="font-semibold text-sky-600 dark:text-sky-400">{fmt(aging.totals.advance)}</span>
                     </p>
@@ -1056,14 +1058,14 @@ export default function IncomeAuditPage() {
                       <table className="w-full text-sm border-collapse">
                         <thead className="sticky top-0 z-10 bg-slate-100 dark:bg-slate-900">
                           <tr className="border-b border-slate-200 dark:border-slate-800 text-[11px] uppercase tracking-wider font-bold text-slate-500">
-                            <th className="p-3 text-left min-w-[240px]">Фирма номлари</th>
-                            <th className="p-3 text-center w-32">СТИР</th>
-                            <th className="p-3 text-right w-36">Қарз қолдиғи</th>
+                            <th className="p-3 text-left min-w-[240px]">{t("Фирма номлари")}</th>
+                            <th className="p-3 text-center w-32">{t("СТИР")}</th>
+                            <th className="p-3 text-right w-36">{t("Қарз қолдиғи")}</th>
                             {BUCKET_KEYS.map((k) => (
                               <th key={k} className="p-3 text-right w-32">{BUCKET_LABELS[k]}</th>
                             ))}
-                            <th className="p-3 text-right w-32">Аванс</th>
-                            <th className="p-3 text-center w-28">Энг эски</th>
+                            <th className="p-3 text-right w-32">{t("Ортиқча тушган")}</th>
+                            <th className="p-3 text-center w-28">{t("Энг эски")}</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-200 dark:divide-slate-800/70">
@@ -1087,7 +1089,7 @@ export default function IncomeAuditPage() {
                                   <span className="text-slate-400">—</span>
                                 ) : (
                                   <span className={p.oldestDays > 90 ? "font-bold text-rose-600 dark:text-rose-400" : "text-slate-600 dark:text-slate-300"}>
-                                    {p.oldestDays} кун
+                                    {p.oldestDays} {t("кун")}
                                   </span>
                                 )}
                               </td>
@@ -1096,7 +1098,7 @@ export default function IncomeAuditPage() {
                         </tbody>
                         <tfoot className="sticky bottom-0 bg-slate-100 dark:bg-slate-900 font-bold border-t-2 border-slate-300 dark:border-slate-700">
                           <tr>
-                            <td colSpan={2} className="p-3 text-right uppercase tracking-wider text-[11px] text-slate-500">ЖАМИ:</td>
+                            <td colSpan={2} className="p-3 text-right uppercase tracking-wider text-[11px] text-slate-500">{t("ЖАМИ:")}</td>
                             <td className="p-3 text-right tabular">{fmt(aging.totals.receivable)}</td>
                             {BUCKET_KEYS.map((k) => (
                               <td key={k} className={`p-3 text-right tabular ${BUCKET_COLORS[k]}`}>{fmt(aging.totals.buckets[k])}</td>
@@ -1109,8 +1111,7 @@ export default function IncomeAuditPage() {
                     </div>
 
                     <p className="text-[11px] text-slate-400 dark:text-slate-600">
-                      Ҳисоблаш усули: келган пул энг эски фактурадан бошлаб ёпилади (FIFO). Ёпилмай қолган қолдиқ
-                      фактура санасидан ҳисоб санасигача ўтган кунга қараб гуруҳланади. Фактурадан ортиқча келган пул — аванс.
+                      {t("Ҳисоблаш усули: келган пул энг эски фактурадан бошлаб ёпилади (FIFO). Ёпилмай қолган қолдиқ фактура санасидан ҳисоб санасигача ўтган кунга қараб гуруҳланади. Фактурадан ортиқча келган пул — аванс.")}
                     </p>
                   </div>
                 )}
@@ -1127,7 +1128,7 @@ export default function IncomeAuditPage() {
             <div className="flex justify-between items-start gap-3">
               <div>
                 <h3 className="text-lg font-black tracking-tight flex items-center gap-2">
-                  <FileText className="w-5 h-5 text-indigo-600 dark:text-indigo-400" /> Акт сверки
+                  <FileText className="w-5 h-5 text-indigo-600 dark:text-indigo-400" /> {t("Акт сверки")}
                 </h3>
                 <p className="text-xs text-slate-500 mt-1">{aktParty.name} · СТИР {aktParty.inn}</p>
               </div>
@@ -1139,15 +1140,15 @@ export default function IncomeAuditPage() {
             {/* Ҳисоб-китоб хулосаси */}
             <div className="grid grid-cols-3 gap-2 text-center">
               <div className="p-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-100/60 dark:bg-slate-900/40">
-                <p className="text-[10px] uppercase tracking-wider font-bold text-indigo-600 dark:text-indigo-400">Дебет (фактура)</p>
+                <p className="text-[10px] uppercase tracking-wider font-bold text-indigo-600 dark:text-indigo-400">{t("Дебет (фактура)")}</p>
                 <p className="text-sm font-black tabular mt-1">{fmt(aktParty.facturaSent)}</p>
               </div>
               <div className="p-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-100/60 dark:bg-slate-900/40">
-                <p className="text-[10px] uppercase tracking-wider font-bold text-emerald-600 dark:text-emerald-400">Кредит (тўлов)</p>
+                <p className="text-[10px] uppercase tracking-wider font-bold text-emerald-600 dark:text-emerald-400">{t("Кредит (тўлов)")}</p>
                 <p className="text-sm font-black tabular mt-1">{fmt(aktParty.bankCredit)}</p>
               </div>
               <div className="p-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-100/60 dark:bg-slate-900/40">
-                <p className="text-[10px] uppercase tracking-wider font-bold text-slate-500">Сальдо</p>
+                <p className="text-[10px] uppercase tracking-wider font-bold text-slate-500">{t("Сальдо")}</p>
                 <p className={`text-sm font-black tabular mt-1 ${verdict(-(aktParty.facturaSent - aktParty.bankCredit)).color}`}>
                   {fmt(Math.abs(aktParty.facturaSent - aktParty.bankCredit))}
                 </p>
@@ -1155,15 +1156,14 @@ export default function IncomeAuditPage() {
             </div>
             <p className="text-[11px] text-slate-500">
               {Math.abs(aktParty.difference) < 0.01
-                ? "Қарздорлик йўқ."
+                ? t("Қарздорлик йўқ.")
                 : aktParty.difference < 0
-                  ? `Қарз БИЗНИНГ фойдамизга — мижоз ${fmt(-aktParty.difference)} сўм тўламаган.`
-                  : `Қарз МИЖОЗ фойдасига — ${fmt(aktParty.difference)} сўм ортиқча тушган (аванс).`}
+                  ? `${t("Улар қарздор — мижоз")} ${fmt(-aktParty.difference)} ${t("сўм тўламаган.")}`
+                  : `${t("Биз қарздормиз —")} ${fmt(aktParty.difference)} ${t("сўм ортиқча тушган.")}`}
             </p>
 
             <p className="text-[11px] text-slate-400 dark:text-slate-600">
-              Файлда фақат жадвалнинг ўзи бўлади: Дата · Документ · Дебет · Кредит — икки томонлама,
-              Сальдо ва Обороты қаторлари билан.
+              {t("Файлда фақат жадвалнинг ўзи бўлади: Дата · Документ · Дебет · Кредит — икки томонлама, Сальдо ва Обороты қаторлари билан.")}
             </p>
 
             <div className="flex justify-end gap-2 pt-1">
@@ -1171,13 +1171,13 @@ export default function IncomeAuditPage() {
                 onClick={() => setAktParty(null)}
                 className="px-4 py-2.5 rounded-xl text-xs font-bold border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-800 transition-all duration-300"
               >
-                Бекор қилиш
+                {t("Бекор қилиш")}
               </button>
               <button
                 onClick={handleAktDownload}
                 className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold shadow-lg shadow-indigo-600/25 transition-all duration-300 flex items-center gap-2 active:scale-95"
               >
-                <Download className="w-3.5 h-3.5" /> Excel юклаб олиш
+                <Download className="w-3.5 h-3.5" /> {t("Excel юклаб олиш")}
               </button>
             </div>
           </div>

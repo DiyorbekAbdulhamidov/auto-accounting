@@ -31,7 +31,11 @@ export async function POST(req: Request) {
       inputs.push({ name: file.name, buffer: Buffer.from(bytes) });
     }
 
-    const report = analyzeIncome(inputs);
+    // «Ожидает подписи партнёра» фактураларни ҳам ҳисоблашми.
+    // Стандарт — ЙЎҚ (чиқим сверкаси билан бир хил хулқ).
+    const includePending = String(formData.get('includePending') || '') === 'true';
+
+    const report = analyzeIncome(inputs, { includePending });
 
     if (report.parties.length === 0) {
       return NextResponse.json(

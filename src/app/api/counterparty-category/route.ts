@@ -11,7 +11,7 @@
 // tizimning boshlang'ich ro'yxatidagi (SEED_CATEGORIES) yozuv bekor
 // qilinadi va kontragent asosiy sverkaga qaytariladi.
 import { NextResponse } from 'next/server';
-import { requireUser } from '@/lib/apiAuth';
+import { assertCompanyAccess, requireUser } from '@/lib/apiAuth';
 import { categoryDocId, CATEGORY_LABELS, type Category } from '@/lib/counterpartyCategory';
 
 export const runtime = 'nodejs';
@@ -49,6 +49,12 @@ export async function POST(req: Request) {
     if (!isCategory(category)) {
       return NextResponse.json({ error: 'Тоифа нотўғри.' }, { status: 400 });
     }
+
+    // `companyId` klientdan keladi. Admin SDK Firestore qoidalarini
+    // chetlab o'tadi, ya'ni bu tekshiruvsiz istalgan foydalanuvchi
+    // begona korxonaning toifalarini o'zgartira olardi.
+    const denied = await assertCompanyAccess(auth.admin, companyId, auth.user.workspaceId);
+    if (denied) return denied;
 
     await auth.admin.db
       .collection('companies').doc(companyId)

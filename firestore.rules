@@ -30,6 +30,32 @@ service cloud.firestore {
       return isAllowed() && userDoc().get('role', 'user') == 'admin';
     }
 
+    // ---- ISH MAYDONI (egalik) ----
+    // 2026-08-13 gacha bu yerda egalik tekshiruvi UMUMAN yo'q edi: ro'yxatdagi
+    // har bir foydalanuvchi BARCHA korxona va hisobotlarni o'qiy olardi.
+    // Endi hujjat o'z ish maydonidan tashqariga ko'rinmaydi.
+    function myWorkspace() {
+      return userDoc().get('workspaceId', '');
+    }
+
+    function isMember(workspaceId) {
+      return isAllowed()
+        && workspaceId != null
+        && workspaceId != ''
+        && exists(/databases/$(database)/documents/workspaces/$(workspaceId)/members/$(request.auth.token.email));
+    }
+
+    // Ish maydoni hujjatini a'zolar o'qiydi; yozish faqat Admin SDK orqali.
+    match /workspaces/{workspaceId} {
+      allow read: if isMember(workspaceId);
+      allow write: if false;
+
+      match /members/{email} {
+        allow read: if isMember(workspaceId);
+        allow write: if false;
+      }
+    }
+
     // Ruxsat ro'yxati: har kim faqat O'Z hujjatini o'qiy oladi (AuthContext shuni qiladi).
     // Yozish faqat Admin SDK orqali — u qoidalarni chetlab o'tadi, shuning uchun bu yerda yopiq.
     match /allowed_users/{email} {
@@ -37,13 +63,24 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // MUHIM: `read` bu yerda ro'yxat so'rovlariga ham tegishli. Firestore
+    // so'rovni hujjatlarni o'qimasdan tekshiradi, shuning uchun klient
+    // HAR DOIM `where('workspaceId','==',...)` bilan so'rashi shart —
+    // aks holda so'rov butunlay rad etiladi (jimgina bo'sh ro'yxat emas).
+    // `create` ATAYLAB yopiq: reja cheklovi («3 tagacha korxona») hujjat
+    // SANOG'iga bog'liq, qoidalar esa hujjatlarni sanay olmaydi. Shuning
+    // uchun korxona faqat /api/companies orqali yaratiladi — u yerda
+    // sanaladi va tekshiriladi. Klientdan yozish cheklovni chetlab
+    // o'tish yo'li bo'lardi.
     match /companies/{companyId} {
-      allow read, create, update: if isAllowed();
-      allow delete: if isAdmin();
+      allow read, update: if isMember(resource.data.get('workspaceId', ''));
+      allow create: if false;
+      allow delete: if isMember(resource.data.get('workspaceId', ''));
     }
 
     match /sverka_reports/{reportId} {
-      allow read, create: if isAllowed();
+      allow read: if isMember(resource.data.get('workspaceId', ''));
+      allow create: if isMember(request.resource.data.get('workspaceId', ''));
       allow update, delete: if isAdmin();
     }
 

@@ -30,12 +30,18 @@ import {
   type GlobalHint,
 } from './counterpartyCategory';
 import {
+  absorbBalances,
+  checkBalanceEquation,
+  findAccountBalances,
+  newBalanceTally,
   parseTwoSidedTurnover,
   parseThreeRowAccountReport,
   parseColumnarStatement,
   parseAmount,
   parseDate,
   sameEntity,
+  type BalanceCheck,
+  type BalanceTally,
   type BankStatement,
   type Cell,
 } from './bankStatements';
@@ -97,11 +103,21 @@ export interface SheetReport {
   note?: string;
 }
 
+/** QOLDIQ TENGLAMASI natijasi. Mantiqning o'zi `bankStatements.ts` da —
+ *  u invariant ikkala sverkaga ham (chiqim va kirim) tegishli. */
+export type { BalanceCheck };
+
 export interface AuditResult {
   data: AggEntry[];
   detectedFormats: string[];
   warnings: string[];
   sheets: SheetReport[];
+  /** Har fayl uchun qoldiq tenglamasi natijasi */
+  balanceChecks: BalanceCheck[];
+  /** Raqamini TASDIQLAB bo'lmaydigan fayllar: na «Итого» qatori, na
+   *  qoldiq tenglamasi. Ya'ni fayl to'liq o'qilganini isbotlaydigan
+   *  hech narsa yo'q — foydalanuvchi qo'lda solishtirishi kerak. */
+  unverifiedFiles: string[];
   /** Shu yuklashda YANGI o'rganilgan yoki qayta ishlatilgan shakllar.
    *  Chaqiruvchi (route) ularni Firestore'ga yozib qo'yadi - keyingi
    *  safar shu shapka kelsa, ustunlar taxmin qilinmaydi. */
@@ -475,6 +491,8 @@ export function auditFiles(files: InputFile[], options: AuditOptions = {}): Audi
   const detectedFormats: string[] = [];
   const warnings: string[] = [];
   const sheets: SheetReport[] = [];
+  const balanceChecks: BalanceCheck[] = [];
+  const unverifiedFiles: string[] = [];
   const seenInvoiceKeys = new Set<string>();
   const skippedInvoices = new Map<string, { count: number; amount: number }>();
   const seenFiles = new Map<string, string>(); // hash -> fayl nomi
@@ -634,6 +652,9 @@ export function auditFiles(files: InputFile[], options: AuditOptions = {}): Audi
     // bo'lgani uchun uni faqat shu varaqdan aniqlab bo'lmaydi.
     const fileOwn = { inn: '', name: '', account: '' };
 
+    // Qoldiq tenglamasi butun fayl bo'yicha yig'iladi
+    const tally: BalanceTally = newBalanceTally();
+
     for (const sd of sheetList) {
       const label = `${file.name} / ${sd.sheet}`;
       const rowsWithTitle = carriedTitle.length ? [...carriedTitle, ...sd.rows] : sd.rows;
@@ -737,6 +758,14 @@ export function auditFiles(files: InputFile[], options: AuditOptions = {}): Audi
         if (!fileOwn.name && st.ownName) fileOwn.name = st.ownName;
         if (!fileOwn.account && st.ownAccount) fileOwn.account = st.ownAccount;
 
+        // Qoldiq tenglamasi uchun: sverkaga kirgan qatorlar emas, varaqdagi
+        // BARCHA o'tkazmalar. O'z hisobvaraqlari orasidagi harakat ham
+        // qoldiqni o'zgartiradi.
+        tally.sheets++;
+        tally.debit += st.totalDebit;
+        tally.credit += st.totalCredit;
+        absorbBalances(tally, st.balances);
+
         const r = addStatement(st, label, fileOwn);
         const rep: SheetReport = {
           file: file.name, sheet: sd.sheet, format: fmt,
@@ -774,6 +803,13 @@ export function auditFiles(files: InputFile[], options: AuditOptions = {}): Audi
           debit += tx.debit;
           credit += tx.credit;
         }
+        // Universal o'quvchi ham qoldiq tenglamasiga kiradi — aynan shu
+        // yerda u eng kerak: shakl tanilmagan bo'lsa, tenglama o'qish
+        // to'g'ri bo'lganini mustaqil tasdiqlaydi.
+        tally.sheets++;
+        tally.debit += debit;
+        tally.credit += credit;
+        absorbBalances(tally, findAccountBalances(rowsWithTitle));
         // NOTANISH FORMATNI O'RGANIB QO'YISH: shapka topilgan bo'lsa,
         // ustun xaritasi saqlanadi va keyingi safar shu shapka kelganda
         // qaytadan taxmin qilinmaydi.
@@ -811,6 +847,34 @@ export function auditFiles(files: InputFile[], options: AuditOptions = {}): Audi
       carriedTitle = [];
       sheets.push({ file: file.name, sheet: sd.sheet, format: 'TANILMADI', rows: 0, debit: 0, credit: 0, note: 'Ўқилмади' });
       warnings.push(`«${label}» — варақ танилмади ва ҲИСОБГА ОЛИНМАДИ (${sd.rows.length} қатор).`);
+    }
+
+    // Fayldagi barcha varaqlar o'qib bo'lindi — endi qoldiq tenglamasi.
+    if (tally.sheets > 0) {
+      const { check, warning } = checkBalanceEquation(file.name, tally);
+      balanceChecks.push(check);
+      if (warning) warnings.push(warning);
+
+      // QAT'IY REJIM. Faylning to'liq o'qilganini isbotlaydigan IKKI
+      // mustaqil yo'l bor: «Итого» qatori va qoldiq tenglamasi. Ikkalasi
+      // ham bo'lmasa, raqam — sof taxmin. Uni jim ko'rsatish eng xavfli
+      // xato: buxgalter tekshirilgan deb o'ylaydi. Shuning uchun raqam
+      // YO'QOTILMAYDI (yo'qotish ham jimgina xato bo'lardi), lekin fayl
+      // «tasdiqlanmagan» deb belgilanadi.
+      const own = sheets.filter((s) => s.file === file.name);
+      const hasFooter = own.some((s) => s.fileDebit !== undefined || s.fileCredit !== undefined);
+      if (!hasFooter && check.status !== 'MOS') {
+        unverifiedFiles.push(file.name);
+        const guessed = own.some((s) => s.format.startsWith('UNIVERSAL'));
+        warnings.push(
+          `«${file.name}» — бу файлни ТЕКШИРИБ БЎЛМАДИ: унда на «Итого» якуний қатори, ` +
+          `на қолдиқ кўрсатилган. Ўқилган ${MONEY_FMT(tally.debit)} дебет / ` +
+          `${MONEY_FMT(tally.credit)} кредит тўғрилигини тизим ИСБОТЛАЙ ОЛМАЙДИ` +
+          (guessed ? ', устига формат ҳам танилмади' : '') +
+          `. Рақамларни файлнинг ўзи билан солиштиринг ёки банкдан якуний қатори бор ` +
+          `кўчирма сўранг.`
+        );
+      }
     }
   }
 
@@ -939,6 +1003,8 @@ export function auditFiles(files: InputFile[], options: AuditOptions = {}): Audi
     detectedFormats,
     warnings,
     sheets,
+    balanceChecks,
+    unverifiedFiles,
     learnedFormats: [...learned.values()],
     skippedInvoices: [...skippedInvoices].map(([status, v]) => ({ status, ...v })),
     totals,

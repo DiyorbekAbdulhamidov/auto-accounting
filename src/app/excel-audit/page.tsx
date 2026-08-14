@@ -2,7 +2,9 @@
 
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { db } from "@/lib/firebase";
-import { collection, getDocs, query, orderBy, addDoc, serverTimestamp, doc, where, writeBatch } from "firebase/firestore";
+import { authFetch } from "@/lib/authFetch";
+import { useAuth } from "@/context/AuthContext";
+import { collection, getDocs, query, doc, where, writeBatch } from "firebase/firestore";
 import NextLink from "next/link";
 import {
   Building2,
@@ -21,12 +23,14 @@ import {
 } from "lucide-react";
 import SortHeader from "@/components/SortHeader";
 import ThemeToggle from "@/components/ThemeToggle";
+import LanguageToggle from "@/components/LanguageToggle";
+import { useT } from "@/context/LanguageContext";
 
 interface Company {
   id: string;
   name: string;
   inn: string;
-  createdAt: unknown;
+  createdAt?: { toMillis?: () => number };
 }
 
 interface SverkaReport {
@@ -46,6 +50,12 @@ type SortKey = "name" | "inn" | "rev" | "exp" | "profit";
 type SortDir = "asc" | "desc";
 
 export default function ExcelAuditPage() {
+  const t = useT();
+  // Ish maydoni `allowed_users/{email}` hujjatidan keladi (AuthContext uni
+  // foydalanuvchi obyektiga qo'shib beradi). Barcha o'qish/yozish shunga
+  // bog'lanadi — ma'lumot egasiz qolmasligi kerak.
+  const { user } = useAuth();
+  const workspaceId: string | undefined = user?.workspaceId;
   const [companies, setCompanies] = useState<Company[]>([]);
   const [reports, setReports] = useState<SverkaReport[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
@@ -97,13 +107,31 @@ export default function ExcelAuditPage() {
   // MUHIM: setLoading(true) bu yerda chaqirilmaydi (effect ichida sinxron
   // setState taqiqlangan) - spinner kerak joyda event handler yoqadi.
   const loadDashboardData = useCallback(async () => {
+    // ISH MAYDONI SHART. Firestore qoidasi so'rovni hujjatlarni o'qimasdan
+    // tekshiradi: `where('workspaceId','==',...)` bo'lmasa so'rov butunlay
+    // RAD ETILADI (bo'sh ro'yxat emas, xato). Shuning uchun bu filtr
+    // ixtiyoriy emas — u himoyaning klient tomondagi juftligi.
+    if (!workspaceId) {
+      setLoading(false);
+      return;
+    }
     try {
-      const companiesQuery = query(collection(db, "companies"), orderBy("createdAt", "desc"));
+      // `orderBy` ATAYLAB yo'q: `where` bilan birga u Firestore'da QO'SHMA
+      // INDEKS talab qiladi va indeks yaratilmaguncha so'rov xato beradi.
+      // Korxonalar soni bitta ish maydonida oz — tartiblash shu yerda.
+      const companiesQuery = query(
+        collection(db, "companies"),
+        where("workspaceId", "==", workspaceId)
+      );
       const companiesSnapshot = await getDocs(companiesQuery);
-      const companiesList = companiesSnapshot.docs.map((d) => ({ id: d.id, ...d.data() } as Company));
+      const companiesList = companiesSnapshot.docs
+        .map((d) => ({ id: d.id, ...d.data() } as Company))
+        .sort((a, b) => (b.createdAt?.toMillis?.() ?? 0) - (a.createdAt?.toMillis?.() ?? 0));
       setCompanies(companiesList);
 
-      const reportsSnapshot = await getDocs(collection(db, "sverka_reports"));
+      const reportsSnapshot = await getDocs(
+        query(collection(db, "sverka_reports"), where("workspaceId", "==", workspaceId))
+      );
       const reportsList = reportsSnapshot.docs.map((d) => ({ id: d.id, ...d.data() } as SverkaReport));
       setReports(reportsList);
 
@@ -113,7 +141,7 @@ export default function ExcelAuditPage() {
     } finally {
       setLoading(false);
     }
-  }, [selectedYear, calculateFinancials]);
+  }, [selectedYear, calculateFinancials, workspaceId]);
 
   useEffect(() => {
     async function load() {
@@ -145,11 +173,19 @@ export default function ExcelAuditPage() {
 
     try {
       setSubmitting(true);
-      await addDoc(collection(db, "companies"), {
-        name: newCompanyName.trim(),
-        inn: newCompanyInn.trim(),
-        createdAt: serverTimestamp(),
+      // Korxona SERVER orqali qo'shiladi: reja cheklovi hujjat sanog'iga
+      // bog'liq va uni Firestore qoidalarida yozib bo'lmaydi.
+      const res = await authFetch("/api/companies", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: newCompanyName.trim(), inn: newCompanyInn.trim() }),
       });
+      const data = await res.json();
+
+      if (!res.ok) {
+        alert(data.error || t("Хатолик юз берди. Қайта уриниб кўринг."));
+        return;
+      }
 
       setNewCompanyName("");
       setNewCompanyInn("");
@@ -158,7 +194,7 @@ export default function ExcelAuditPage() {
       await loadDashboardData();
     } catch (error) {
       console.error("Firmani saqlashda xatolik:", error);
-      alert("Xatolik yuz berdi. Qayta urinib ko'ring.");
+      alert(t("Хатолик юз берди. Қайта уриниб кўринг."));
     } finally {
       setSubmitting(false);
     }
@@ -170,7 +206,7 @@ export default function ExcelAuditPage() {
   // `sverka_reports` yozuvlarini o'chirmaydi. Ular qolib ketsa, firma
   // ro'yxatdan yo'qolgani bilan summalari tizimda osilib qoladi.
   const handleDeleteCompany = async (companyId: string, companyName: string) => {
-    if (!confirm(`Ҳақиқатан ҳам "${companyName}" корхонасини ва унинг барча сверка ҳисоботларини бутунлай ўчириб ташламоқчимисиз?`)) {
+    if (!confirm(`"${companyName}" — ${t("корхонасини ва унинг барча сверка ҳисоботларини бутунлай ўчириб ташламоқчимисиз?")}`)) {
       return;
     }
 
@@ -178,7 +214,11 @@ export default function ExcelAuditPage() {
       setLoading(true);
 
       const reportsSnap = await getDocs(
-        query(collection(db, "sverka_reports"), where("companyId", "==", companyId))
+        query(
+          collection(db, "sverka_reports"),
+          where("workspaceId", "==", workspaceId),
+          where("companyId", "==", companyId)
+        )
       );
 
       // Bitta batch'da 500 tagacha amal bo'ladi — bo'laklarga bo'lamiz
@@ -245,7 +285,7 @@ export default function ExcelAuditPage() {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-white">
         <Loader2 className="h-12 w-12 text-indigo-500 animate-spin" />
-        <p className="mt-4 font-semibold text-sm animate-pulse text-slate-500 dark:text-slate-400">Аудит маълумотлари юкланмоқда...</p>
+        <p className="mt-4 font-semibold text-sm animate-pulse text-slate-500 dark:text-slate-400">{t("Аудит маълумотлари юкланмоқда...")}</p>
       </div>
     );
   }
@@ -266,9 +306,9 @@ export default function ExcelAuditPage() {
             </NextLink>
             <div>
               <h1 className="text-2xl font-black tracking-tight text-slate-900 dark:text-white flex items-center gap-2">
-                📊 Excel Smart-Audit Муҳити
+                📊 Excel Smart-Audit {t("Муҳити")}
               </h1>
-              <p className="text-xs text-slate-500 mt-0.5">Пул маблағлари ва счёт-фактуралар фарқи таҳлили</p>
+              <p className="text-xs text-slate-500 mt-0.5">{t("Тўланган пул ↔ келган фактура: фарқни топади")}</p>
             </div>
           </div>
 
@@ -283,11 +323,12 @@ export default function ExcelAuditPage() {
                 }}
                 className="focus:outline-none bg-transparent font-bold cursor-pointer text-slate-700 dark:text-slate-200"
               >
-                <option value={2026} className="bg-slate-100 dark:bg-slate-900">2026 йил</option>
-                <option value={2025} className="bg-slate-100 dark:bg-slate-900">2025 йил</option>
-                <option value={2024} className="bg-slate-100 dark:bg-slate-900">2024 йил</option>
+                <option value={2026} className="bg-slate-100 dark:bg-slate-900">2026</option>
+                <option value={2025} className="bg-slate-100 dark:bg-slate-900">2025</option>
+                <option value={2024} className="bg-slate-100 dark:bg-slate-900">2024</option>
               </select>
             </div>
+            <LanguageToggle />
             <ThemeToggle />
           </div>
         </div>
@@ -296,7 +337,7 @@ export default function ExcelAuditPage() {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <div className="anim-fade-up delay-1 surface p-6 flex items-center justify-between transition-all duration-300 hover:border-emerald-500/30 hover:-translate-y-1">
             <div className="space-y-1.5">
-              <p className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-widest">Умумий Кирим (Кредит)</p>
+              <p className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-widest">{t("Умумий тушган пул")}</p>
               <h3 className="text-2xl font-black text-slate-900 dark:text-white tabular">{formatMoney(stats.totalRevenue)} <span className="text-sm text-slate-500 font-bold">UZS</span></h3>
             </div>
             <div className="p-3.5 rounded-2xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
@@ -306,7 +347,7 @@ export default function ExcelAuditPage() {
 
           <div className="anim-fade-up delay-2 surface p-6 flex items-center justify-between transition-all duration-300 hover:border-rose-500/30 hover:-translate-y-1">
             <div className="space-y-1.5">
-              <p className="text-[11px] font-bold text-rose-600 dark:text-rose-400 uppercase tracking-widest">Умумий Чиқим (Дебет)</p>
+              <p className="text-[11px] font-bold text-rose-600 dark:text-rose-400 uppercase tracking-widest">{t("Умумий тўланган пул")}</p>
               <h3 className="text-2xl font-black text-slate-900 dark:text-white tabular">{formatMoney(stats.totalExpenses)} <span className="text-sm text-slate-500 font-bold">UZS</span></h3>
             </div>
             <div className="p-3.5 rounded-2xl bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20">
@@ -316,7 +357,7 @@ export default function ExcelAuditPage() {
 
           <div className="anim-fade-up delay-3 surface p-6 flex items-center justify-between transition-all duration-300 hover:border-indigo-500/30 hover:-translate-y-1">
             <div className="space-y-1.5">
-              <p className="text-[11px] font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-widest">Қолдиқ (Сальдо)</p>
+              <p className="text-[11px] font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-widest">{t("Фарқ")}</p>
               <h3 className={`text-2xl font-black tabular ${stats.netProfit >= 0 ? "text-indigo-600 dark:text-indigo-400" : "text-amber-600 dark:text-amber-400"}`}>
                 {formatMoney(stats.netProfit)} <span className="text-sm text-slate-500 font-bold">UZS</span>
               </h3>
@@ -334,7 +375,7 @@ export default function ExcelAuditPage() {
               <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500 w-4 h-4" />
               <input
                 type="text"
-                placeholder="Фирма номи ёки СТИР бўйича излаш..."
+                placeholder={t("Фирма номи ёки СТИР бўйича излаш...")}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="w-full pl-11 pr-4 py-2.5 border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950/70 rounded-xl text-sm font-medium text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-600 transition-all duration-300 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20"
@@ -345,7 +386,7 @@ export default function ExcelAuditPage() {
               onClick={() => setIsModalOpen(true)}
               className="w-full sm:w-auto bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-2.5 px-5 rounded-xl text-sm transition-all duration-300 flex items-center justify-center gap-2 shadow-lg shadow-indigo-600/25 hover:shadow-indigo-500/40 hover:-translate-y-0.5 active:scale-95"
             >
-              <Plus className="w-4 h-4" /> Янги Фирма Қўшиш
+              <Plus className="w-4 h-4" /> {t("Янги Фирма Қўшиш")}
             </button>
           </div>
 
@@ -353,12 +394,12 @@ export default function ExcelAuditPage() {
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/60">
-                  <th className="p-4 pl-6"><SortHeader label="Корхона Номи" k="name" activeKey={sortKey} dir={sortDir} onToggle={toggleSort} /></th>
-                  <th className="p-4"><SortHeader label="СТИР (ИНН)" k="inn" activeKey={sortKey} dir={sortDir} onToggle={toggleSort} /></th>
-                  <th className="p-4 text-right"><SortHeader label="Кирим (Фактура)" k="rev" align="right" activeKey={sortKey} dir={sortDir} onToggle={toggleSort} /></th>
-                  <th className="p-4 text-right"><SortHeader label="Чиқим (Банк)" k="exp" align="right" activeKey={sortKey} dir={sortDir} onToggle={toggleSort} /></th>
-                  <th className="p-4 text-right"><SortHeader label="Сальдо" k="profit" align="right" activeKey={sortKey} dir={sortDir} onToggle={toggleSort} /></th>
-                  <th className="p-4 text-center pr-6 uppercase tracking-wider text-[11px] font-bold text-slate-500">Ҳаракат</th>
+                  <th className="p-4 pl-6"><SortHeader label={t("Корхона Номи")} k="name" activeKey={sortKey} dir={sortDir} onToggle={toggleSort} /></th>
+                  <th className="p-4"><SortHeader label={t("СТИР (ИНН)")} k="inn" activeKey={sortKey} dir={sortDir} onToggle={toggleSort} /></th>
+                  <th className="p-4 text-right"><SortHeader label={t("Келган фактура")} k="rev" align="right" activeKey={sortKey} dir={sortDir} onToggle={toggleSort} /></th>
+                  <th className="p-4 text-right"><SortHeader label={t("Чиқим (Банк)")} k="exp" align="right" activeKey={sortKey} dir={sortDir} onToggle={toggleSort} /></th>
+                  <th className="p-4 text-right"><SortHeader label={t("Фарқ")} k="profit" align="right" activeKey={sortKey} dir={sortDir} onToggle={toggleSort} /></th>
+                  <th className="p-4 text-center pr-6 uppercase tracking-wider text-[11px] font-bold text-slate-500">{t("Ҳаракат")}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200 dark:divide-slate-800/60 font-medium text-sm text-slate-700 dark:text-slate-300">
@@ -367,7 +408,7 @@ export default function ExcelAuditPage() {
                     <td colSpan={6} className="text-center p-16 text-slate-500">
                       <div className="anim-fade flex flex-col items-center justify-center space-y-2">
                         <FolderOpen className="w-10 h-10 text-slate-400 dark:text-slate-600" />
-                        <p className="text-sm">Фирма топилмади</p>
+                        <p className="text-sm">{t("Фирма топилмади")}</p>
                       </div>
                     </td>
                   </tr>
@@ -400,14 +441,14 @@ export default function ExcelAuditPage() {
                         <div className="flex items-center justify-center gap-2">
                           <NextLink href={`excel-audit/companies/${company.id}`}>
                             <button className="inline-flex items-center gap-1.5 border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/60 font-semibold py-1.5 px-3.5 rounded-lg text-xs text-slate-500 dark:text-slate-400 transition-all duration-300 hover:text-indigo-600 dark:hover:text-indigo-400 hover:border-indigo-500/40 hover:-translate-y-0.5">
-                              Сверка <ArrowRight className="w-3 h-3" />
+                              {t("Сверка")} <ArrowRight className="w-3 h-3" />
                             </button>
                           </NextLink>
 
                           <button
                             onClick={() => handleDeleteCompany(company.id, company.name)}
                             className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/60 text-slate-500 transition-all duration-300 hover:text-rose-600 dark:hover:text-rose-400 hover:border-rose-500/30"
-                            title="Корхонани ўчириш"
+                            title={t("Корхонани ўчириш")}
                           >
                             <Trash2 className="w-4 h-4" />
                           </button>
@@ -429,7 +470,7 @@ export default function ExcelAuditPage() {
             <div className="flex justify-between items-center">
               <div className="flex items-center gap-2">
                 <Building2 className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
-                <h3 className="text-lg font-bold tracking-tight">Янги Корхона Қўшиш</h3>
+                <h3 className="text-lg font-bold tracking-tight">{t("Янги Корхона Қўшиш")}</h3>
               </div>
               <button onClick={() => setIsModalOpen(false)} className="p-1 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white">
                 <X className="w-5 h-5" />
@@ -438,7 +479,7 @@ export default function ExcelAuditPage() {
 
             <form onSubmit={handleAddCompany} className="space-y-4">
               <div>
-                <label className="text-xs font-bold uppercase tracking-wider block mb-2 text-slate-500 dark:text-slate-400">Корхона Номи</label>
+                <label className="text-xs font-bold uppercase tracking-wider block mb-2 text-slate-500 dark:text-slate-400">{t("Корхона Номи")}</label>
                 <input
                   type="text"
                   required
@@ -450,7 +491,7 @@ export default function ExcelAuditPage() {
               </div>
 
               <div>
-                <label className="text-xs font-bold uppercase tracking-wider block mb-2 text-slate-500 dark:text-slate-400">СТИР (ИНН)</label>
+                <label className="text-xs font-bold uppercase tracking-wider block mb-2 text-slate-500 dark:text-slate-400">{t("СТИР (ИНН)")}</label>
                 <input
                   type="text"
                   required
@@ -469,7 +510,7 @@ export default function ExcelAuditPage() {
                   onClick={() => setIsModalOpen(false)}
                   className="px-4 py-2.5 rounded-xl text-xs font-bold border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-800 transition-all duration-300"
                 >
-                  Бекор қилиш
+                  {t("Бекор қилиш")}
                 </button>
                 <button
                   type="submit"
@@ -477,7 +518,7 @@ export default function ExcelAuditPage() {
                   className="px-4 py-2.5 bg-indigo-600 text-white rounded-xl text-xs font-bold hover:bg-indigo-500 disabled:opacity-50 transition-all duration-300 shadow-lg shadow-indigo-600/25 flex items-center gap-1.5 active:scale-95"
                 >
                   {submitting && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-                  Сақлаш
+                  {t("Сақлаш")}
                 </button>
               </div>
             </form>

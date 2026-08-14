@@ -58,6 +58,9 @@ export interface BankStatement {
    *  to'liq o'qilmagan, chaqiruvchi buni foydalanuvchiga ko'rsatadi. */
   footerDebit?: number;
   footerCredit?: number;
+  /** Ko'chirmaning o'z qoldiqlari («Остаток на начало / конец периода»).
+   *  Chaqiruvchi ular bilan qoldiq tenglamasini tekshiradi. */
+  balances?: AccountBalances;
   /** Har bo'lim uchun aniqlangan ustunlar — chaqiruvchi tomon
    *  eski mantiq bilan mos-nomosligini tekshirishi uchun. */
   layout: SectionLayout[];
@@ -75,6 +78,20 @@ export interface SectionLayout {
   direction: 'DEBIT' | 'CREDIT';
   counterpartyNameCol: number;
   counterpartyInnCol: number;
+}
+
+/** Ko'chirmaning O'Z qoldiqlari — qoldiq tenglamasi uchun.
+ *  Boshlang'ich qoldiq + kredit − debet = oxirgi qoldiq. */
+export interface AccountBalances {
+  opening?: number;
+  closing?: number;
+  /** «ПАССИВ» (odatiy joriy hisob) yoki «АКТИВ». Aktiv hisobda
+   *  tenglama teskari: qoldiqni DEBET oshiradi. Faylda ko'rsatilmasa
+   *  undefined - u holda passiv deb qaraladi (barcha namunalar shunday). */
+  kind?: 'ACTIVE' | 'PASSIVE';
+  /** Bir joyda ikki xil qiymat uchradi - demak bu bitta hisob emas.
+   *  Bunday holatda tenglama tekshirilmaydi. */
+  conflict?: boolean;
 }
 
 // ------------------------------------------------------------
@@ -195,6 +212,202 @@ function isFooterRow(row: Cell[] | undefined): boolean {
     if (t && FOOTER_RE.test(t)) return true;
   }
   return false;
+}
+
+// ------------------------------------------------------------
+// QOLDIQ TENGLAMASI uchun: boshlang'ich va oxirgi qoldiqni topish
+//
+// Nega bu «Итого»dan kuchli: «Итого» faqat YIG'INDIni tekshiradi,
+// debet bilan kredit almashib ketsa yig'indi baribir to'g'ri chiqadi
+// va xato jimgina o'tib ketadi. Qoldiq tenglamasi esa YO'NALISHga
+// bog'liq — almashinuvni darhol sezadi. Ipoteka/ASBT fayli aynan
+// shu xatoni bergan edi.
+//
+// Haqiqiy fayllarda ikki shakl uchraydi:
+//   «Остаток на начало периода: 5 310 044.59»       — raqam AYNI katakda
+//   «Остаток на начало периода:» … «3,038,511.11» «ПАССИВ»  — keyingi katakda
+//
+// Yorliq katak BOSHIDAN moslashtiriladi. Aks holda to'lov maqsadidagi
+// «...инкасса мк за терминал 100% от сальдо 42000» kabi matnlar
+// qoldiq deb o'qilib ketardi (IMANMAX faylida 200 dan ortiq shunday qator bor).
+// ------------------------------------------------------------
+
+const OPENING_LABEL_RE = /^(ОСТАТОК\s*НА\s*НАЧАЛО|ВХОДЯЩИЙ\s*ОСТАТОК)/;
+const CLOSING_LABEL_RE = /^(ОСТАТОК\s*НА\s*КОНЕЦ|ИСХОДЯЩИЙ\s*ОСТАТОК)/;
+
+/** Katakda faqat raqam turibdimi (ajratgichlar bilan)? «ПАССИВ» yoki
+ *  sana kabi kataklar qoldiq deb o'qilmasligi uchun. */
+const PURE_NUMBER_RE = /^-?[\d\s.,]*\d[\d\s.,]*$/;
+
+/** Yorliqdan KEYINGI matndagi raqamlar. Butun katakni parseAmount'ga
+ *  bermaymiz: yorliqning o'zida ham raqam bo'lishi mumkin
+ *  («Остаток на конец периода 31.07.2026»), u summaga qo'shilib ketardi. */
+const NUMBER_IN_TEXT_RE = /-?\d[\d\s.,]*\d|-?\d/g;
+
+/** Sana raqam emas. parseAmount uni 0 qilib qaytaradi, ya'ni sana
+ *  qoldiq deb o'qilsa summa JIMGINA nolga aylanardi. */
+const DATE_LIKE_RE = /^\d{1,4}[.\-/]\d{1,2}[.\-/]\d{2,4}/;
+
+/** Yorliq katagidan boshlab qoldiq summasini olish: avval o'sha
+ *  katakning o'zidan, topilmasa — o'ngdagi birinchi raqamli katakdan. */
+function balanceAfterLabel(row: Cell[], col: number, label: RegExp): number | undefined {
+  const cell = up(row[col]);
+  const m = cell.match(label);
+  if (!m) return undefined;
+
+  for (const found of cell.slice(m[0].length).matchAll(NUMBER_IN_TEXT_RE)) {
+    const raw = found[0].trim();
+    if (DATE_LIKE_RE.test(raw)) continue;
+    return parseAmount(raw);
+  }
+
+  for (let c = col + 1; c < row.length; c++) {
+    const t = text(row[c]);
+    if (!t) continue;
+    // Birinchi to'ldirilgan katak raqam bo'lmasa — bu qatorda qoldiq
+    // yo'q. Uzoqdagi begona raqamni olib qo'ymaslik uchun to'xtaymiz.
+    if (!PURE_NUMBER_RE.test(t) || DATE_LIKE_RE.test(t.trim())) return undefined;
+    return parseAmount(t);
+  }
+  return undefined;
+}
+
+/** «ПАССИВ» / «АКТИВ» belgisi — yorliqdan keyingi kataklarda */
+function balanceKind(row: Cell[], col: number): 'ACTIVE' | 'PASSIVE' | undefined {
+  for (let c = col + 1; c < row.length; c++) {
+    const t = up(row[c]);
+    if (!t) continue;
+    if (/^ПАССИВ/.test(t)) return 'PASSIVE';
+    if (/^АКТИВ/.test(t)) return 'ACTIVE';
+  }
+  return undefined;
+}
+
+export function findAccountBalances(rows: Cell[][]): AccountBalances {
+  const out: AccountBalances = {};
+
+  const put = (field: 'opening' | 'closing', value: number) => {
+    const prev = out[field];
+    if (prev === undefined) out[field] = value;
+    else if (Math.abs(prev - value) > 0.005) out.conflict = true;
+  };
+
+  for (const row of rows) {
+    if (!row) continue;
+    for (let c = 0; c < row.length; c++) {
+      const t = up(row[c]);
+      if (!t) continue;
+
+      const isOpening = OPENING_LABEL_RE.test(t);
+      if (!isOpening && !CLOSING_LABEL_RE.test(t)) continue;
+
+      const v = balanceAfterLabel(row, c, isOpening ? OPENING_LABEL_RE : CLOSING_LABEL_RE);
+      if (v === undefined) continue;
+      put(isOpening ? 'opening' : 'closing', v);
+      if (!out.kind) out.kind = balanceKind(row, c);
+    }
+  }
+
+  return out;
+}
+
+// ------------------------------------------------------------
+// Qoldiq tenglamasini TEKSHIRISH
+//
+// Tekshiruv FAYL darajasida yig'iladi, varaq darajasida emas: ASBT
+// eksportida debet va kredit ALOHIDA varaqlarda turadi, oxirgi qoldiq
+// esa faqat oxirgi varaqning yakuniy qatorida yoziladi (IMANMAX.xls -
+// Sheet2 debet, Sheet4 kredit va «Остаток на конец периода»).
+//
+// Bu yerda turibdi, chunki INVARIANT IKKALA sverkaga ham tegishli:
+// chiqim (statementAudit.ts) va kirim (incomeParser.ts).
+// ------------------------------------------------------------
+
+/** Bir fayl uchun qoldiq tenglamasining natijasi */
+export interface BalanceCheck {
+  file: string;
+  /** MOS — tenglama to'g'ri; NOMOS — yiqildi; YO'Q — tekshirib bo'lmadi */
+  status: 'MOS' | 'NOMOS' | "YO'Q";
+  /** «YO'Q» bo'lsa sababi */
+  note?: string;
+  opening?: number;
+  closing?: number;
+  /** Tenglamadan chiqqan qiymat (oxirgi qoldiq bilan solishtiriladi) */
+  expected?: number;
+  debit: number;
+  credit: number;
+  kind?: 'ACTIVE' | 'PASSIVE';
+}
+
+export interface BalanceTally {
+  opening?: number;
+  closing?: number;
+  kind?: 'ACTIVE' | 'PASSIVE';
+  debit: number;
+  credit: number;
+  /** Nechta varaqdan ko'chirma o'qildi (0 bo'lsa tekshiradigan narsa yo'q) */
+  sheets: number;
+  /** Bir faylda ikki xil qoldiq uchradi — bu bitta hisob emas */
+  conflict: boolean;
+}
+
+export function newBalanceTally(): BalanceTally {
+  return { debit: 0, credit: 0, sheets: 0, conflict: false };
+}
+
+export function absorbBalances(tally: BalanceTally, b: AccountBalances | undefined) {
+  if (!b) return;
+  if (b.conflict) tally.conflict = true;
+  for (const field of ['opening', 'closing'] as const) {
+    const v = b[field];
+    if (v === undefined) continue;
+    const prev = tally[field];
+    if (prev === undefined) tally[field] = v;
+    else if (Math.abs(prev - v) > 0.005) tally.conflict = true;
+  }
+  if (!tally.kind) tally.kind = b.kind;
+}
+
+const MONEY = (n: number) =>
+  n.toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+export function checkBalanceEquation(
+  file: string,
+  t: BalanceTally
+): { check: BalanceCheck; warning?: string } {
+  const base: BalanceCheck = {
+    file, status: "YO'Q", debit: t.debit, credit: t.credit,
+    opening: t.opening, closing: t.closing, kind: t.kind,
+  };
+
+  if (t.conflict) return { check: { ...base, note: 'файлда бир нечта ҳисоб қолдиғи бор' } };
+  if (t.opening === undefined || t.closing === undefined) {
+    return { check: { ...base, note: 'файлда қолдиқ кўрсатилмаган' } };
+  }
+
+  // Passiv hisobda (odatiy joriy hisob) qoldiqni KREDIT oshiradi,
+  // aktivda esa DEBET. Fayl buni «ПАССИВ»/«АКТИВ» deb o'zi aytadi;
+  // aytmasa passiv deb qaraladi - barcha namunalar shunday.
+  const sign = t.kind === 'ACTIVE' ? -1 : 1;
+  const expected = t.opening + sign * (t.credit - t.debit);
+  const gap = expected - t.closing;
+
+  if (Math.abs(gap) < 0.5) return { check: { ...base, status: 'MOS', expected } };
+
+  // Debet bilan kredit almashib ketganmi? Teskari hisob TIYINIGACHA mos
+  // kelsa - yig'indilar to'g'ri o'qilgan, faqat yo'nalish teskari.
+  const swapped = t.opening + sign * (t.debit - t.credit);
+  const swappedFits = Math.abs(swapped - t.closing) < 0.5;
+
+  const warning =
+    `«${file}» — ҚОЛДИҚ ТЕНГЛАМАСИ МОС КЕЛМАДИ. Бошланғич қолдиқ ${MONEY(t.opening)} + ` +
+    `кредит ${MONEY(t.credit)} − дебет ${MONEY(t.debit)} = ${MONEY(expected)}, ` +
+    `лекин файлнинг ўзида охирги қолдиқ ${MONEY(t.closing)}. Фарқ: ${MONEY(gap)}. ` +
+    (swappedFits
+      ? 'Тескари ҳисоб (дебет ↔ кредит) файлга АНИҚ мос келади — демак кирим билан чиқим алмашиб кетган.'
+      : 'Демак кўчирма тўлиқ ўқилмаган — рақамларни файл билан солиштиринг.');
+
+  return { check: { ...base, status: 'NOMOS', expected }, warning };
 }
 
 // Yuridik shakl qisqartmalari — nomlarni solishtirishdan oldin olib tashlanadi
@@ -467,7 +680,10 @@ export function parseTwoSidedTurnover(rows: Cell[][]): BankStatement | null {
     put('account', other.account); put('ownInn', own.inn);
   }
 
-  return { format: 'TWO_SIDED', txs, ownInn, ownName, ownAccount, totalDebit, totalCredit, footerDebit, footerCredit, headerLabels, columns, layout };
+  return {
+    format: 'TWO_SIDED', txs, ownInn, ownName, ownAccount, totalDebit, totalCredit,
+    footerDebit, footerCredit, balances: findAccountBalances(rows), headerLabels, columns, layout,
+  };
 }
 
 // ------------------------------------------------------------
@@ -590,6 +806,7 @@ export function parseThreeRowAccountReport(rows: Cell[][]): BankStatement | null
     ownAccount,
     totalDebit,
     totalCredit,
+    balances: findAccountBalances(rows),
     layout: [{
       headerRow,
       amountCol: creditCol,
@@ -762,6 +979,7 @@ export function parseColumnarStatement(rows: Cell[][]): BankStatement | null {
     totalCredit,
     footerDebit,
     footerCredit,
+    balances: findAccountBalances(rows),
     headerLabels: rows[headerRow],
     columns,
     layout: [{

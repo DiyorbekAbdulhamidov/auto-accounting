@@ -138,7 +138,7 @@ export function buildIncomeWorkbook(
   dateRow.getCell(6).alignment = { horizontal: 'right' };
   dateRow.getCell(6).font = { size: 11, name: 'Times New Roman' };
 
-  styleHeader(ws.addRow(['Фирма номлари', 'СТИР', 'Келган пул жами', 'Юборилган счет-ф жами', 'Фарқи', 'Изоҳ']));
+  styleHeader(ws.addRow(['Фирма номлари', 'СТИР', 'Тушган пул жами', 'Ёзилган фактура жами', 'Фарқи', 'Изоҳ']));
 
   for (const p of rows) {
     styleBody(
@@ -154,7 +154,7 @@ export function buildIncomeWorkbook(
     ws.addRow([]);
     const capRow = ws.addRow([`ЙИЛЛАР БЎЙИЧА (давр: ${periodText})`]);
     capRow.getCell(1).font = { bold: true, size: 12, name: 'Times New Roman' };
-    styleHeader(ws.addRow(['Йил', '', 'Келган пул жами', 'Юборилган счет-ф жами', 'Фарқи', 'Изоҳ']));
+    styleHeader(ws.addRow(['Йил', '', 'Тушган пул жами', 'Ёзилган фактура жами', 'Фарқи', 'Изоҳ']));
 
     let yc = 0;
     let yf = 0;
@@ -184,9 +184,9 @@ export function buildIncomeWorkbook(
       wy.addRow([
         'Фирма номлари',
         'СТИР',
-        ...years.flatMap((y) => [`${y} келган пул`, `${y} счет-ф`, `${y} фарқи`]),
-        'ЖАМИ келган пул',
-        'ЖАМИ счет-ф',
+        ...years.flatMap((y) => [`${y} тушган пул`, `${y} ёзилган фактура`, `${y} фарқи`]),
+        'ЖАМИ тушган пул',
+        'ЖАМИ фактура',
         'ЖАМИ фарқи',
       ])
     );
@@ -219,7 +219,7 @@ export function buildIncomeWorkbook(
   // ---------- 3) ОЙМА-ОЙ ----------
   const wm = wb.addWorksheet('Ойма-ой');
   wm.columns = [{ width: 50 }, { width: 18 }, { width: 10 }, { width: 16 }, { width: 22 }, { width: 22 }, { width: 22 }];
-  styleHeader(wm.addRow(['Фирма номлари', 'СТИР', 'Йил', 'Ой', 'Келган пул', 'Юборилган счет-ф', 'Фарқи']));
+  styleHeader(wm.addRow(['Фирма номлари', 'СТИР', 'Йил', 'Ой', 'Тушган пул', 'Ёзилган фактура', 'Фарқи']));
 
   for (const p of rows) {
     for (const period of Object.keys(p.monthly).sort()) {
@@ -248,7 +248,7 @@ export function buildIncomeWorkbook(
   wp.columns = [
     { width: 14 }, { width: 10 }, { width: 16 }, { width: 46 }, { width: 16 }, { width: 22 }, { width: 16 }, { width: 70 },
   ];
-  styleHeader(wp.addRow(['Сана', 'Йил', 'Ой', 'Фирма номлари', 'СТИР', 'Келган пул', 'Ҳужжат №', 'Тўлов мақсади']));
+  styleHeader(wp.addRow(['Сана', 'Йил', 'Ой', 'Фирма номлари', 'СТИР', 'Тушган пул', 'Ҳужжат №', 'Тўлов мақсади']));
 
   const payments = rows.flatMap((p) => p.payments.map((pay) => ({ ...pay, name: p.name, inn: p.inn })));
   payments.sort((a, b) => (a.date || '').localeCompare(b.date || '') || a.name.localeCompare(b.name, 'ru'));

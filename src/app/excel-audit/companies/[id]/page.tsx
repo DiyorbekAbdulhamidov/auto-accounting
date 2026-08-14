@@ -4,6 +4,7 @@ import React, { useState, use, useMemo, useEffect } from "react";
 // 🔥 FIREBASE IMPORTLARI
 import { collection, addDoc, serverTimestamp, query, where, getDocs } from "firebase/firestore";
 import { db } from "@/lib/firebase";
+import { useAuth } from "@/context/AuthContext";
 import { authFetch } from "@/lib/authFetch";
 // 📊 EXCEL IMPORTLARI
 import ExcelJS from "exceljs";
@@ -22,6 +23,8 @@ import {
 } from "lucide-react";
 import SortHeader from "@/components/SortHeader";
 import ThemeToggle from "@/components/ThemeToggle";
+import LanguageToggle from "@/components/LanguageToggle";
+import { useT } from "@/context/LanguageContext";
 import { CATEGORY_LABELS, type Category } from "@/lib/counterpartyCategory";
 
 interface MonthlyBucket {
@@ -83,6 +86,20 @@ interface SheetReport {
   note?: string;
 }
 
+/** Қолдиқ тенгламаси: бошланғич қолдиқ + кредит − дебет = охирги қолдиқ.
+ *  «Итого»дан мустақил назорат — дебет билан кредит алмашиб кетса
+ *  «Итого» буни сезмайди (йиғинди барибир тўғри), бу эса сезади. */
+interface BalanceCheck {
+  file: string;
+  status: "MOS" | "NOMOS" | "YO'Q";
+  note?: string;
+  opening?: number;
+  closing?: number;
+  expected?: number;
+  debit: number;
+  credit: number;
+}
+
 /** Кўчирма/фактура ёзувини бир хил ном билан бирлаштириш учун калит */
 function rowKey(tx: AggregatedTx): string {
   return tx.key || (tx.inn && tx.inn !== "-" ? tx.inn : `NAME:${tx.name}`);
@@ -100,10 +117,11 @@ interface PageProps {
 
 const MONTH_NAMES = ["Январь", "Февраль", "Март", "Апрель", "Май", "Июнь", "Июль", "Август", "Сентябрь", "Октябрь", "Ноябрь", "Декабрь"];
 
-function periodLabel(period: string): string {
+/** Тил ўзгарса ой номи ҳам ўзгариши учун таржимон узатилади */
+function periodLabel(period: string, t: (s: string) => string): string {
   const [y, m] = period.split('-').map(Number);
-  const name = MONTH_NAMES[(m || 1) - 1] || period;
-  return `${name} ${y}`;
+  const raw = MONTH_NAMES[(m || 1) - 1];
+  return raw ? `${t(raw)} ${y}` : period;
 }
 function sortedPeriods(monthlyData: Record<string, MonthlyBucket>): string[] {
   return Object.keys(monthlyData || {}).sort();
@@ -176,6 +194,10 @@ type SortDir = "asc" | "desc";
 export default function CompanyDetailPage({ params }: PageProps) {
   const resolvedParams = use(params);
   const companyId = resolvedParams.id;
+  const t = useT();
+  // Barcha o'qish/yozish ish maydoniga bog'lanadi (src/lib/workspace.ts)
+  const { user } = useAuth();
+  const workspaceId: string | undefined = user?.workspaceId;
 
   const [files, setFiles] = useState<File[]>([]);
   const [loading, setLoading] = useState(false);
@@ -185,6 +207,7 @@ export default function CompanyDetailPage({ params }: PageProps) {
   const [detectedFormats, setDetectedFormats] = useState<string[]>([]);
   const [warnings, setWarnings] = useState<string[]>([]);
   const [sheetReports, setSheetReports] = useState<SheetReport[]>([]);
+  const [balanceChecks, setBalanceChecks] = useState<BalanceCheck[]>([]);
   const [knownFormats, setKnownFormats] = useState<KnownFormat[]>([]);
   const [showReport, setShowReport] = useState(false);
 
@@ -220,7 +243,14 @@ export default function CompanyDetailPage({ params }: PageProps) {
     async function fetchSavedData() {
       if (!companyId) return;
       try {
-        const q = query(collection(db, "sverka_reports"), where("companyId", "==", companyId));
+        // Ish maydoni filtri SHART: Firestore qoidasi so'rovni hujjatlarni
+        // o'qimasdan tekshiradi, filtrsiz so'rov butunlay rad etiladi.
+        if (!workspaceId) return;
+        const q = query(
+          collection(db, "sverka_reports"),
+          where("workspaceId", "==", workspaceId),
+          where("companyId", "==", companyId)
+        );
         const querySnapshot = await getDocs(q);
 
         if (!querySnapshot.empty) {
@@ -244,16 +274,17 @@ export default function CompanyDetailPage({ params }: PageProps) {
       }
     }
     fetchSavedData();
-  }, [companyId]);
+  }, [companyId, workspaceId]);
 
   const handleFileUpload = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (files.length === 0) return alert("Илтимос, камида битта Excel ёки CSV файлни танланг!");
+    if (files.length === 0) return alert(t("Илтимос, камида битта Excel ёки CSV файлни танланг!"));
 
     setLoading(true);
     setDetectedFormats([]);
     setWarnings([]);
     setSheetReports([]);
+    setBalanceChecks([]);
     setKnownFormats([]);
     const formData = new FormData();
 
@@ -278,6 +309,7 @@ export default function CompanyDetailPage({ params }: PageProps) {
         setDetectedFormats(data.detectedFormats || []);
         setWarnings(data.warnings || []);
         setSheetReports(data.sheets || []);
+        setBalanceChecks(data.balanceChecks || []);
         setKnownFormats(data.formats || []);
         // Огоҳлантириш бўлса — ҳисобот панели дарҳол очиқ турсин
         setShowReport((data.warnings || []).length > 0);
@@ -299,12 +331,13 @@ export default function CompanyDetailPage({ params }: PageProps) {
       } else {
         setWarnings(data.warnings || []);
         setSheetReports(data.sheets || []);
+        setBalanceChecks(data.balanceChecks || []);
         setShowReport(true);
-        alert("Хатолик: " + (data.error || "Номаълум хатолик юз берди"));
+        alert(t("Хатолик:") + " " + (data.error || t("Номаълум хатолик юз берди")));
       }
     } catch (error) {
       console.error("Юклашда хато:", error);
-      alert("Сервер билан уланишда хатолик!");
+      alert(t("Сервер билан уланишда хатолик!"));
     } finally {
       setLoading(false);
     }
@@ -492,7 +525,7 @@ export default function CompanyDetailPage({ params }: PageProps) {
           ? Array.from(new Set([...prev, key]))
           : prev.filter((k) => k !== key)
       );
-      alert("Тоифани сақлаб бўлмади: " + (error instanceof Error ? error.message : String(error)));
+      alert(t("Тоифани сақлаб бўлмади:") + " " + (error instanceof Error ? error.message : String(error)));
     } finally {
       setSavingCategory(null);
     }
@@ -550,13 +583,13 @@ export default function CompanyDetailPage({ params }: PageProps) {
   const colCount = showSaldo ? 10 : 9;
   const periodTitle =
     yearFilter === "ALL"
-      ? "Барча давр"
+      ? t("Барча давр")
       : monthFilter === "ALL"
-        ? `${yearFilter} йил`
-        : `${MONTH_NAMES[(monthFilter as number) - 1]} ${yearFilter}${cumulative ? " (йил бошидан)" : ""}`;
+        ? `${yearFilter}`
+        : `${t(MONTH_NAMES[(monthFilter as number) - 1])} ${yearFilter}${cumulative ? ` ${t("(йил бошидан)")}` : ""}`;
 
   const handleSaveToFirebase = async () => {
-    if (selectedFullData.length === 0) return alert("Сақлаш учун камида битта фирмани белгиланг!");
+    if (selectedFullData.length === 0) return alert(t("Сақлаш учун камида битта фирмани белгиланг!"));
     setIsSaving(true);
     try {
       const totals = selectedFullData.reduce(
@@ -569,8 +602,15 @@ export default function CompanyDetailPage({ params }: PageProps) {
         { debit: 0, credit: 0, diff: 0 }
       );
 
+      if (!workspaceId) {
+        alert(t("Иш майдони аниқланмади. Тизимдан чиқиб, қайта киринг."));
+        return;
+      }
+
       const docRef = await addDoc(collection(db, "sverka_reports"), {
         companyId: companyId,
+        // Egalik: hisobot boshqa ish maydoniga ko'rinmasligi uchun
+        workspaceId,
         savedAt: serverTimestamp(),
         // Қайси давр кесими сақлангани — кейин очилганда аниқ бўлиши учун
         period: {
@@ -582,10 +622,10 @@ export default function CompanyDetailPage({ params }: PageProps) {
         totals,
         firmsData: selectedFullData,
       });
-      alert(`Муваффақиятли сақланди! (ID: ${docRef.id})`);
+      alert(`${t("Муваффақиятли сақланди!")} (ID: ${docRef.id})`);
     } catch (error) {
       console.error("Firebase хатолиги:", error);
-      alert("Сақлашда хатолик юз берди.");
+      alert(t("Сақлашда хатолик юз берди."));
     } finally {
       setIsSaving(false);
     }
@@ -593,11 +633,11 @@ export default function CompanyDetailPage({ params }: PageProps) {
 
   // 📈 MUKAMMAL EXCEL EXPORT (EXCELJS)
   const handleExportExcel = async () => {
-    if (displayData.length === 0) return alert("Рўйхат бўш. Камида битта фирмани белгиланг!");
+    if (displayData.length === 0) return alert(t("Рўйхат бўш. Камида битта фирмани белгиланг!"));
 
     const today = new Date().toLocaleDateString('ru-RU');
     const workbook = new ExcelJS.Workbook();
-    const worksheet = workbook.addWorksheet("Сверка");
+    const worksheet = workbook.addWorksheet(t("Сверка"));
 
     // --- Ustun kengliklari ---
     worksheet.columns = [
@@ -613,17 +653,17 @@ export default function CompanyDetailPage({ params }: PageProps) {
     const titleRow = worksheet.addRow(["OOO \"AZAM-MARKET ANGREN\""]);
     titleRow.getCell(1).font = { bold: true, size: 14, name: "Times New Roman" };
 
-    const dateRow = worksheet.addRow(["", "", "", "", "", `${periodTitle} · ${today} ҳолатига`]);
+    const dateRow = worksheet.addRow(["", "", "", "", "", `${periodTitle} · ${today} ${t("ҳолатига")}`]);
     dateRow.getCell(6).alignment = { horizontal: "right" };
     dateRow.getCell(6).font = { size: 11, name: "Times New Roman" };
 
     const headerRow = worksheet.addRow([
-      "Фирма номлари",
-      "СТИР",
-      "Чиққан пул жами",
-      "Келган счет-ф жами",
-      "Фарқи",
-      "Изоҳ"
+      t("Фирма номлари"),
+      t("СТИР"),
+      t("Тўланган пул жами"),
+      t("Келган фактура"),
+      t("Фарқи"),
+      t("Изоҳ")
     ]);
     headerRow.height = 30;
 
@@ -642,7 +682,7 @@ export default function CompanyDetailPage({ params }: PageProps) {
     displayData.forEach((tx) => {
       const isInvoiceNeeded = tx.difference > 0;
       const isDebt = tx.difference < 0;
-      const statusText = isInvoiceNeeded ? 'Ҳисоб фактура олиш керак' : isDebt ? 'Қарзмиз' : '-';
+      const statusText = isInvoiceNeeded ? t('Ҳисоб фактура олиш керак') : isDebt ? t('Қарзмиз') : '-';
 
       const row = worksheet.addRow([
         tx.name,
@@ -676,10 +716,10 @@ export default function CompanyDetailPage({ params }: PageProps) {
     });
 
     // --- ЖАМИ qatori ---
-    const grandStatusText = grandTotals.diff > 0 ? 'Ҳисоб фактура олиш керак' : grandTotals.diff < 0 ? 'Қарзмиз' : '-';
+    const grandStatusText = grandTotals.diff > 0 ? t('Ҳисоб фактура олиш керак') : grandTotals.diff < 0 ? t('Қарзмиз') : '-';
 
     const grandRow = worksheet.addRow([
-      "ЖАМИ",
+      t("ЖАМИ"),
       "",
       grandTotals.debit,
       grandTotals.credit,
@@ -715,7 +755,7 @@ export default function CompanyDetailPage({ params }: PageProps) {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-500 dark:text-slate-400">
         <Loader2 className="h-12 w-12 text-indigo-500 animate-spin" />
-        <p className="mt-4 font-semibold text-sm animate-pulse">Маълумотлар юкланмоқда...</p>
+        <p className="mt-4 font-semibold text-sm animate-pulse">{t("Маълумотлар юкланмоқда...")}</p>
       </div>
     );
   }
@@ -734,12 +774,12 @@ export default function CompanyDetailPage({ params }: PageProps) {
             </button>
           </NextLink>
           <div>
-            <h1 className="text-2xl font-black tracking-tight text-slate-900 dark:text-white">Далолатнома (Сверка)</h1>
+            <h1 className="text-2xl font-black tracking-tight text-slate-900 dark:text-white">{t("Далолатнома (Сверка)")}</h1>
             <p className="text-sm text-slate-500">
-              Банк айланмаси ва Э-Фактура файлларни юкланг, таҳрирланг ва таҳлил қилинг.
+              {t("Банк айланмаси ва Э-Фактура файлларни юкланг, таҳрирланг ва таҳлил қилинг.")}
             </p>
           </div>
-          <div className="ml-auto"><ThemeToggle /></div>
+          <div className="ml-auto flex items-center gap-2"><LanguageToggle /><ThemeToggle /></div>
         </div>
 
         <form onSubmit={handleFileUpload} className="flex flex-col gap-4 mt-6">
@@ -752,11 +792,11 @@ export default function CompanyDetailPage({ params }: PageProps) {
                 <div className="min-w-0">
                   <p className="text-sm font-bold text-slate-700 dark:text-slate-200 truncate">
                     {files.length > 0
-                      ? `${files.length} та файл танланди`
-                      : "Excel / CSV файлларни танланг"}
+                      ? `${files.length} ${t("та файл танланди")}`
+                      : t("Excel / CSV файлларни танланг")}
                   </p>
                   <p className="text-xs text-slate-500 truncate">
-                    {files.length > 0 ? files.map((f) => f.name).join(", ") : ".xls, .xlsx, .csv — бир нечта файлни бирга юкласа бўлади"}
+                    {files.length > 0 ? files.map((f) => f.name).join(", ") : t(".xls, .xlsx, .csv — бир нечта файлни бирга юкласа бўлади")}
                   </p>
                 </div>
               </div>
@@ -774,7 +814,7 @@ export default function CompanyDetailPage({ params }: PageProps) {
               className="w-full md:w-1/4 px-8 py-3 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-60 text-white font-bold rounded-xl shadow-lg shadow-indigo-600/25 transition-all duration-300 flex items-center justify-center gap-2 hover:-translate-y-0.5 active:scale-95"
             >
               {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileSpreadsheet className="w-4 h-4" />}
-              {loading ? "Ўқилмоқда..." : "Таҳлил"}
+              {loading ? t("Ўқилмоқда...") : t("Таҳлил")}
             </button>
           </div>
 
@@ -786,18 +826,18 @@ export default function CompanyDetailPage({ params }: PageProps) {
               onChange={(e) => setIncludePending(e.target.checked)}
             />
             <span>
-              «Ожидает подписи партнёра» фактураларни ҳам ҳисоблаш
-              <span className="text-slate-400 dark:text-slate-500"> — одатда ҳисобланмайди (имзоланмаган фактура кучга кирмаган)</span>
+              {t("Имзо кутилаётган фактураларни ҳам ҳисоблаш")}
+              <span className="text-slate-400 dark:text-slate-500"> {t("— одатда ҳисобланмайди (имзоланмаган фактура кучга кирмаган)")}</span>
             </span>
           </label>
 
           {/* Aniqlangan formatlar */}
           {(detectedFormats.length > 0 || sheetReports.length > 0) && (
             <div className="anim-fade flex flex-wrap items-center gap-2">
-              <span className="text-[11px] uppercase tracking-wider font-bold text-slate-500">Аниқланган форматлар:</span>
+              <span className="text-[11px] uppercase tracking-wider font-bold text-slate-500">{t("Аниқланган форматлар:")}</span>
               {detectedFormats.map((f) => (
                 <span key={f} className="px-2.5 py-1 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400 text-xs font-bold">
-                  {FORMAT_LABELS[f] || f}
+                  {FORMAT_LABELS[f] ? t(FORMAT_LABELS[f]) : f}
                 </span>
               ))}
               {knownFormats.filter((f) => f.isNew).map((f) => (
@@ -806,7 +846,7 @@ export default function CompanyDetailPage({ params }: PageProps) {
                   title={f.label}
                   className="px-2.5 py-1 rounded-lg bg-sky-500/10 border border-sky-500/25 text-sky-700 dark:text-sky-400 text-xs font-bold"
                 >
-                  🧠 Янги шакл ўрганилди
+                  🧠 {t("Янги шакл ўрганилди")}
                 </span>
               ))}
               {sheetReports.length > 0 && (
@@ -818,7 +858,7 @@ export default function CompanyDetailPage({ params }: PageProps) {
                     : "bg-slate-500/10 border-slate-500/20 text-slate-600 dark:text-slate-300"
                     }`}
                 >
-                  {warnings.length > 0 ? `⚠ ${warnings.length} та эслатма` : "✓ Ўқиш ҳисоботи"} · {showReport ? "яшириш" : "кўриш"}
+                  {warnings.length > 0 ? `⚠ ${warnings.length} ${t("та эслатма")}` : t("✓ Ўқиш ҳисоботи")} · {showReport ? t("яшириш") : t("кўриш")}
                 </button>
               )}
             </div>
@@ -831,13 +871,13 @@ export default function CompanyDetailPage({ params }: PageProps) {
                 <table className="w-full text-xs">
                   <thead>
                     <tr className="bg-slate-100 dark:bg-slate-900 text-slate-500 dark:text-slate-400 text-left">
-                      <th className="p-2.5 font-bold">Файл / варақ</th>
-                      <th className="p-2.5 font-bold">Формат</th>
-                      <th className="p-2.5 font-bold text-center">Қатор</th>
-                      <th className="p-2.5 font-bold text-right">Чиққан пул</th>
-                      <th className="p-2.5 font-bold text-right">Келган</th>
-                      <th className="p-2.5 font-bold text-right">Файл якуни</th>
-                      <th className="p-2.5 font-bold">Изоҳ</th>
+                      <th className="p-2.5 font-bold">{t("Файл / варақ")}</th>
+                      <th className="p-2.5 font-bold">{t("Формат")}</th>
+                      <th className="p-2.5 font-bold text-center">{t("Қатор")}</th>
+                      <th className="p-2.5 font-bold text-right">{t("Чиққан пул")}</th>
+                      <th className="p-2.5 font-bold text-right">{t("Келган")}</th>
+                      <th className="p-2.5 font-bold text-right">{t("Файл якуни")}</th>
+                      <th className="p-2.5 font-bold">{t("Изоҳ")}</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-200 dark:divide-slate-800/70">
@@ -862,16 +902,67 @@ export default function CompanyDetailPage({ params }: PageProps) {
                   </tbody>
                 </table>
               </div>
+              {/* ҚОЛДИҚ ТЕНГЛАМАСИ — «Итого»дан мустақил назорат.
+                  Дебет билан кредит алмашиб кетса «Итого» буни сезмайди
+                  (йиғинди барибир тўғри), қолдиқ тенгламаси эса йиқилади. */}
+              {balanceChecks.length > 0 && (
+                <div className="border-t border-slate-200 dark:border-slate-800 p-3">
+                  <p className="text-[11px] uppercase tracking-wider font-bold text-slate-500 mb-2">
+                    {t("Қолдиқ тенгламаси")}
+                    <span className="normal-case font-normal tracking-normal text-slate-400">
+                      {" — "}{t("бошланғич қолдиқ + кирим − чиқим = охирги қолдиқ")}
+                    </span>
+                  </p>
+                  <ul className="space-y-1">
+                    {balanceChecks.map((b, i) => (
+                      <li key={i} className="text-xs flex flex-wrap gap-x-2 gap-y-0.5 items-baseline">
+                        <span
+                          className={
+                            b.status === "MOS"
+                              ? "text-emerald-600 dark:text-emerald-400 font-bold shrink-0"
+                              : b.status === "NOMOS"
+                                ? "text-amber-600 dark:text-amber-400 font-bold shrink-0"
+                                : "text-slate-400 shrink-0"
+                          }
+                        >
+                          {b.status === "MOS" ? "✓" : b.status === "NOMOS" ? "⚠" : "—"}
+                        </span>
+                        <span className="text-slate-600 dark:text-slate-300">{b.file}</span>
+                        {b.status === "YO'Q" ? (
+                          <span className="text-slate-400">{t(b.note || "текшириб бўлмади")}</span>
+                        ) : (
+                          <>
+                            <span className="tabular text-slate-500">
+                              {formatNum(b.opening ?? 0)} + {formatNum(b.credit)} − {formatNum(b.debit)}
+                              {" = "}
+                              {formatNum(b.expected ?? 0)}
+                            </span>
+                            <span
+                              className={
+                                b.status === "MOS"
+                                  ? "tabular text-slate-400"
+                                  : "tabular text-amber-600 dark:text-amber-400 font-bold"
+                              }
+                            >
+                              ({t("файлда")} {formatNum(b.closing ?? 0)})
+                            </span>
+                          </>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
               {knownFormats.length > 0 && (
                 <div className="border-t border-slate-200 dark:border-slate-800 p-3">
                   <p className="text-[11px] uppercase tracking-wider font-bold text-slate-500 mb-2">
-                    Тизим таниган экспорт шакллари ({knownFormats.length} та)
+                    {t("Тизим таниган экспорт шакллари")} ({knownFormats.length})
                   </p>
                   <ul className="space-y-1">
                     {knownFormats.map((f) => (
                       <li key={f.id} className="text-xs text-slate-600 dark:text-slate-300 flex gap-2">
                         <span className={f.isNew ? "text-sky-600 dark:text-sky-400 font-bold shrink-0" : "text-slate-400 shrink-0"}>
-                          {f.isNew ? "янги" : "таниш"}
+                          {f.isNew ? t("янги") : t("таниш")}
                         </span>
                         <span className="truncate">{f.label}</span>
                       </li>
@@ -884,7 +975,10 @@ export default function CompanyDetailPage({ params }: PageProps) {
                   {warnings.map((w, i) => (
                     <li key={i} className="text-xs text-amber-700 dark:text-amber-400 flex gap-2">
                       <span className="shrink-0">⚠</span>
-                      <span>{w}</span>
+                      {/* Сервер огоҳлантиришлари динамик тузилади —
+                          луғатда бўлмайди, лекин лотин ёзувига
+                          автоматик ўгирилади */}
+                      <span>{t(w)}</span>
                     </li>
                   ))}
                 </ul>
@@ -903,7 +997,7 @@ export default function CompanyDetailPage({ params }: PageProps) {
                 <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500 w-4 h-4" />
                 <input
                   type="text"
-                  placeholder="Фирма номи ёки СТИР бўйича қидирув..."
+                  placeholder={t("Фирма номи ёки СТИР бўйича қидирув...")}
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   className="pl-10 pr-4 py-2.5 w-full rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950/70 text-sm text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-600 outline-none transition-all duration-300 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20"
@@ -920,9 +1014,9 @@ export default function CompanyDetailPage({ params }: PageProps) {
                   }}
                   className="px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950/70 font-semibold text-sm text-slate-700 dark:text-slate-200 outline-none cursor-pointer focus:border-indigo-500"
                 >
-                  <option value="ALL">Барча давр</option>
+                  <option value="ALL">{t("Барча давр")}</option>
                   {availableYears.map((y) => (
-                    <option key={y} value={y}>{y} йил</option>
+                    <option key={y} value={y}>{y}</option>
                   ))}
                 </select>
               )}
@@ -937,9 +1031,9 @@ export default function CompanyDetailPage({ params }: PageProps) {
                   }}
                   className="px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950/70 font-semibold text-sm text-slate-700 dark:text-slate-200 outline-none cursor-pointer focus:border-indigo-500"
                 >
-                  <option value="ALL">Йил бўйича</option>
+                  <option value="ALL">{t("Йил бўйича")}</option>
                   {availableMonths.map((m) => (
-                    <option key={m} value={m}>{MONTH_NAMES[m - 1]}</option>
+                    <option key={m} value={m}>{t(MONTH_NAMES[m - 1])}</option>
                   ))}
                 </select>
               )}
@@ -952,7 +1046,7 @@ export default function CompanyDetailPage({ params }: PageProps) {
                     checked={cumulative}
                     onChange={(e) => setCumulative(e.target.checked)}
                   />
-                  Нарастающий
+                  {t("Йил бошидан")}
                 </label>
               )}
 
@@ -963,9 +1057,9 @@ export default function CompanyDetailPage({ params }: PageProps) {
                   onChange={(e) => setFilterType(e.target.value as "ALL" | "DIFF" | "EQUAL")}
                   className="pl-10 pr-8 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950/70 font-semibold text-sm text-slate-700 dark:text-slate-200 outline-none cursor-pointer transition-all duration-300 focus:border-indigo-500 appearance-none"
                 >
-                  <option value="ALL" className="bg-slate-100 dark:bg-slate-900">Барчаси ({parsedData.length})</option>
-                  <option value="DIFF" className="bg-slate-100 dark:bg-slate-900">Фарқи борлар</option>
-                  <option value="EQUAL" className="bg-slate-100 dark:bg-slate-900">Тенг бўлганлар</option>
+                  <option value="ALL" className="bg-slate-100 dark:bg-slate-900">{t("Барчаси")} ({parsedData.length})</option>
+                  <option value="DIFF" className="bg-slate-100 dark:bg-slate-900">{t("Фарқи борлар")}</option>
+                  <option value="EQUAL" className="bg-slate-100 dark:bg-slate-900">{t("Тенг бўлганлар")}</option>
                 </select>
               </div>
 
@@ -973,12 +1067,12 @@ export default function CompanyDetailPage({ params }: PageProps) {
               <select
                 value={categoryFilter}
                 onChange={(e) => setCategoryFilter(e.target.value as "KORXONA" | "BOSHQA" | "ALL")}
-                title="Коммунал, бюджет ва банк комиссияси асосий сверкани чалғитади. Улар йўқолмайди — тепадаги «ЖАМИ» ҳар доим тўлиқ."
+                title={t("Коммунал, бюджет ва банк комиссияси асосий сверкани чалғитади. Улар йўқолмайди — тепадаги «ЖАМИ» ҳар доим тўлиқ.")}
                 className="px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950/70 font-semibold text-sm text-slate-700 dark:text-slate-200 outline-none cursor-pointer focus:border-indigo-500"
               >
-                <option value="KORXONA" className="bg-slate-100 dark:bg-slate-900">Фақат корхоналар ({periodTotals.korxonaCount})</option>
-                <option value="BOSHQA" className="bg-slate-100 dark:bg-slate-900">Коммунал/бюджет ({periodTotals.boshqaCount})</option>
-                <option value="ALL" className="bg-slate-100 dark:bg-slate-900">Ҳаммаси ({periodTotals.count})</option>
+                <option value="KORXONA" className="bg-slate-100 dark:bg-slate-900">{t("Фақат корхоналар")} ({periodTotals.korxonaCount})</option>
+                <option value="BOSHQA" className="bg-slate-100 dark:bg-slate-900">{t("Коммунал/бюджет")} ({periodTotals.boshqaCount})</option>
+                <option value="ALL" className="bg-slate-100 dark:bg-slate-900">{t("Ҳаммаси")} ({periodTotals.count})</option>
               </select>
             </div>
 
@@ -988,7 +1082,7 @@ export default function CompanyDetailPage({ params }: PageProps) {
                 disabled={displayData.length === 0}
                 className="bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white px-5 py-2.5 rounded-xl text-sm font-bold shadow-lg shadow-emerald-600/20 transition-all duration-300 flex items-center gap-2 w-full md:w-auto justify-center hover:-translate-y-0.5 active:scale-95"
               >
-                <Download className="w-4 h-4" /> Excel юклаш
+                <Download className="w-4 h-4" /> {t("Excel юклаш")}
               </button>
 
               <button
@@ -997,7 +1091,7 @@ export default function CompanyDetailPage({ params }: PageProps) {
                 className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white px-6 py-2.5 rounded-xl text-sm font-bold shadow-lg shadow-indigo-600/25 transition-all duration-300 flex items-center gap-2 w-full md:w-auto justify-center hover:-translate-y-0.5 active:scale-95"
               >
                 {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                {isSaving ? "Сақланмоқда..." : "Сақлаш"}
+                {isSaving ? t("Сақланмоқда...") : t("Сақлаш")}
               </button>
             </div>
           </div>
@@ -1008,47 +1102,45 @@ export default function CompanyDetailPage({ params }: PageProps) {
               чиқарилмайди. Остидаги кичик қатор эса корхоналар кесими. */}
           <div className="mb-4 grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950/60 p-4">
-              <p className="text-[11px] uppercase tracking-wider font-bold text-slate-500">Жами чиққан пул</p>
+              <p className="text-[11px] uppercase tracking-wider font-bold text-slate-500">{t("Жами тўланган пул")}</p>
               <p className="text-xl font-bold text-slate-900 dark:text-white tabular mt-1">{formatNum(periodTotals.debit)}</p>
               <p className="text-[11px] text-slate-500 tabular mt-1">
-                корхоналар: <b className="text-slate-700 dark:text-slate-300">{formatNum(periodTotals.korxonaDebit)}</b>
-                {periodTotals.boshqaCount > 0 && <> · коммунал/бюджет: {formatNum(periodTotals.boshqaDebit)}</>}
+                {t("корхоналар")}: <b className="text-slate-700 dark:text-slate-300">{formatNum(periodTotals.korxonaDebit)}</b>
+                {periodTotals.boshqaCount > 0 && <> · {t("коммунал/бюджет")}: {formatNum(periodTotals.boshqaDebit)}</>}
               </p>
             </div>
             <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950/60 p-4">
-              <p className="text-[11px] uppercase tracking-wider font-bold text-slate-500">Жами келган счёт-фактура</p>
+              <p className="text-[11px] uppercase tracking-wider font-bold text-slate-500">{t("Жами келган фактура")}</p>
               <p className="text-xl font-bold text-slate-900 dark:text-white tabular mt-1">{formatNum(periodTotals.credit)}</p>
               <p className="text-[11px] text-slate-500 tabular mt-1">
-                корхоналар: <b className="text-slate-700 dark:text-slate-300">{formatNum(periodTotals.korxonaCredit)}</b>
-                {periodTotals.boshqaCount > 0 && <> · коммунал/бюджет: {formatNum(periodTotals.boshqaCredit)}</>}
+                {t("корхоналар")}: <b className="text-slate-700 dark:text-slate-300">{formatNum(periodTotals.korxonaCredit)}</b>
+                {periodTotals.boshqaCount > 0 && <> · {t("коммунал/бюджет")}: {formatNum(periodTotals.boshqaCredit)}</>}
               </p>
             </div>
             <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950/60 p-4">
-              <p className="text-[11px] uppercase tracking-wider font-bold text-slate-500">Фарқи ({periodTitle})</p>
+              <p className="text-[11px] uppercase tracking-wider font-bold text-slate-500">{t("Фарқи")} ({periodTitle})</p>
               <p className={`text-xl font-bold tabular mt-1 ${periodTotals.diff < 0 ? "text-rose-600 dark:text-rose-400" : periodTotals.diff > 0 ? "text-amber-600 dark:text-amber-400" : "text-emerald-600 dark:text-emerald-400"}`}>
                 {formatNum(periodTotals.diff)}
               </p>
               <p className="text-[11px] text-slate-500 tabular mt-1">
-                корхоналар: <b className="text-slate-700 dark:text-slate-300">{formatNum(periodTotals.korxonaDebit - periodTotals.korxonaCredit)}</b>
+                {t("корхоналар")}: <b className="text-slate-700 dark:text-slate-300">{formatNum(periodTotals.korxonaDebit - periodTotals.korxonaCredit)}</b>
               </p>
             </div>
           </div>
 
           {periodTotals.hintCount > 0 && (
             <div className="mb-3 rounded-xl border border-amber-300/70 dark:border-amber-700/50 bg-amber-50 dark:bg-amber-950/30 px-4 py-2.5 text-xs text-amber-900 dark:text-amber-200">
-              <b>{periodTotals.hintCount}</b> та контрагент коммуналга ўхшайди (номи бўйича ёки
-              бошқа корхоналар шундай белгилагани учун), лекин улар
-              <b> ҳисобдан чиқарилмаган</b> — жадвалда «?» белгиси билан турибди.
-              Текшириб, тоифасини ўзгартиринг. Тизим ўзи ҳеч қачон яшириб қўймайди.
+              <b>{periodTotals.hintCount}</b> {t("та контрагент коммуналга ўхшайди (номи бўйича ёки бошқа корхоналар шундай белгилагани учун), лекин улар")}
+              <b> {t("ҳисобдан чиқарилмаган")}</b> {t("— жадвалда «?» белгиси билан турибди. Текшириб, тоифасини ўзгартиринг. Тизим ўзи ҳеч қачон яшириб қўймайди.")}
             </div>
           )}
 
           <p className="text-xs text-slate-500 mb-3">
-            Жами <b className="text-slate-700 dark:text-slate-300">{periodTotals.count}</b> контрагент,
-            шундан <b className="text-slate-700 dark:text-slate-300">{periodTotals.withDiff}</b> тасида фарқ бор.
-            Қуйидаги жадвалда <b className="text-slate-700 dark:text-slate-300">
-              {filterType === "DIFF" ? "фақат фарқи борлар" : filterType === "EQUAL" ? "фақат тенг бўлганлар" : "барчаси"}
-            </b> кўрсатилмоқда, жадвал остидаги «Жами танланганлар» эса фақат ✓ белгиланганларни қўшади.
+            {t("Жами")} <b className="text-slate-700 dark:text-slate-300">{periodTotals.count}</b> {t("контрагент, шундан")}
+            {" "}<b className="text-slate-700 dark:text-slate-300">{periodTotals.withDiff}</b> {t("тасида фарқ бор. Қуйидаги жадвалда")}
+            {" "}<b className="text-slate-700 dark:text-slate-300">
+              {filterType === "DIFF" ? t("фақат фарқи борлар") : filterType === "EQUAL" ? t("фақат тенг бўлганлар") : t("барчаси")}
+            </b> {t("кўрсатилмоқда, жадвал остидаги «Жами танланганлар» эса фақат ✓ белгиланганларни қўшади.")}
           </p>
 
           {/* JADVAL */}
@@ -1064,17 +1156,17 @@ export default function CompanyDetailPage({ params }: PageProps) {
                       onChange={toggleAll}
                     />
                   </th>
-                  <th className="p-3 text-left"><SortHeader label="Фирма номлари" k="name" activeKey={sortKey} dir={sortDir} onToggle={toggleSort} /></th>
-                  <th className="p-3 w-32 text-center"><SortHeader label="СТИР" k="inn" align="center" activeKey={sortKey} dir={sortDir} onToggle={toggleSort} /></th>
-                  <th className="p-3 w-32 text-center uppercase tracking-wider text-[11px] font-bold text-slate-500 dark:text-slate-400">Тоифа</th>
+                  <th className="p-3 text-left"><SortHeader label={t("Фирма номлари")} k="name" activeKey={sortKey} dir={sortDir} onToggle={toggleSort} /></th>
+                  <th className="p-3 w-32 text-center"><SortHeader label={t("СТИР")} k="inn" align="center" activeKey={sortKey} dir={sortDir} onToggle={toggleSort} /></th>
+                  <th className="p-3 w-32 text-center uppercase tracking-wider text-[11px] font-bold text-slate-500 dark:text-slate-400">{t("Тоифа")}</th>
                   {showSaldo && (
-                    <th className="p-3 w-36 text-right uppercase tracking-wider text-[11px] font-bold text-slate-500 dark:text-slate-400">Ўтган даврдан</th>
+                    <th className="p-3 w-36 text-right uppercase tracking-wider text-[11px] font-bold text-slate-500 dark:text-slate-400">{t("Ўтган даврдан")}</th>
                   )}
-                  <th className="p-3 w-40 text-right"><SortHeader label="Чиққан пул жами" k="debit" align="right" activeKey={sortKey} dir={sortDir} onToggle={toggleSort} /></th>
-                  <th className="p-3 w-40 text-right"><SortHeader label="Келган счет-ф жами" k="credit" align="right" activeKey={sortKey} dir={sortDir} onToggle={toggleSort} /></th>
-                  <th className="p-3 w-40 text-right"><SortHeader label="Фарқи" k="diff" align="right" activeKey={sortKey} dir={sortDir} onToggle={toggleSort} /></th>
-                  <th className="p-3 w-48 text-left uppercase tracking-wider text-[11px] font-bold text-slate-500 dark:text-slate-400">Изоҳ</th>
-                  <th className="p-3 w-24 text-center uppercase tracking-wider text-[11px] font-bold text-slate-500 dark:text-slate-400">Ойлар</th>
+                  <th className="p-3 w-40 text-right"><SortHeader label={t("Тўланган пул жами")} k="debit" align="right" activeKey={sortKey} dir={sortDir} onToggle={toggleSort} /></th>
+                  <th className="p-3 w-40 text-right"><SortHeader label={t("Келган фактура")} k="credit" align="right" activeKey={sortKey} dir={sortDir} onToggle={toggleSort} /></th>
+                  <th className="p-3 w-40 text-right"><SortHeader label={t("Фарқи")} k="diff" align="right" activeKey={sortKey} dir={sortDir} onToggle={toggleSort} /></th>
+                  <th className="p-3 w-48 text-left uppercase tracking-wider text-[11px] font-bold text-slate-500 dark:text-slate-400">{t("Изоҳ")}</th>
+                  <th className="p-3 w-24 text-center uppercase tracking-wider text-[11px] font-bold text-slate-500 dark:text-slate-400">{t("Ойлар")}</th>
                 </tr>
               </thead>
 
@@ -1082,7 +1174,7 @@ export default function CompanyDetailPage({ params }: PageProps) {
                 {filteredData.length === 0 ? (
                   <tr>
                     <td colSpan={colCount} className="text-center p-12 text-slate-500 font-medium text-base">
-                      Маълумот топилмади... 🕵️‍♂️
+                      {t("Маълумот топилмади... 🕵️‍♂️")}
                     </td>
                   </tr>
                 ) : (
@@ -1093,7 +1185,7 @@ export default function CompanyDetailPage({ params }: PageProps) {
                     const isInvoiceNeeded = tx.difference > 0;
                     const isDebt = tx.difference < 0;
 
-                    const statusText = isInvoiceNeeded ? "Ҳисоб фактура олиш керак" : isDebt ? "Қарзмиз" : "-";
+                    const statusText = isInvoiceNeeded ? t("Ҳисоб фактура олиш керак") : isDebt ? t("Қарзмиз") : "-";
                     const statusColor = isDebt ? "text-rose-600 dark:text-rose-400" : isInvoiceNeeded ? "text-amber-600 dark:text-amber-400" : "text-slate-500";
 
                     return (
@@ -1122,10 +1214,10 @@ export default function CompanyDetailPage({ params }: PageProps) {
                               onChange={(e) => handleCategoryChange(tx, e.target.value as Category)}
                               title={
                                 tx.categoryLabel
-                                  ? `${tx.categoryLabel}${tx.categorySource === "user" ? " (сиз белгилагансиз)" : ""}`
+                                  ? `${t(tx.categoryLabel)}${tx.categorySource === "user" ? ` ${t("(сиз белгилагансиз)")}` : ""}`
                                   : tx.categoryHintLabel
-                                    ? `${tx.categoryHintLabel} — текширинг`
-                                    : "Контрагент тоифаси"
+                                    ? `${t(tx.categoryHintLabel)} — ${t("текширинг")}`
+                                    : t("Контрагент тоифаси")
                               }
                               className={`w-full max-w-[110px] text-[11px] font-semibold rounded-md border px-1.5 py-1 outline-none cursor-pointer disabled:opacity-50 ${catOf(tx) === "korxona"
                                 ? tx.categoryHint
@@ -1136,7 +1228,7 @@ export default function CompanyDetailPage({ params }: PageProps) {
                             >
                               {(Object.keys(CATEGORY_LABELS) as Category[]).map((c) => (
                                 <option key={c} value={c} className="bg-slate-100 dark:bg-slate-900 text-slate-900 dark:text-slate-100">
-                                  {CATEGORY_LABELS[c]}
+                                  {t(CATEGORY_LABELS[c])}
                                   {c === "korxona" && tx.categoryHint ? " ?" : ""}
                                 </option>
                               ))}
@@ -1159,7 +1251,7 @@ export default function CompanyDetailPage({ params }: PageProps) {
                                 : "bg-white dark:bg-slate-900/60 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-800 hover:text-indigo-600 dark:hover:text-indigo-400 hover:border-indigo-500/40"
                                 }`}
                             >
-                              {isExpanded ? "Ёпиш" : "Очиш"}
+                              {isExpanded ? t("Ёпиш") : t("Очиш")}
                               <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-300 ${isExpanded ? "rotate-180" : ""}`} />
                             </button>
                           </td>
@@ -1170,22 +1262,22 @@ export default function CompanyDetailPage({ params }: PageProps) {
                             <td colSpan={colCount} className="p-0">
                               <div className="anim-fade bg-slate-100/70 dark:bg-slate-900/50 p-5 md:p-6 border-y border-indigo-500/10">
                                 <h4 className="font-bold text-indigo-700 dark:text-indigo-300 mb-4 flex items-center gap-2 text-sm">
-                                  📅 {tx.name} — Ойма-ой тафсилотлар
+                                  📅 {tx.name} — {t("Ойма-ой тафсилотлар")}
                                 </h4>
                                 <div className="overflow-hidden rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-100 dark:bg-slate-950/60">
                                   <table className="w-full text-sm text-left">
                                     <thead className="bg-slate-100 dark:bg-slate-900/80 text-slate-500 dark:text-slate-400">
                                       <tr>
-                                        <th className="p-3 font-bold text-[11px] uppercase tracking-wider">Давр</th>
-                                        <th className="p-3 font-bold text-[11px] uppercase tracking-wider text-right">Чиққан пул (Дебет)</th>
-                                        <th className="p-3 font-bold text-[11px] uppercase tracking-wider text-right">Келган счет-ф (Кредит)</th>
-                                        <th className="p-3 font-bold text-[11px] uppercase tracking-wider text-right">Фарқ</th>
+                                        <th className="p-3 font-bold text-[11px] uppercase tracking-wider">{t("Давр")}</th>
+                                        <th className="p-3 font-bold text-[11px] uppercase tracking-wider text-right">{t("Тўланган пул")}</th>
+                                        <th className="p-3 font-bold text-[11px] uppercase tracking-wider text-right">{t("Келган фактура")}</th>
+                                        <th className="p-3 font-bold text-[11px] uppercase tracking-wider text-right">{t("Фарқ")}</th>
                                       </tr>
                                     </thead>
                                     <tbody className="divide-y divide-slate-200 dark:divide-slate-800/60">
                                       {sortedPeriods(tx.monthlyData).length === 0 ? (
                                         <tr>
-                                          <td colSpan={4} className="p-3 text-center text-slate-500">Ойлик маълумот йўқ</td>
+                                          <td colSpan={4} className="p-3 text-center text-slate-500">{t("Ойлик маълумот йўқ")}</td>
                                         </tr>
                                       ) : sortedPeriods(tx.monthlyData).map((period) => {
                                         const bucket = tx.monthlyData[period] || { debit: 0, credit: 0 };
@@ -1195,7 +1287,7 @@ export default function CompanyDetailPage({ params }: PageProps) {
 
                                         return (
                                           <tr key={period} className="hover:bg-slate-100 dark:hover:bg-slate-900/50 transition-colors">
-                                            <td className="p-3 font-semibold text-slate-700 dark:text-slate-300">{periodLabel(period)}</td>
+                                            <td className="p-3 font-semibold text-slate-700 dark:text-slate-300">{periodLabel(period, t)}</td>
                                             <td className="p-2">
                                               <input
                                                 type="number"
@@ -1237,7 +1329,7 @@ export default function CompanyDetailPage({ params }: PageProps) {
                 <tfoot className="sticky bottom-0 z-30 bg-slate-100 dark:bg-slate-900 font-bold border-t-2 border-slate-300 dark:border-slate-700">
                   <tr>
                     <td className="p-3 text-center text-indigo-600 dark:text-indigo-400">✓</td>
-                    <td colSpan={3} className="p-3 text-right uppercase tracking-wider text-[11px] text-slate-500 dark:text-slate-400">Жами танланганлар:</td>
+                    <td colSpan={3} className="p-3 text-right uppercase tracking-wider text-[11px] text-slate-500 dark:text-slate-400">{t("Жами танланганлар:")}</td>
                     {showSaldo && (
                       <td className="p-3 text-right text-xs text-slate-500 dark:text-slate-400 tabular">{formatNum(grandTotals.saldo)}</td>
                     )}
@@ -1247,7 +1339,7 @@ export default function CompanyDetailPage({ params }: PageProps) {
                       {formatNum(grandTotals.diff)}
                     </td>
                     <td className={`p-3 text-left pl-4 text-xs ${grandTotals.diff < 0 ? "text-rose-600 dark:text-rose-400" : grandTotals.diff > 0 ? "text-amber-600 dark:text-amber-400" : "text-slate-500"}`}>
-                      {grandTotals.diff < 0 ? "Қарзмиз" : grandTotals.diff > 0 ? "Ҳисоб фактура олиш керак" : "-"}
+                      {grandTotals.diff < 0 ? t("Қарзмиз") : grandTotals.diff > 0 ? t("Ҳисоб фактура олиш керак") : "-"}
                     </td>
                     <td className="p-3"></td>
                   </tr>

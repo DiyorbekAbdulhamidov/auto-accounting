@@ -1,7 +1,12 @@
 "use client";
 import { createContext, useContext, useEffect, useRef, useState } from "react";
 import { auth, db } from "@/lib/firebase";
-import { onAuthStateChanged, signOut, signInWithEmailAndPassword } from "firebase/auth";
+import {
+  onAuthStateChanged,
+  signOut,
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
+} from "firebase/auth";
 import { doc, getDoc } from "firebase/firestore";
 import { usePathname, useRouter } from "next/navigation";
 
@@ -18,9 +23,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     pathnameRef.current = pathname;
   }, [pathname]);
 
+  // RO'YXATDAN O'TISH POYGASI. `createUserWithEmailAndPassword` darhol
+  // auth holatini o'zgartiradi, `allowed_users` hujjati esa /api/signup
+  // ishlagandan KEYIN paydo bo'ladi. Oradagi lahzada quyidagi tekshiruv
+  // «ruxsat yo'q» deb foydalanuvchini tashqariga uloqtirardi. Shu bayroq
+  // o'sha oraliqni yopadi.
+  const signingUpRef = useRef(false);
+
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       try {
+        if (signingUpRef.current) return;
         if (firebaseUser?.email) {
           const userRef = doc(db, "allowed_users", firebaseUser.email);
           const userSnap = await getDoc(userRef);
@@ -70,13 +83,60 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  /**
+   * RO'YXATDAN O'TISH — o'zi ochadi va darhol ishlaydi.
+   *
+   * Ikki bosqich: avval Firebase'da hisob ochiladi, keyin /api/signup
+   * ish maydonini yaratadi. Ikkinchisi yiqilsa hisob YARIM holatda
+   * qolmasligi kerak — shuning uchun Firebase hisobi o'chiriladi va
+   * odam qaytadan urinib ko'ra oladi.
+   */
+  const signup = async (email: string, pass: string): Promise<string | null> => {
+    setLoading(true);
+    signingUpRef.current = true;
+    try {
+      const cred = await createUserWithEmailAndPassword(auth, email, pass);
+      const token = await cred.user.getIdToken();
+      const res = await fetch("/api/signup", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        await cred.user.delete().catch(() => signOut(auth));
+        signingUpRef.current = false;
+        setLoading(false);
+        return data.error || "Рўйхатдан ўтишда хатолик.";
+      }
+
+      // Ish maydoni endi tayyor — foydalanuvchi holatini O'ZIMIZ qo'yamiz.
+      // `onAuthStateChanged` bu hisob uchun allaqachon ishlab bo'lgan va
+      // qaytadan chaqirilmaydi.
+      const userSnap = await getDoc(doc(db, "allowed_users", cred.user.email!));
+      signingUpRef.current = false;
+      setUser({ ...cred.user, ...(userSnap.exists() ? userSnap.data() : {}) });
+      setLoading(false);
+      router.replace("/");
+      return null;
+    } catch (error) {
+      signingUpRef.current = false;
+      setLoading(false);
+      const err = error as { code?: string; message?: string };
+      const code = String(err?.code || "");
+      if (code.includes("email-already-in-use")) return "Бу электрон почта аллақачон рўйхатдан ўтган. Кириш бўлимидан фойдаланинг.";
+      if (code.includes("weak-password")) return "Парол жуда содда — камида 6 та белги бўлсин.";
+      if (code.includes("invalid-email")) return "Электрон почта нотўғри ёзилган.";
+      return err?.message || "Рўйхатдан ўтишда хатолик.";
+    }
+  };
+
   const logout = async () => {
     await signOut(auth);
     router.replace("/login");
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, logout }}>
+    <AuthContext.Provider value={{ user, loading, login, signup, logout }}>
       {children}
     </AuthContext.Provider>
   );

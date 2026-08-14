@@ -11,11 +11,15 @@
 
 import { NextResponse } from "next/server";
 import { getAdminServices, getAdminInitError, type AdminServices } from "./firebaseAdmin";
+import { resolveWorkspaceId } from "./workspace";
 
 export interface AuthUser {
   uid: string;
   email: string;
   role: string;
+  /** Foydalanuvchining ish maydoni. Yo'q bo'lsa shu yerda YARATILADI —
+   *  aks holda ma'lumot egasiz yozilib qolardi (src/lib/workspace.ts). */
+  workspaceId: string;
 }
 
 export type AuthError = NextResponse<{ error: string }>;
@@ -70,9 +74,21 @@ export async function requireUser(req: Request): Promise<AuthResult> {
       return deny("Ҳисобингиз фаол эмас.", 403);
     }
 
+    // Ish maydoni har API chaqiruvida ta'minlanadi: eski foydalanuvchilarda
+    // u yo'q, shuning uchun birinchi so'rovda yaratiladi.
+    let workspaceId = typeof data.workspaceId === "string" ? data.workspaceId : "";
+    if (!workspaceId) {
+      const { FieldValue } = await import("firebase-admin/firestore");
+      workspaceId = await resolveWorkspaceId(
+        admin.db as unknown as Parameters<typeof resolveWorkspaceId>[0],
+        email,
+        FieldValue.serverTimestamp()
+      );
+    }
+
     return {
       ok: true,
-      user: { uid: decoded.uid, email, role: String(data.role ?? "user") },
+      user: { uid: decoded.uid, email, role: String(data.role ?? "user"), workspaceId },
       admin,
     };
   } catch (e) {
@@ -91,4 +107,27 @@ export async function requireAdmin(req: Request): Promise<AuthResult> {
     return deny("Бу амал учун администратор ҳуқуқи керак.", 403);
   }
   return result;
+}
+
+/**
+ * Korxona SHU foydalanuvchining ish maydoniga tegishlimi?
+ *
+ * Nega kerak: `companyId` klientdan keladi. Firestore qoidalari Admin SDK'ga
+ * TA'SIR QILMAYDI, ya'ni route ichida tekshirilmasa, istalgan foydalanuvchi
+ * begona korxonaning kontragent toifalarini o'qib/yozib yuborardi.
+ */
+export async function assertCompanyAccess(
+  admin: AdminServices,
+  companyId: string,
+  workspaceId: string
+): Promise<AuthError | null> {
+  if (!companyId) return null; // korxonasiz ham sverka qilinadi (saqlanmaydi)
+  const snap = await admin.db.collection("companies").doc(companyId).get();
+  if (!snap.exists) {
+    return NextResponse.json({ error: "Корхона топилмади." }, { status: 404 });
+  }
+  if (snap.data()?.workspaceId !== workspaceId) {
+    return NextResponse.json({ error: "Бу корхона сизнинг иш майдонингизга тегишли эмас." }, { status: 403 });
+  }
+  return null;
 }

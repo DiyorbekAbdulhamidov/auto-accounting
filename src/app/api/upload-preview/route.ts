@@ -7,7 +7,7 @@ import { NextResponse } from 'next/server';
 import { auditFiles, type InputFile } from '@/lib/statementAudit';
 import type { LearnedFormat } from '@/lib/formatMemory';
 import { MIN_COMPANIES_FOR_HINT, type Category, type GlobalHint } from '@/lib/counterpartyCategory';
-import { requireUser } from '@/lib/apiAuth';
+import { assertCompanyAccess, requireUser } from '@/lib/apiAuth';
 import type { Firestore } from 'firebase-admin/firestore';
 
 export const runtime = 'nodejs';
@@ -140,6 +140,11 @@ export async function POST(req: Request) {
     const includePending = String(formData.get('includePending') || '') === 'true';
     const companyId = String(formData.get('companyId') || '');
 
+    // `companyId` klientdan keladi — u haqiqatan shu ish maydoniga
+    // tegishlimi, tekshirilmasa begona korxona ma'lumoti ochilardi.
+    const denied = await assertCompanyAccess(auth.admin, companyId, auth.user.workspaceId);
+    if (denied) return denied;
+
     const [knownFormats, categoryOverrides, categoryGlobalHints] = await Promise.all([
       loadKnownFormats(auth.admin.db),
       loadCategoryOverrides(auth.admin.db, companyId),
@@ -155,6 +160,7 @@ export async function POST(req: Request) {
         error: "Файл ичидан ҳисоб-китобга яроқли маълумот топилмади.",
         warnings: result.warnings,
         sheets: result.sheets,
+        balanceChecks: result.balanceChecks,
       }, { status: 400 });
     }
 
@@ -164,6 +170,12 @@ export async function POST(req: Request) {
       detectedFormats: result.detectedFormats,
       warnings: result.warnings,
       sheets: result.sheets,
+      // Қолдиқ тенгламаси: бошланғич қолдиқ + кредит − дебет = охирги қолдиқ.
+      // «Итого»дан мустақил назорат — дебет билан кредит алмашиб кетса
+      // «Итого» сезмайди, бу эса сезади.
+      balanceChecks: result.balanceChecks,
+      // Рақамини ТАСДИҚЛАБ бўлмайдиган файллар (на «Итого», на қолдиқ)
+      unverifiedFiles: result.unverifiedFiles,
       totals: result.totals,
       categoryTotals: result.categoryTotals,
       // Qaysi shakllar tanish bo'lgani/yangi o'rganilgani

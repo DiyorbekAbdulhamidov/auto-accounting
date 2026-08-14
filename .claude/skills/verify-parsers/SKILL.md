@@ -1,0 +1,54 @@
+---
+name: verify-parsers
+description: Sverka parserlarini haqiqiy bank fayllariga qarshi tekshirish. Har qanday o'zgarish `src/lib/statementAudit.ts`, `bankStatements.ts`, `incomeParser.ts`, `universalParser.ts`, `excelWorkbook.ts`, `formatMemory.ts` yoki `counterpartyCategory.ts` ga tegsa — SHU skill ishga tushirilsin. Yangi bank fayli kelganda ham shu.
+---
+
+# Parserlarni tekshirish
+
+Bu loyihada raqam noto'g'ri chiqishi eng qimmat xato turi. Shuning uchun
+har qanday parser o'zgarishidan keyin regress majburiy.
+
+## Ishga tushirish
+
+```bash
+node scripts/verify-parsers.cjs
+```
+
+Fayllar boshqa papkada bo'lsa:
+
+```bash
+node scripts/verify-parsers.cjs "C:/boshqa/papka"
+```
+
+Chiqish kodi 0 — hammasi o'tdi, 1 — kamida bitta tekshiruv yiqilgan.
+
+## Nimani tekshiradi
+
+1. **«ИТОГО»** — har varaqda o'qilgan qatorlar yig'indisi faylning o'z
+   yakuniy qatoriga teng bo'lishi shart.
+2. **Qoldiq tenglamasi** — boshlang'ich qoldiq + kredit − debet = oxirgi
+   qoldiq. «Итого»dan mustaqil. **Debet bilan kredit almashib ketsa
+   «Итого» buni sezmaydi, bu esa sezadi** — Ipoteka/ASBT fayli aynan
+   shu xatoni keltirgan edi.
+3. **Toifalar** — kommunal/byudjet kesimlari yig'indisi umumiy JAMIga
+   teng bo'lishi shart (toifalash pul yo'qotmasligi kerak).
+
+## Qoidalar
+
+- **Raqamni "to'g'rilash" uchun qo'lda tuzatma qo'shilmaydi.** Faqat
+  sabab topiladi va manba bilan solishtiriladi.
+- Yiqilgan tekshiruvni oq ro'yxatga qo'shishdan oldin **sababi
+  isbotlanishi** shart. `KNOWN_GAP` da hozir ikkita yozuv bor va
+  ikkalasi ham manba faylda qatorlar o'chirilganidan (isbotlangan).
+- Yangi bank fayli kelsa: `ETALON` ga faylning o'z «Итого» raqamlarini
+  qo'shing, keyin skriptni chopib ko'ring.
+
+## Qo'shimcha tekshiruvlar
+
+Parser kodiga tegilgan bo'lsa, bulardan keyin:
+
+```bash
+npx tsc --noEmit
+npx eslint src/lib src/app
+npx next build
+```

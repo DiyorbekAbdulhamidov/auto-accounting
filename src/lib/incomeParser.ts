@@ -25,7 +25,14 @@
 import * as XLSX from 'xlsx';
 import iconv from 'iconv-lite';
 import { createHash } from 'crypto';
-import { parseNewBankFormats } from './bankStatements';
+import {
+  absorbBalances,
+  checkBalanceEquation,
+  findAccountBalances,
+  newBalanceTally,
+  parseNewBankFormats,
+  type BalanceCheck,
+} from './bankStatements';
 import { readWorkbookSmart } from './excelWorkbook';
 
 export type Cell = string | number | boolean | Date | null | undefined;
@@ -95,6 +102,9 @@ export interface IncomeReport {
     periodFrom: string | null;
     periodTo: string | null;
     warnings: string[];
+    /** Ҳар файл учун қолдиқ тенгламаси: бошланғич қолдиқ + кредит −
+     *  дебет = охирги қолдиқ. «Итого»дан мустақил назорат. */
+    balanceChecks: BalanceCheck[];
   };
 }
 
@@ -509,8 +519,13 @@ function isOwnExportSheet(rows: Cell[][]): boolean {
   for (let r = 0; r < limit; r++) {
     const text = (rows[r] || []).map((v) => cellText(v)).join('|').toUpperCase();
     if (!text.includes('ФИРМА НОМЛАРИ')) continue;
-    if (/(КЕЛГАН|ЧИҚҚАН|ЧИККАН)\s+ПУЛ\s+ЖАМИ/.test(text)) return true;
+    // Sarlavhalar 2026-08-13 da o'zgardi («келган пул» → «тушган пул»,
+    // «счет-ф» → «фактура»). ESKI shakl ham qoldirilgan: foydalanuvchining
+    // papkasida ilgari chiqarilgan fayllar turibdi va ular ham tanilishi
+    // kerak — aks holda himoya jimgina ishlamay qo'yardi.
+    if (/(КЕЛГАН|ЧИҚҚАН|ЧИККАН|ТУШГАН|ТЎЛАНГАН|ТУЛАНГАН)\s+ПУЛ\s+ЖАМИ/.test(text)) return true;
     if (/СЧЕТ-Ф\s+ЖАМИ/.test(text)) return true;
+    if (/(ЁЗИЛГАН|ЕЗИЛГАН|КЕЛГАН)\s+ФАКТУРА\s+ЖАМИ/.test(text)) return true;
   }
   return false;
 }
@@ -559,6 +574,18 @@ function isConfirmedStatus(s: string): boolean {
          t.includes('tasdiq') || t.includes('confirm');
 }
 
+// BEKOR QILINGAN fakturalar — bular HECH QACHON hisoblanmaydi.
+// «Ожидает подписи партнёра» (imzo kutilmoqda) esa boshqa narsa:
+// faktura yozib berilgan, faqat qarshi tomon hali imzolamagan. Buxgalteriya
+// qoidasi bo'yicha u hali kuchga kirmagan — shuning uchun STANDART holatda
+// hisoblanmaydi, lekin ba'zi buxgalterlar sverkaga qo'shadi (chiqim
+// tomonida ham aynan shu tanlov bor: statementAudit.ts `includePending`).
+const REJECTED_RE = /отмен|отказ|недейств|аннулир|bekor|rad et|бекор|рад эт/;
+
+function isRejectedStatus(s: string): boolean {
+  return REJECTED_RE.test(s.toLowerCase());
+}
+
 function looksLikeFacturaSheet(rows: Cell[][]): HeaderHit | null {
   return findHeader(rows, FACTURA_SPEC, ['amount', 'doc'], 30);
 }
@@ -576,17 +603,24 @@ interface ParsedInvoice {
 interface FacturaSheetResult {
   invoices: ParsedInvoice[];
   skipped: Map<string, { count: number; amount: number }>;
+  /** Hisoblangan, lekin hali imzolanmagan («Ожидает подписи партнёра») */
+  pending: Map<string, { count: number; amount: number }>;
   ownInn: string;
   ownName: string;
   direction: 'SENT' | 'RECEIVED' | 'UNKNOWN';
 }
 
-function parseFacturaSheet(rows: Cell[][], hit: HeaderHit): FacturaSheetResult {
+function parseFacturaSheet(
+  rows: Cell[][],
+  hit: HeaderHit,
+  includePending: boolean
+): FacturaSheetResult {
   const c = hit.cols;
   const start = hit.rowIndex + 1;
 
   const invoices: ParsedInvoice[] = [];
   const skipped = new Map<string, { count: number; amount: number }>();
+  const pending = new Map<string, { count: number; amount: number }>();
 
   // Kimning reestri ekanini aniqlash: ustunlardan qaysi birida
   // bitta STIR deyarli hamma qatorda takrorlansa - o'sha bizniki.
@@ -641,14 +675,22 @@ function parseFacturaSheet(rows: Cell[][], hit: HeaderHit): FacturaSheetResult {
     if (sig && seenIds.has(sig)) continue;
     if (sig) seenIds.add(sig);
 
-    // Bekor qilingan / rad etilgan / haqiqiy emas fakturalar hisobga olinmaydi
-    if (status && !isConfirmedStatus(status)) {
-      const label = status;
-      const prev = skipped.get(label) || { count: 0, amount: 0 };
+    // Bekor qilingan / rad etilgan — HECH QACHON hisoblanmaydi
+    if (status && isRejectedStatus(status)) {
+      const prev = skipped.get(status) || { count: 0, amount: 0 };
       prev.count++;
       prev.amount += amount;
-      skipped.set(label, prev);
+      skipped.set(status, prev);
       continue;
+    }
+    // Tasdiqlanmagan, lekin bekor ham qilinmagan (imzo kutilmoqda)
+    if (status && !isConfirmedStatus(status)) {
+      const bucket = includePending ? pending : skipped;
+      const prev = bucket.get(status) || { count: 0, amount: 0 };
+      prev.count++;
+      prev.amount += amount;
+      bucket.set(status, prev);
+      if (!includePending) continue;
     }
 
     if (!ownName && ownNameCol !== undefined) ownName = cellText(row[ownNameCol]);
@@ -667,7 +709,7 @@ function parseFacturaSheet(rows: Cell[][], hit: HeaderHit): FacturaSheetResult {
     });
   }
 
-  return { invoices, skipped, ownInn, ownName, direction };
+  return { invoices, skipped, pending, ownInn, ownName, direction };
 }
 
 // ------------------------------------------------------------
@@ -787,7 +829,15 @@ function parseBankSheet(rows: Cell[][], hit: HeaderHit): BankSheetResult {
 // ASOSIY: fayllarni o'qib, kirim–faktura solishtiruvini qurish
 // ------------------------------------------------------------
 
-export function analyzeIncome(files: InputFile[]): IncomeReport {
+export interface IncomeOptions {
+  /** «Ожидает подписи партнёра» ҳолатидаги фактураларни ҳам ҳисоблаш.
+   *  Стандарт ҲОЛАТДА ЙЎҚ: имзоланмаган фактура ҳали кучга кирмаган.
+   *  Чиқим сверкасидаги `includePending` билан айнан бир хил. */
+  includePending?: boolean;
+}
+
+export function analyzeIncome(files: InputFile[], options: IncomeOptions = {}): IncomeReport {
+  const includePending = options.includePending === true;
   const warnings: string[] = [];
   const bankSheets: string[] = [];
   const facturaSheets: string[] = [];
@@ -796,6 +846,7 @@ export function analyzeIncome(files: InputFile[]): IncomeReport {
   const allInvoices: ParsedInvoice[] = [];
   const allPayments: ParsedPayment[] = [];
   const skippedMap = new Map<string, { count: number; amount: number }>();
+  const balanceChecks: BalanceCheck[] = [];
 
   let ownInn = '-';
   let ownName = '';
@@ -825,6 +876,10 @@ export function analyzeIncome(files: InputFile[]): IncomeReport {
       continue;
     }
 
+    // QOLDIQ TENGLAMASI fayl bo'yicha yig'iladi: ASBT eksportida debet va
+    // kredit alohida varaqlarda, oxirgi qoldiq esa faqat oxirgisida.
+    const tally = newBalanceTally();
+
     for (const sd of sheets) {
       const label = `${sd.file}${sd.sheet !== 'CSV' ? ` / ${sd.sheet}` : ''}`;
 
@@ -838,7 +893,7 @@ export function analyzeIncome(files: InputFile[]): IncomeReport {
 
       const facturaHit = looksLikeFacturaSheet(sd.rows);
       if (facturaHit) {
-        const res = parseFacturaSheet(sd.rows, facturaHit);
+        const res = parseFacturaSheet(sd.rows, facturaHit, includePending);
         if (res.invoices.length === 0 && res.skipped.size === 0) continue;
 
         facturaSheets.push(`${sd.file}${sd.sheet !== 'CSV' ? ` / ${sd.sheet}` : ''}`);
@@ -855,6 +910,13 @@ export function analyzeIncome(files: InputFile[]): IncomeReport {
         if (!ownName && res.ownName) ownName = res.ownName;
 
         allInvoices.push(...res.invoices);
+        for (const [status, v] of res.pending) {
+          warnings.push(
+            `"${sd.file}" — «${status}» ҳолатидаги ${v.count} та фактура ` +
+            `(${v.amount.toLocaleString('ru-RU')}) ҲИСОБГА ОЛИНДИ ` +
+            `(фактура ёзиб берилган, фақат имзо кутилмоқда).`
+          );
+        }
         for (const [status, v] of res.skipped) {
           const prev = skippedMap.get(status) || { count: 0, amount: 0 };
           prev.count += v.count;
@@ -880,6 +942,11 @@ export function analyzeIncome(files: InputFile[]): IncomeReport {
         bankRowCount += newFormat.txs.length;
         totalCreditRaw += newFormat.totalCredit;
         totalDebitRaw += newFormat.totalDebit;
+
+        tally.sheets++;
+        tally.debit += newFormat.totalDebit;
+        tally.credit += newFormat.totalCredit;
+        absorbBalances(tally, newFormat.balances);
 
         for (const tx of newFormat.txs) {
           if (tx.credit <= 0) continue;
@@ -912,6 +979,15 @@ export function analyzeIncome(files: InputFile[]): IncomeReport {
           bankRowCount += res.rowCount;
           totalCreditRaw += res.totalCredit;
           totalDebitRaw += res.totalDebit;
+
+          // Eski shakl parseri qoldiqni o'qimaydi — qoldiq ustunlar
+          // xaritasiga bog'liq emas, shuning uchun qatorlardan mustaqil
+          // ravishda topiladi.
+          tally.sheets++;
+          tally.debit += res.totalDebit;
+          tally.credit += res.totalCredit;
+          absorbBalances(tally, findAccountBalances(sd.rows));
+
           allPayments.push(...res.payments);
           continue;
         }
@@ -919,6 +995,14 @@ export function analyzeIncome(files: InputFile[]): IncomeReport {
 
       // Na bank kо'chirmasi, na faktura reestri — jim o'tkazib yuborilmaydi
       if (hasContent(sd.rows)) unrecognized.push(label);
+    }
+
+    // Fayl tugadi — qoldiq tenglamasi. Bu «Итого»dan mustaqil nazorat:
+    // debet bilan kredit almashib ketsa «Итого» sezmaydi, bu sezadi.
+    if (tally.sheets > 0) {
+      const { check, warning } = checkBalanceEquation(file.name, tally);
+      balanceChecks.push(check);
+      if (warning) warnings.push(warning);
     }
   }
 
@@ -1198,6 +1282,7 @@ export function analyzeIncome(files: InputFile[]): IncomeReport {
       periodFrom: from,
       periodTo: to,
       warnings,
+      balanceChecks,
     },
   };
 }

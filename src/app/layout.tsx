@@ -1,4 +1,5 @@
 import { AuthProvider } from "@/context/AuthContext";
+import { LanguageProvider } from "@/context/LanguageContext";
 import "@/app/globals.css";
 
 // Metadata loyihangizning brauzerdagi nomi va SEO qismini bildiradi
@@ -23,7 +24,11 @@ export default function RootLayout({
         />
         {/* Barcha sahifalar auth holatidan xabardor bo'lishi uchun provider ichiga olamiz */}
         <AuthProvider>
-          {children}
+          {/* Til tanlovi ham hamma sahifaga kerak. Standart — kirill
+              o'zbekcha; tanlangani localStorage'da saqlanadi. */}
+          <LanguageProvider>
+            {children}
+          </LanguageProvider>
         </AuthProvider>
       </body>
     </html>

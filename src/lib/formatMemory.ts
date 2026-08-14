@@ -16,7 +16,7 @@
 // ============================================================
 
 import { createHash } from 'crypto';
-import { parseAmount, parseDate, type BankStatement, type BankTx, type Cell } from './bankStatements';
+import { findAccountBalances, parseAmount, parseDate, type BankStatement, type BankTx, type Cell } from './bankStatements';
 
 export type FormatKind = 'BANK' | 'FAKTURA';
 
@@ -119,8 +119,19 @@ export function makeLearnedFormat(params: {
     createdAt: now,
     updatedAt: now,
     uses: 1,
-    sampleFile: params.sampleFile,
+    // MAXFIYLIK: format xotirasi BARCHA ish maydonlari uchun umumiy —
+    // bu ataylab, chunki qancha ko'p foydalanuvchi bo'lsa, shuncha ko'p
+    // bank shakli taniladi. Lekin fayl NOMIda odatda mijoz firmasining
+    // nomi turadi («IMANMAX.xls»), ya'ni uni saqlash begonaga mijoz
+    // ro'yxatini ochib berardi. Shuning uchun faqat TURI saqlanadi.
+    sampleFile: fileKind(params.sampleFile),
   };
+}
+
+/** Fayl nomidan faqat kengaytma: «KARVON MEBILLARI.xls» → «.xls» */
+function fileKind(name: string): string {
+  const m = /(\.[a-z0-9]{1,5})$/i.exec(name.trim());
+  return m ? m[1].toLowerCase() : '';
 }
 
 // ------------------------------------------------------------
@@ -238,6 +249,10 @@ export function readBankWithFormat(
     totalCredit,
     footerDebit,
     footerCredit,
+    // Qoldiq tenglamasi saqlangan xarita bo'yicha o'qishda ham ishlaydi:
+    // qoldiq ustunlar xaritasiga bog'liq emas, u sarlavha/yakun
+    // qatorida matn bilan yozilgan.
+    balances: findAccountBalances(rows),
     layout: [{
       headerRow,
       amountCol: has('credit') ? c.credit : (c.amount ?? -1),
