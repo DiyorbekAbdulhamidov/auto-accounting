@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { Moon, Sun } from "lucide-react";
 import { useT } from "@/context/LanguageContext";
+import { buttonClasses } from "@/components/ui";
 
 export default function ThemeToggle() {
   const t = useT();
@@ -21,10 +22,10 @@ export default function ThemeToggle() {
     <button
       suppressHydrationWarning
       onClick={() => setDark((d) => !d)}
-      className="p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/60 text-slate-600 dark:text-amber-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-all duration-300"
+      className={buttonClasses("secondary", "md", { iconOnly: true })}
       title={t("Тунги/Кундузги режим")}
     >
-      {dark ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+      {dark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
     </button>
   );
 }

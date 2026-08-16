@@ -3,9 +3,10 @@
 //
 // Bu modul faqat ILGARI O'QILMAGAN (yoki noto'g'ri o'qilgan)
 // ko'chirma shakllarini taniydi va ularni bir xil ko'rinishga
-// (BankTx) keltiradi. Ikkala sahifa ham shundan foydalanadi:
-//   - /income-audit  (kirim sverkasi)
-//   - /excel-audit   (chiqim sverkasi, /api/upload-preview)
+// (BankTx) keltiradi. Ikkala sverka ham shundan foydalanadi
+// (`/korxonalar/[id]` sahifasidagi ikki tab):
+//   - kirim  -> /api/income-audit
+//   - chiqim -> /api/upload-preview
 //
 // MUHIM: har bir parser o'z IMZOsiga qarab ishlaydi va imzo
 // topilmasa null qaytaradi. Shuning uchun hozir xatosiz ishlab

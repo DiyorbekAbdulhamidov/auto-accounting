@@ -1,11 +1,24 @@
+import type { Metadata } from "next";
 import { AuthProvider } from "@/context/AuthContext";
 import { LanguageProvider } from "@/context/LanguageContext";
+import { BRAND } from "@/lib/brand";
 import "@/app/globals.css";
 
-// Metadata loyihangizning brauzerdagi nomi va SEO qismini bildiradi
-export const metadata = {
-  title: "Бухгалтерия Хизматлари Маркази | Ички Тизим",
-  description: "Интеллектуал бошқарув ва автоматик аудит тизими. Барча ҳаракатлар назорат остида.",
+// Brauzer yorlig'i va qidiruv natijasidagi matn.
+//
+// Bu YAGONA joy — sayt endi ochiq (bosh sahifa login talab qilmaydi),
+// shuning uchun matn ichki tizim tili bilan emas, foydalanuvchi tili
+// bilan yozilgan. Lotin: standart alifbo ham lotin.
+export const metadata: Metadata = {
+  title: {
+    default: `${BRAND.name} — pul bilan fakturani solishtiradi`,
+    template: `%s · ${BRAND.name}`,
+  },
+  description:
+    "Bank ko'chirmangizni va faktura ro'yxatini yuklang — tizim har bir kontragent " +
+    "bo'yicha pul bilan fakturani solishtiradi va farq borlarini ajratib beradi. " +
+    "Qo'lda bir necha kun ketadigan ish bir necha soniyada.",
+  applicationName: BRAND.name,
 };
 
 export default function RootLayout({

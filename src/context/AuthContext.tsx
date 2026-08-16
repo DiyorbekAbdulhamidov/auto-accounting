@@ -67,9 +67,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => unsubscribe();
   }, [router]);
 
+  // Kirgan odam login sahifasida turmaydi. Manzil "/" EMAS: bosh sahifa
+  // endi ochiq tanishtiruv sahifasi, ish esa korxonalar ro'yxatida.
   useEffect(() => {
     if (!loading && user && pathname === "/login") {
-      router.replace("/");
+      router.replace("/korxonalar");
     }
   }, [loading, user, pathname, router]);
 
@@ -116,7 +118,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       signingUpRef.current = false;
       setUser({ ...cred.user, ...(userSnap.exists() ? userSnap.data() : {}) });
       setLoading(false);
-      router.replace("/");
+      router.replace("/korxonalar");
       return null;
     } catch (error) {
       signingUpRef.current = false;

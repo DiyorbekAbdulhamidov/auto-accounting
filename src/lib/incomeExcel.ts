@@ -52,10 +52,13 @@ function fmtDate(iso: string | null): string {
   return `${d}.${m}.${y}`;
 }
 
-// Фарқнинг маъноси (сотувчи нуқтаи назаридан)
+// Фарқнинг маъноси. Фарқ = ФАКТУРА − ПУЛ (сальдо, `incomeParser.ts`).
+//   > 0 — фактура ёзилган, пул келмаган -> мижоз қарздор
+//   < 0 — пул келган, фактура ёзилмаган -> фактура ёзиш керак
+// Чиқим сверкаси билан БИР ХИЛ қоида: мусбат = улар қарздор.
 export function verdictText(diff: number): string {
-  if (diff > 0.01) return 'Ҳисоб фактура ёзиш керак';
-  if (diff < -0.01) return 'Бизга қарздор';
+  if (diff > 0.01) return 'Бизга қарздор';
+  if (diff < -0.01) return 'Ҳисоб фактура ёзиш керак';
   return '-';
 }
 
@@ -73,7 +76,7 @@ function yearOf(p: XlParty, year: string) {
       factura += b.factura;
     }
   }
-  return { credit, factura, diff: credit - factura };
+  return { credit, factura, diff: factura - credit };
 }
 
 function styleHeader(row: ExcelJS.Row) {
@@ -208,7 +211,7 @@ export function buildIncomeWorkbook(
     for (const y of years) {
       const c = rows.reduce((a, p) => a + yearOf(p, y).credit, 0);
       const f = rows.reduce((a, p) => a + yearOf(p, y).factura, 0);
-      totalCells.push(c, f, c - f);
+      totalCells.push(c, f, f - c);
     }
     totalCells.push(shown.credit, shown.factura, shown.diff);
     styleTotal(wy.addRow(totalCells), moneyCols);
@@ -233,7 +236,7 @@ export function buildIncomeWorkbook(
           dated ? MONTH_NAMES[Number(period.slice(5, 7)) - 1] : '—',
           b.credit,
           b.factura,
-          b.credit - b.factura,
+          b.factura - b.credit,
         ]),
         [5, 6, 7],
         [2, 3, 4]

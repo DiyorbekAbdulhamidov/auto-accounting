@@ -1,6 +1,7 @@
 "use client";
 import { useState } from "react";
 import { authFetch } from "@/lib/authFetch";
+import { Alert, Button, Card, Field, Input, Select, layout } from "@/components/ui";
 
 export default function AdminUsersPage() {
   const [email, setEmail] = useState("");
@@ -8,6 +9,7 @@ export default function AdminUsersPage() {
   const [role, setRole] = useState("user");
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState("");
+  const [ok, setOk] = useState(false);
 
   const handleCreateUser = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -31,72 +33,74 @@ export default function AdminUsersPage() {
       setLoading(false);
 
       if (data.success) {
-        setMsg("🎉 Foydalanuvchi yaratildi!");
+        setOk(true);
+        setMsg("Foydalanuvchi yaratildi!");
         setEmail("");
         setPassword("");
       } else {
-        setMsg("❌ Xatolik: " + data.error);
+        setOk(false);
+        setMsg("Xatolik: " + data.error);
       }
-    } catch (err: any) {
+    } catch (err) {
       setLoading(false);
-      if (err.name === 'AbortError') {
-        setMsg("❌ Tarmoq juda sekin: Server Google bilan bog'lana olmadi (Timeout). Internetni tekshiring yoki VPN yoqing!");
+      setOk(false);
+      // `AbortError` ni ajratamiz: sekin tarmoq bilan haqiqiy xatoni
+      // farqlash kerak, aks holda foydalanuvchi noto'g'ri joyni qidiradi
+      if (err instanceof Error && err.name === "AbortError") {
+        setMsg("Tarmoq juda sekin: Server Google bilan bog'lana olmadi (Timeout). Internetni tekshiring yoki VPN yoqing!");
       } else {
-        setMsg("❌ Kutilmagan xatolik yuz berdi.");
+        setMsg("Kutilmagan xatolik yuz berdi.");
       }
     }
   };
 
   return (
-    <div className="max-w-md mx-auto mt-10 p-6 bg-white rounded-xl shadow-md border">
-      <h2 className="text-xl font-bold text-gray-800 mb-4">Yangi Foydalanuvchi Qoʻshish</h2>
+    <div className={`${layout.page} flex items-start justify-center px-4 py-10`}>
+      <Card className="w-full max-w-sm p-6">
+        <h1 className="mb-5 text-h2 font-semibold text-ink">Yangi Foydalanuvchi Qoʻshish</h1>
 
-      {msg && <p className="mb-4 text-sm font-medium p-2 bg-gray-50 rounded text-center">{msg}</p>}
+        {msg && (
+          <Alert tone={ok ? "ok" : "bad"} className="mb-4">
+            {msg}
+          </Alert>
+        )}
 
-      <form onSubmit={handleCreateUser} className="space-y-4">
-        <div>
-          <label className="block text-sm font-medium text-gray-700">Email (Login)</label>
-          <input
-            type="email"
-            required
-            className="mt-1 w-full p-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-          />
-        </div>
+        <form onSubmit={handleCreateUser} className="space-y-4">
+          <Field label="Email (Login)" htmlFor="admin-email">
+            <Input
+              id="admin-email"
+              type="email"
+              required
+              autoComplete="off"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+            />
+          </Field>
 
-        <div>
-          <label className="block text-sm font-medium text-gray-700">Parol</label>
-          <input
-            type="password"
-            required
-            minLength={6}
-            className="mt-1 w-full p-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-          />
-        </div>
+          <Field label="Parol" htmlFor="admin-password">
+            <Input
+              id="admin-password"
+              type="password"
+              required
+              minLength={6}
+              autoComplete="new-password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+            />
+          </Field>
 
-        <div>
-          <label className="block text-sm font-medium text-gray-700">Huquqi (Role)</label>
-          <select
-            className="mt-1 w-full p-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-            value={role}
-            onChange={(e) => setRole(e.target.value)}
-          >
-            <option value="user">Oddiy xodim</option>
-            <option value="admin">Admin / Superuser</option>
-          </select>
-        </div>
+          <Field label="Huquqi (Role)" htmlFor="admin-role">
+            <Select id="admin-role" value={role} onChange={(e) => setRole(e.target.value)}>
+              <option value="user">Oddiy xodim</option>
+              <option value="admin">Admin / Superuser</option>
+            </Select>
+          </Field>
 
-        <button
-          type="submit"
-          disabled={loading}
-          className="w-full bg-indigo-600 text-white p-2.5 rounded-lg font-semibold hover:bg-indigo-700 transition disabled:bg-indigo-400"
-        >
-          {loading ? "Yaratilmoqda..." : "Foydalanuvchini Faollashtirish"}
-        </button>
-      </form>
+          <Button type="submit" variant="primary" block loading={loading}>
+            {loading ? "Yaratilmoqda..." : "Foydalanuvchini Faollashtirish"}
+          </Button>
+        </form>
+      </Card>
     </div>
   );
 }

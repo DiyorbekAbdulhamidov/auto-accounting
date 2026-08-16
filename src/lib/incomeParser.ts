@@ -62,7 +62,22 @@ export interface PartyRow {
   aliases: string[];
   bankCredit: number;   // banktan kelgan pul (kredit)
   facturaSent: number;  // biz yozib bergan счёт-фактура
-  difference: number;   // bankCredit - facturaSent
+  /**
+   * SALDO = facturaSent − bankCredit.
+   *
+   * Ishora buxgalteriya qoidasidan olingan, tanlab qo'yilmagan.
+   * Xaridor hisobi (4010 «Харидорлардан олинадиган счётлар») — АКТИВ
+   * hisob: yozilgan faktura DEBET, kelgan to'lov KREDIT. Har qanday
+   * hisobda saldo = debet − kredit, ya'ni faktura − to'lov.
+   *
+   *   > 0  ular qarzdor   (faktura yozilgan, pul kelmagan)
+   *   < 0  biz qarzdormiz (pul kelgan, faktura yozilmagan)
+   *
+   * `aktSverki.ts` («Сальдо конечное», etalon PDF bilan qatorma-qator
+   * mos) ham AYNAN shu ayirmani hisoblaydi — ilgari ekrандаги «Фарқ»
+   * o'sha rasmiy hujjatga teskari turardi.
+   */
+  difference: number;
   monthly: Record<string, MonthBucket>;
   payments: PaymentRec[];
   invoices: InvoiceRec[];
@@ -1197,7 +1212,8 @@ export function analyzeIncome(files: InputFile[], options: IncomeOptions = {}): 
   // --- Yakuniy hisob-kitob ---
   const list = [...parties.values()];
   for (const p of list) {
-    p.difference = p.bankCredit - p.facturaSent;
+    // Saldo = debet − kredit. Xaridor hisobi aktiv: debet = faktura.
+    p.difference = p.facturaSent - p.bankCredit;
     p.payments.sort((a, b) => (a.date || '').localeCompare(b.date || ''));
     p.invoices.sort((a, b) => (a.date || '').localeCompare(b.date || ''));
   }
@@ -1211,7 +1227,7 @@ export function analyzeIncome(files: InputFile[], options: IncomeOptions = {}): 
     },
     { bankCredit: 0, facturaSent: 0, difference: 0, bankDebit: totalDebitRaw }
   );
-  totals.difference = totals.bankCredit - totals.facturaSent;
+  totals.difference = totals.facturaSent - totals.bankCredit;
 
   // Davr chegaralari
   let from: string | null = null;
@@ -1237,7 +1253,7 @@ export function analyzeIncome(files: InputFile[], options: IncomeOptions = {}): 
     }
   }
   const byYear = [...yearMap.values()]
-    .map((y) => ({ ...y, difference: y.bankCredit - y.facturaSent }))
+    .map((y) => ({ ...y, difference: y.facturaSent - y.bankCredit }))
     .sort((a, b) => {
       if (a.year === NO_DATE) return 1;
       if (b.year === NO_DATE) return -1;

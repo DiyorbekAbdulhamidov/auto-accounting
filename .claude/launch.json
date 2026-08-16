@@ -7,6 +7,14 @@
       "runtimeArgs": ["run", "dev"],
       "port": 3000,
       "url": "http://localhost:3000"
+    },
+    {
+      "name": "dev-tekshiruv",
+      "comment": "Ikkinchi port: asosiy dev-server 3000 da ishlab turganda UI ni ko'rish uchun",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["next", "dev", "--turbo", "-p", "3100"],
+      "port": 3100,
+      "url": "http://localhost:3100"
     }
   ]
 }

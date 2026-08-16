@@ -1,34 +1,197 @@
 @import "tailwindcss";
 
 /* ============================================================
-   YAGONA DIZAYN TIZIMI - light (default) + dark rejim
-   Barcha sahifalar shu tokenlar va animatsiyalardan foydalanadi
+   ДИЗАЙН ТИЗИМИ — токенлар
+   ------------------------------------------------------------
+   Бу файл САҲИФАЛАРНИНГ рангини белгилайди. Саҳифада тўғридан-
+   тўғри `slate-500`, `emerald-600` каби ранглар ёзилмайди —
+   фақат шу ердаги токенлар ишлатилади (`text-ink-2`, `text-cash`).
+
+   Икки ўқ АРАЛАШТИРИЛМАЙДИ:
+     1. МОДУЛЬ ранги (қайси сверкадасиз) — фақат тугма, актив таб,
+        фокус ҳалқаси ва танланган қатор учун. `--accent`.
+     2. МАЪЛУМОТ ранги (пул, фактура, фарқ) — модулдан МУСТАҚИЛ.
+        Чиқим саҳифасида ҳам, кирим саҳифасида ҳам пул бир хил
+        рангда бўлади, акс ҳолда буxгалтер ранг маъносини қайта
+        ўрганишга мажбур бўлади.
    ============================================================ */
 
 @custom-variant dark (&:where(.dark, .dark *));
 
 :root {
-  --background: #f8fafc; /* slate-50 */
-  --foreground: #0f172a; /* slate-900 */
-  --accent: #6366f1; /* indigo-500 */
-  --surface-bg: rgba(255, 255, 255, 0.75);
-  --surface-border: #e2e8f0;
+  /* --- Бренд (логотипдаги ранглар) --- */
+  --brand-in: #10b981; /* кирим сверкаси */
+  --brand-out: #4f46e5; /* чиқим сверкаси */
+
+  /* --- Сирт ва матн --- */
+  --page: #f6f7f9;
+  --surface: #ffffff;
+  --surface-2: #f1f5f9; /* жадвал шапкаси, ички панель */
+  --line: #e2e8f0;
+  --line-strong: #cbd5e1; /* ЖАМИ қатори устидаги чизиқ */
+  --ink: #0f172a; /* асосий матн, рақамлар */
+  --ink-2: #475569; /* иккиламчи матн */
+  /* Изоҳ, жадвал шапкаси, ўлчов бирлиги.
+     slate-500 (#64748b) ЭМАС: у --surface-2 фонида 4,34:1 берарди,
+     яъни жадвал шапкаси WCAG чегарасидан паст эди. Ўлчанган. */
+  --ink-3: #5c6b7f;
+
+  /* --- Маълумот ранглари (модулдан мустақил) ---
+     Ёруғ фонда етарли контраст учун бренд рангининг ТЎҚроқ
+     вариантлари олинади: #10B981 оқ фонда 2,2:1 — матн учун ярамайди. */
+  --cash: #047857; /* ПУЛ устуни (тўланган/тушган) */
+  --invoice: #4338ca; /* ФАКТУРА устуни (келган/ёзилган) */
+  --ok: #047857; /* тенг, фарқ йўқ */
+  --warn: #b45309; /* диққат талаб қилади */
+  --bad: #be123c; /* қарз, номувофиқлик */
+  --info: #0369a1; /* аванс, ортиқча тушган */
+
+  /* Юмшоқ фонлар — белги (badge) ва огоҳлантириш учун */
+  --warn-soft: #fffbeb;
+  --bad-soft: #fff1f2;
+  --ok-soft: #ecfdf5;
+  --info-soft: #f0f9ff;
+
+  /* --- Модуль ранги. Стандарт — чиқим (асосий модуль) ---
+     `--accent`     — ТЎЛДИРИШ ранги (тугма фони, актив таб)
+     `--accent-ink` — МАТН ва белги ранги. Иккитаси ажратилган, чунки
+                      тунги режимда тўлдириш ранги матн бўлиб етарли
+                      контраст бермайди (#4F46E5 тўқ фонда 3,3:1). */
+  --accent: var(--brand-out);
+  --accent-fg: #ffffff;
+  --accent-ink: #4338ca;
+  --accent-soft: #eef2ff;
+
+  /* Модал ортидаги қоплама */
+  --overlay: rgba(15, 23, 42, 0.5);
+
+  /* ЎҚУВ БЕЛГИСИ — «мана бу ерга босинг» деб чизиладиган қизил.
+     `--bad` дан АТАЙЛАБ ажратилган: `--bad` маълумот ранги (қарз),
+     бу эса кўрсаткич. Иккови аралашса, қўлланмадаги қизил ўқ
+     буxгалтерга «бу ерда қарз бор» деб кўринарди.
+     ФАҚАТ қўлланма (guide) ичида ишлатилади, жадвалда ҲЕЧ ҚАЧОН. */
+  --mark: #e11d48;
+  --mark-soft: #fff1f2;
+
   --scroll-thumb: #cbd5e1;
 }
 
 .dark {
-  --background: #020617; /* slate-950 */
-  --foreground: #e2e8f0; /* slate-200 */
-  --surface-bg: rgba(15, 23, 42, 0.6);
-  --surface-border: #1e293b;
-  --scroll-thumb: #334155;
+  --page: #0b1120;
+  --surface: #111827;
+  --surface-2: #1e293b;
+  --line: #273449;
+  --line-strong: #3b4a63;
+  --ink: #f1f5f9;
+  --ink-2: #cbd5e1;
+  --ink-3: #94a3b8;
+
+  /* Тўқ фонда тескариси: рангнинг ОЧроқ варианти керак */
+  --cash: #34d399;
+  --invoice: #a5b4fc;
+  --ok: #34d399;
+  --warn: #fbbf24;
+  --bad: #fb7185;
+  --info: #38bdf8;
+
+  --warn-soft: #2a2010;
+  --bad-soft: #2c1218;
+  --ok-soft: #06231a;
+  --info-soft: #082234;
+
+  --accent-ink: #a5b4fc;
+  --accent-soft: #1e2547;
+
+  --overlay: rgba(2, 6, 23, 0.7);
+
+  --mark: #fb7185;
+  --mark-soft: #2c1218;
+
+  --scroll-thumb: #3b4a63;
 }
 
+/* Модуль ранги — саҳифа илдизига `data-module` қўйилади.
+   Ичидаги ҳамма тугма, таб ва фокус ҳалқаси шуни олади. */
+[data-module="in"] {
+  --accent: var(--brand-in);
+  /* ОҚ ЭМАС. Оқ матн #10B981 устида 2,54:1 беради — тугмадаги ёзув
+     ўқилмайди (ўлчанган). Тўқ матн эса 7,04:1. Шунинг учун кирим
+     модулининг асосий тугмаси — бренднинг АЙНАН ўша яшили, устида
+     тўқ ёзув билан. Ранг ўзгармади, ўқилиши тузатилди. */
+  --accent-fg: #0f172a;
+  --accent-ink: #047857;
+  --accent-soft: #ecfdf5;
+}
+.dark [data-module="in"] {
+  --accent-ink: #34d399;
+  --accent-soft: #06231a;
+}
+[data-module="out"] {
+  --accent: var(--brand-out);
+  --accent-fg: #ffffff;
+  --accent-ink: #4338ca;
+  --accent-soft: #eef2ff;
+}
+.dark [data-module="out"] {
+  --accent-ink: #a5b4fc;
+  --accent-soft: #1e2547;
+}
+
+/* ------------------------------------------------------------
+   Токенларни Tailwind утилиталарига улаш.
+   `@theme inline` — қиймат КЎЧИРИЛМАЙДИ, var() ҳолича қолади,
+   шунинг учун тунги режим ва модуль ранги ўз-ўзидан ишлайди.
+   ------------------------------------------------------------ */
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-page: var(--page);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-ink-3: var(--ink-3);
+
+  --color-accent: var(--accent);
+  --color-accent-fg: var(--accent-fg);
+  --color-accent-ink: var(--accent-ink);
+  --color-accent-soft: var(--accent-soft);
+
+  --color-cash: var(--cash);
+  --color-invoice: var(--invoice);
+  --color-ok: var(--ok);
+  --color-warn: var(--warn);
+  --color-bad: var(--bad);
+  --color-info: var(--info);
+  --color-overlay: var(--overlay);
+  --color-mark: var(--mark);
+  --color-mark-soft: var(--mark-soft);
+  --color-ok-soft: var(--ok-soft);
+  --color-warn-soft: var(--warn-soft);
+  --color-bad-soft: var(--bad-soft);
+  --color-info-soft: var(--info-soft);
+
+  /* Битта шрифт шкаласи. Бошқа ўлчов ишлатилмайди —
+     `text-[11px]` каби ихтиёрий қийматлар йўқ қилинди. */
+  --text-caption: 0.75rem; /* 12px — изоҳ, шапка, ўлчов бирлиги */
+  --text-caption--line-height: 1.4;
+  --text-body: 0.875rem; /* 14px — асосий матн ва жадвал катаклари */
+  --text-body--line-height: 1.5;
+  --text-lead: 1rem; /* 16px — саҳифа таснифи */
+  --text-lead--line-height: 1.55;
+  --text-h3: 1.125rem; /* 18px — карта сарлавҳаси */
+  --text-h3--line-height: 1.35;
+  --text-h2: 1.375rem; /* 22px — бўлим сарлавҳаси */
+  --text-h2--line-height: 1.3;
+  --text-h1: 1.75rem; /* 28px — саҳифа сарлавҳаси */
+  --text-h1--line-height: 1.25;
+  --text-num: 1.5rem; /* 24px — кўрсаткич картасидаги рақам */
+  --text-num--line-height: 1.2;
+
+  /* Битта радиус шкаласи: 6 / 8 / 12. Бошқаси йўқ. */
+  --radius-sm: 0.375rem;
+  --radius-md: 0.5rem;
+  --radius-lg: 0.75rem;
 }
 
 html {
@@ -39,19 +202,30 @@ html {
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
+  background: var(--page);
+  color: var(--ink);
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  font-size: 0.875rem;
+  line-height: 1.5;
   -webkit-font-smoothing: antialiased;
 }
 
-/* Matn belgilash rangi */
 ::selection {
-  background: rgba(99, 102, 241, 0.4);
+  background: color-mix(in srgb, var(--accent) 25%, transparent);
+}
+
+/* Фокус — клавиатура билан юрадиган одам учун ҳар доим кўринади.
+   Ранги модулники, яъни кирим саҳифасида яшил бўлади.
+   `--accent` ЭМАС, `--accent-ink`: #10B981 оқ фонда 2,54:1 — ҳалқа
+   кўринмай қоларди. `--accent-ink` эса 5,48:1. */
+:where(a, button, input, select, textarea, [tabindex]):focus-visible {
+  outline: 2px solid var(--accent-ink);
+  outline-offset: 2px;
+  border-radius: 2px;
 }
 
 /* ------------------------------------------------------------
-   Custom scrollbar (jadval va sahifa uchun)
+   Скроллбар
    ------------------------------------------------------------ */
 .custom-scrollbar::-webkit-scrollbar,
 ::-webkit-scrollbar {
@@ -69,7 +243,7 @@ body {
 }
 .custom-scrollbar::-webkit-scrollbar-thumb:hover,
 ::-webkit-scrollbar-thumb:hover {
-  background: #475569;
+  background: var(--ink-3);
 }
 * {
   scrollbar-width: thin;
@@ -77,12 +251,15 @@ body {
 }
 
 /* ------------------------------------------------------------
-   Animatsiyalar (motion)
+   Анимациялар.
+   Ойига бир марта очиладиган ҳисоб воситасида ҳаракат — безак эмас,
+   ҲОЛАТ хабари: нима ўзгарганини кўрсатади. Шунинг учун улар
+   қисқа ва камсонли.
    ------------------------------------------------------------ */
 @keyframes fade-in-up {
   from {
     opacity: 0;
-    transform: translateY(18px);
+    transform: translateY(6px);
   }
   to {
     opacity: 1;
@@ -102,21 +279,11 @@ body {
 @keyframes scale-in {
   from {
     opacity: 0;
-    transform: scale(0.96);
+    transform: scale(0.98);
   }
   to {
     opacity: 1;
     transform: scale(1);
-  }
-}
-
-@keyframes blob-float {
-  0%,
-  100% {
-    transform: translate(0, 0) scale(1);
-  }
-  50% {
-    transform: translate(40px, -30px) scale(1.1);
   }
 }
 
@@ -126,69 +293,51 @@ body {
   }
 }
 
-@keyframes pulse-ring {
-  0% {
-    transform: scale(0.9);
-    opacity: 0.7;
-  }
-  100% {
-    transform: scale(1.6);
-    opacity: 0;
-  }
-}
-
 .anim-fade-up {
-  animation: fade-in-up 0.55s cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation: fade-in-up 0.24s ease-out both;
 }
 .anim-fade {
-  animation: fade-in 0.45s ease both;
+  animation: fade-in 0.2s ease-out both;
 }
 .anim-scale {
-  animation: scale-in 0.3s cubic-bezier(0.16, 1, 0.3, 1) both;
-}
-.anim-blob {
-  animation: blob-float 14s ease-in-out infinite;
-}
-.anim-pulse-ring {
-  animation: pulse-ring 1.6s cubic-bezier(0.16, 1, 0.3, 1) infinite;
+  animation: scale-in 0.16s ease-out both;
 }
 
-/* Ketma-ket kirish effekti (stagger) */
-.delay-1 { animation-delay: 0.05s; }
-.delay-2 { animation-delay: 0.1s; }
-.delay-3 { animation-delay: 0.15s; }
-.delay-4 { animation-delay: 0.2s; }
-.delay-5 { animation-delay: 0.25s; }
-.delay-6 { animation-delay: 0.3s; }
-.delay-7 { animation-delay: 0.35s; }
-.delay-8 { animation-delay: 0.4s; }
+/* Кетма-кет кириш эффекти (stagger) */
+.delay-1 { animation-delay: 0.03s; }
+.delay-2 { animation-delay: 0.06s; }
+.delay-3 { animation-delay: 0.09s; }
+.delay-4 { animation-delay: 0.12s; }
+.delay-5 { animation-delay: 0.15s; }
+.delay-6 { animation-delay: 0.18s; }
+.delay-7 { animation-delay: 0.21s; }
+.delay-8 { animation-delay: 0.24s; }
 
-/* Harakat kamaytirilgan rejimni hurmat qilish */
 @media (prefers-reduced-motion: reduce) {
   .anim-fade-up,
   .anim-fade,
-  .anim-scale,
-  .anim-blob,
-  .anim-pulse-ring {
+  .anim-scale {
     animation: none;
   }
 }
 
 /* ------------------------------------------------------------
-   Umumiy sirt (karta) stillari
+   Умумий сирт (карта)
    ------------------------------------------------------------ */
 .surface {
-  background: var(--surface-bg);
-  border: 1px solid var(--surface-border);
-  border-radius: 1rem;
-  backdrop-filter: blur(12px);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 0.75rem;
 }
 
-.glow-indigo {
-  box-shadow: 0 0 50px rgba(99, 102, 241, 0.12);
-}
-
-/* Raqamli ustunlar uchun tekis raqamlar */
+/* Рақамли устунлар учун текис (бир хил кенгликдаги) рақамлар.
+   Жадвалда рақам устма-уст тушиши учун шарт. */
 .tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Жадвалдаги ҳар қандай рақам ва СТИР — ўз-ўзидан текис */
+table td,
+table th {
   font-variant-numeric: tabular-nums;
 }

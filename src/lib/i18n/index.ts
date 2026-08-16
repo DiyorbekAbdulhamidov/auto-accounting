@@ -15,7 +15,14 @@ import { toLatin } from './translit';
 export const LANGS = ['uz-cyrl', 'uz-latn', 'ru', 'en'] as const;
 export type Lang = (typeof LANGS)[number];
 
-export const DEFAULT_LANG: Lang = 'uz-cyrl';
+// Standart — o'zbek LOTIN (2026-08-16 da qabul qilingan).
+//
+// Manba matn va t() kaliti kirill holicha QOLADI — o'zgargani faqat
+// birinchi marta kirgan odam nimani ko'rishi. Sabab: davlat rasmiy
+// alifbosi lotin va yosh foydalanuvchi lotinni bemalol, kirillni esa
+// qiynalib o'qiydi; teskarisi kamroq to'sqinlik qiladi (kirill o'quvchi
+// bir bosishda «ЎЗ» ga o'tadi va tanlov localStorage'da saqlanadi).
+export const DEFAULT_LANG: Lang = 'uz-latn';
 
 export const LANG_LABELS: Record<Lang, string> = {
   'uz-cyrl': 'Ўзбекча',
