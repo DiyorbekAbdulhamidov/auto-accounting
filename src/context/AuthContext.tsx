@@ -9,19 +9,55 @@ import {
 } from "firebase/auth";
 import { doc, getDoc } from "firebase/firestore";
 import { usePathname, useRouter } from "next/navigation";
+import { isPath, localeFromPathname, path } from "@/lib/routes";
 
-const AuthContext = createContext<any>(null);
+/**
+ * Ilova ko'radigan foydalanuvchi: Firebase hisobi + `allowed_users`
+ * hujjatidagi maydonlar (ish maydoni, rol, holat) bitta obyektda.
+ *
+ * `workspaceId` — ENG muhimi: barcha Firestore so'rovlari shunga
+ * bog'lanadi. Uni `any` ostida qoldirish xatoni jimgina o'tkazib
+ * yuborardi (nomi noto'g'ri yozilsa `undefined` bo'lib, so'rov
+ * butunlay rad etilardi).
+ */
+export interface AppUser {
+  uid: string;
+  email: string | null;
+  workspaceId?: string;
+  role?: string;
+  status?: string;
+  /** `allowed_users` hujjatidagi qolgan maydonlar */
+  [key: string]: unknown;
+}
+
+export interface AuthValue {
+  user: AppUser | null;
+  loading: boolean;
+  login: (email: string, pass: string) => Promise<void>;
+  /** Xato matnini qaytaradi; muvaffaqiyatda `null` */
+  signup: (email: string, pass: string) => Promise<string | null>;
+  logout: () => Promise<void>;
+}
+
+const AuthContext = createContext<AuthValue | null>(null);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<any>(null);
+  const [user, setUser] = useState<AppUser | null>(null);
   const [loading, setLoading] = useState(true);
   const router = useRouter();
   const pathname = usePathname();
   const pathnameRef = useRef(pathname);
 
+  // Til manzilning birinchi bo'lagida. `useLocale()` bu yerda ISHLAMAYDI:
+  // `AuthProvider` `LanguageProvider` dan yuqorida turadi, ya'ni til
+  // konteksti hali mavjud emas. Manzil esa har doim bor.
+  const locale = localeFromPathname(pathname);
+  const localeRef = useRef(locale);
+
   useEffect(() => {
     pathnameRef.current = pathname;
-  }, [pathname]);
+    localeRef.current = locale;
+  }, [pathname, locale]);
 
   // RO'YXATDAN O'TISH POYGASI. `createUserWithEmailAndPassword` darhol
   // auth holatini o'zgartiradi, `allowed_users` hujjati esa /api/signup
@@ -43,9 +79,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           } else {
             await signOut(auth);
             setUser(null);
-            if (pathnameRef.current !== "/login") {
+            if (!isPath(pathnameRef.current, "login")) {
               alert("Sizga bu tizimga kirishga ruxsat berilmagan!");
-              router.replace("/login");
+              router.replace(path("login", localeRef.current));
             }
           }
         } else {
@@ -55,9 +91,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         console.error("Auth tekshiruvi xatosi:", error);
         setUser(null);
         await signOut(auth).catch(() => {});
-        if (pathnameRef.current !== "/login") {
+        if (!isPath(pathnameRef.current, "login")) {
           alert("Tizimga ulanishda xatolik. Qayta urinib ko'ring.");
-          router.replace("/login");
+          router.replace(path("login", localeRef.current));
         }
       } finally {
         setLoading(false);
@@ -67,20 +103,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => unsubscribe();
   }, [router]);
 
-  // Kirgan odam login sahifasida turmaydi. Manzil "/" EMAS: bosh sahifa
-  // endi ochiq tanishtiruv sahifasi, ish esa korxonalar ro'yxatida.
+  // Kirgan odam login sahifasida turmaydi. Manzil bosh sahifa EMAS:
+  // u endi ochiq tanishtiruv sahifasi, ish esa mijozlar ro'yxatida.
   useEffect(() => {
-    if (!loading && user && pathname === "/login") {
-      router.replace("/korxonalar");
+    if (!loading && user && isPath(pathname, "login")) {
+      router.replace(path("clients", locale));
     }
-  }, [loading, user, pathname, router]);
+  }, [loading, user, pathname, locale, router]);
 
   const login = async (email: string, pass: string) => {
     setLoading(true);
     try {
       await signInWithEmailAndPassword(auth, email, pass);
-    } catch (error: any) {
-      alert("Login yoki parol xato: " + error.message);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      alert("Login yoki parol xato: " + message);
       setLoading(false);
     }
   };
@@ -118,7 +155,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       signingUpRef.current = false;
       setUser({ ...cred.user, ...(userSnap.exists() ? userSnap.data() : {}) });
       setLoading(false);
-      router.replace("/korxonalar");
+      router.replace(path("clients", localeRef.current));
       return null;
     } catch (error) {
       signingUpRef.current = false;
@@ -134,7 +171,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const logout = async () => {
     await signOut(auth);
-    router.replace("/login");
+    router.replace(path("login", localeRef.current));
   };
 
   return (
@@ -144,4 +181,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   );
 }
 
-export const useAuth = () => useContext(AuthContext);
+export const useAuth = (): AuthValue => {
+  const ctx = useContext(AuthContext);
+  // Provider ichida bo'lmasa — bu dasturchi xatosi, jimgina `null`
+  // qaytarilsa sahifa tushunarsiz joyda yiqilardi.
+  if (!ctx) throw new Error("useAuth() faqat <AuthProvider> ichida ishlaydi");
+  return ctx;
+};

@@ -24,7 +24,9 @@ export function Marker({ n, className }: { n: number; className?: string }) {
     <span
       className={cx(
         "inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full",
-        "bg-mark text-caption font-semibold text-white tabular",
+        // `text-white` ЭМАС — `--mark-fg`. Tungi rejimda `--mark`
+        // ochroq bo'ladi va oq yozuv unda o'qilmaydi (o'lchangan).
+        "bg-mark text-caption font-semibold text-mark-fg tabular",
         className
       )}
       aria-hidden
@@ -56,7 +58,7 @@ export function Highlight({
       )}
       {children}
       {label && (
-        <span className="absolute -bottom-2 right-2 z-10 rounded-sm bg-mark px-1.5 py-0.5 text-caption font-medium text-white">
+        <span className="absolute -bottom-2 right-2 z-10 rounded-sm bg-mark px-1.5 py-0.5 text-caption font-medium text-mark-fg">
           {label}
         </span>
       )}

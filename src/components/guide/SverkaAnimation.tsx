@@ -143,8 +143,11 @@ export default function SverkaAnimation() {
                     <span
                       className={cx(
                         "inline-flex h-6 min-w-6 items-center justify-center rounded-full px-1.5 text-caption font-semibold transition-all duration-300",
-                        lockedOk && "bg-ok text-white",
-                        lockedBad && "bg-bad text-white",
+                        // `text-white` ЭМАС: тунги режимда `--ok` ва
+                        // `--bad` ОЧроқ вариантга ўтади ва оқ ёзув
+                        // 1,92:1 / 2,69:1 берарди (ўлчанган).
+                        lockedOk && "bg-ok text-fill-fg",
+                        lockedBad && "bg-bad text-fill-fg",
                         !locked && "bg-surface-2 text-ink-3"
                       )}
                       style={{

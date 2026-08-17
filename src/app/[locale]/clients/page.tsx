@@ -2,7 +2,7 @@
 // КОРХОНАЛАР — ИККАЛА сверка учун БИТТА рўйхат
 // ------------------------------------------------------------
 // Илгари корхоналар фақат чиқим сверкасида бор эди (`/excel-audit`),
-// кирим сверкаси эса корхонасиз мустақил саҳифа эди. Буxгалтер учун
+// кирим сверкаси эса корхонасиз мустақил саҳифа эди. Бухгалтер учун
 // эса бу битта иш: «қайси мижоз» -> «қайси йўналиш». Шунинг учун
 // корхона — рўйхат, йўналиш — таб.
 //
@@ -19,7 +19,8 @@ import { collection, getDocs, query, doc, where, writeBatch } from "firebase/fir
 import NextLink from "next/link";
 import { Building2, Plus, ArrowRight, FolderOpen, Trash2 } from "lucide-react";
 import SortHeader from "@/components/SortHeader";
-import { useT } from "@/context/LanguageContext";
+import { useLocale, useT } from "@/context/LanguageContext";
+import { clientPath } from "@/lib/routes";
 import {
   Alert,
   Button,
@@ -82,8 +83,9 @@ interface Totals {
 type SortKey = "name" | "inn" | "tolov" | "faktura" | "farq";
 type SortDir = "asc" | "desc";
 
-export default function KorxonalarPage() {
+export default function ClientsPage() {
   const t = useT();
+  const locale = useLocale();
   // Ish maydoni `allowed_users/{email}` hujjatidan keladi (AuthContext uni
   // foydalanuvchi obyektiga qo'shib beradi). Barcha o'qish/yozish shunga
   // bog'lanadi — ma'lumot egasiz qolmasligi kerak.
@@ -473,7 +475,7 @@ export default function KorxonalarPage() {
                     <Td align="center">
                       <div className="flex items-center justify-center gap-2">
                         <NextLink
-                          href={`/korxonalar/${company.id}`}
+                          href={clientPath(company.id, locale)}
                           className={buttonClasses("secondary", "sm")}
                         >
                           {t("Сверка")} <ArrowRight className="h-3.5 w-3.5" />

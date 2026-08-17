@@ -1,21 +1,54 @@
 # HANDOFF — loyihaning joriy holati
 
-**Oxirgi yangilanish: 2026-08-14.** Loyiha: `accounting-automation`
-(Next.js 16, Turbopack, `master`).
+**Oxirgi yangilanish: 2026-08-16.** Loyiha: `accounting-automation`
+(Next.js 16.2, Turbopack, `master`). Mahsulot nomi — **Moslik**.
 
-Ikki sahifa: `/excel-audit` (chiqim: to'langan pul ↔ kelgan faktura) va
-`/income-audit` (kirim: tushgan pul ↔ yozilgan faktura).
+## Marshrutlar (2026-08-17 da tilga bo'lingan)
+
+Har manzil `/[locale]/...` ko'rinishida. **Til — URL'ning birinchi
+bo'lagida**, `localStorage` da EMAS.
+
+| Manzil | Nima | Kirish |
+|---|---|---|
+| `/[locale]` | **Ochiq tanishtiruv sahifasi** | ochiq · indeksda |
+| `/[locale]/guide` | To'liq qo'llanma (`<Guide />`) | ochiq · indeksda |
+| `/[locale]/pricing` | Narx + narxga oid TSS | ochiq · indeksda |
+| `/[locale]/features` | Imkoniyatlar (to'liq 8 ta) | ochiq · indeksda |
+| `/[locale]/login` | Kirish va ro'yxatdan o'tish | ochiq · indeksda |
+| `/[locale]/clients` | Mijozlar ro'yxati — **ikkala sverka uchun bitta** | login · `noindex` |
+| `/[locale]/clients/[id]` | Bitta mijoz: **Чиқим \| Кирим — tab** | login · `noindex` |
+| `/[locale]/admin/users` | Foydalanuvchilar | login · `noindex` |
+
+`locale` ∈ `uz` · `uz-cyrl` · `ru` · `en` — 4 × 5 = **20 ta ochiq
+sahifa statik quriladi**.
+
+**Yo'naltirish `src/proxy.ts` da** (Next 16 da `middleware.ts` EMAS —
+nom o'zgargan). U tilsiz kelgan so'rovni to'g'ri tilga oladi:
+`NEXT_LOCALE` cookie → `Accept-Language` → `uz`. Eski manzillar ham
+shu yerda tarjima qilinadi, chunki natija TILGA bog'liq:
+
+| Eski | Yangi |
+|---|---|
+| `/korxonalar` | `/{til}/clients` |
+| `/qollanma` | `/{til}/guide` |
+| `/excel-audit/companies/{id}` | `/{til}/clients/{id}` |
+| `/income-audit` | `/{til}/clients` |
+
+Brauzerda tekshirilgan: 10 ta manzil, `/xyz/pricing` → 404.
 
 ## Bir qarashda
 
 | | Holat |
 |---|---|
 | **Mahsulot kimga** | **Buxgalter uchun sverka vositasi** (A yo'l). YATT/soliq moduli YOZILMAYDI |
-| **Nom** | Hali tanlanmagan. UI atamalari brenddan mustaqil qilingan |
+| **Nom** | **Moslik** (`moslik.uz`). Sabab: `src/lib/brand.ts` va `MAHSULOT-QARORLARI.md` 1-bo'lim |
+| **Shior** | «Бухгалтер учун автоматик текширув тизими» + majburiy `BRAND.promise` qatori |
+| **Logotip** | Ikkita teng chiziq = «мос келди». Yuqorigi `--cash`, pastkisi `--invoice`. `src/components/Brand.tsx`, `src/app/icon.svg` |
+| **Tillar** | 4 ta, **URL'da**: `uz` (lotin) · `uz-cyrl` · `ru` · `en`. Lug'at qamrovi **92,4%** (qolgani tarjima qilinmaydigan narsalar) |
 | **Kirish** | O'zi ro'yxatdan o'tadi, darhol ishlaydi |
 | **Rejalar** | Bepul 3 korxona · Buxgalter 9 999 so'm · Byuro 39 999 so'm |
 | **Tekshiruv** | `node scripts/verify-parsers.cjs` — **58 ta, hammasi o'tadi** |
-| **Commit** | Bu sessiyadagi hech narsa commit QILINMAGAN |
+| **Commit** | `b4ab63c "big changes"` (2026-08-16) — shu sessiyaning katta qismi kiritilgan. Undan keyingi tuzatmalar hali commit qilinmagan |
 
 ## Ikki asosiy hujjat
 
@@ -23,15 +56,21 @@ Ikki sahifa: `/excel-audit` (chiqim: to'langan pul ↔ kelgan faktura) va
 - **`MAHSULOT-QARORLARI.md`** — nom, atamalar lug'ati, UI rejasi, bozor,
   narx, to'lov tizimlari va soliq bo'yicha tekshirilgan faktlar
 
-## Bu sessiyada nima qilindi (2026-08-13 → 14)
+## Bu sessiyada nima qilindi (2026-08-16)
 
-1. **Qoldiq tenglamasi dasturga kiritildi** — ikkala sverkada (3-bo'lim)
-2. **Qat'iy rejim** — tasdiqlab bo'lmaydigan fayl ochiq aytiladi
-3. **«Ожидает подписи» kirim tomonda** ham ajratildi
-4. **Atamalar lug'ati** — 28 ta matn almashtirildi (`MAHSULOT-QARORLARI.md` 2-bo'lim)
-5. **Ish maydoni (egalik) modeli** — ilgari har kim hammaning ma'lumotini
-   ko'rardi (5a-bo'lim, deploy tartibi QAT'IY)
-6. **Ro'yxatdan o'tish + rejalar** (5b-bo'lim)
+1. **Nom va logotip** — `Moslik`. `src/lib/brand.ts` bitta manba, nom
+   hech qachon `t()` dan o'tkazilmaydi.
+2. **Standart alifbo lotinga o'tdi** — `DEFAULT_LANG = 'uz-latn'`.
+   Bitta qator; kalitlar tegilmadi. Saqlangan tanlov ustun turadi.
+3. **Bosh sahifa qayta yozildi** — endi OCHIQ tanishtiruv sahifasi.
+   Ilgari u login ortida edi va «Иш Муҳитини Танланг» deb turardi,
+   ya'ni ishontirish kerak bo'lgan odam uni hech qachon ko'rmasdi.
+4. **Chiqim va kirim BITTA sahifaga birlashdi** (UI 3-bosqich).
+   Yo'nalish endi sahifa emas, tab. Kirim sverkasida ilgari korxona
+   tushunchasi umuman yo'q edi.
+5. **«Фарқ» ishorasi to'g'rilandi** — quyida 8-bo'lim.
+6. **Uchta o'lchangan kontrast xatosi tuzatildi** — quyida 9-bo'lim.
+7. **O'lik fayllar o'chirildi** — 10-bo'lim.
 
 ## Darhol e'tibor talab qiladi
 
@@ -39,7 +78,12 @@ Ikki sahifa: `/excel-audit` (chiqim: to'langan pul ↔ kelgan faktura) va
   mavjud ma'lumot «yo'qolgandek» bo'ladi. 5a-bo'limga qarang.
 - ⚠️ **Firestore'da hech narsa sinalmagan** — kalitlar yo'q edi. Ish
   maydoni, ro'yxatdan o'tish va cheklovlar **jonli bazada bir marta
-  sinalishi shart**.
+  sinalishi shart**. Login ortidagi sahifalar (`/korxonalar`) shu
+  sababli brauzerda ham sinab ko'rilmagan.
+- ⚠️ **Eski saqlangan hisobotlar** `sverka_reports` da chiqim
+  tomondan yozilgan va ishorasi o'zgarmagan — ular to'g'ri qoladi.
+  Kirim sverkasi hech narsa saqlamaydi, ya'ni ishora o'zgarishi
+  bazadagi ma'lumotga TEGMAYDI.
 - ⚠️ **Soliq savoli ochiq:** 100 mln so'mgacha ozodlik 2026 dan bekor
   qilinganmi? Manbalar zid — `MAHSULOT-QARORLARI.md` 4-bo'lim.
 
@@ -137,7 +181,7 @@ fayl o'qish buziladi.
 ## 3. Tekshiruv tizimi
 
 `scripts/verify-parsers.cjs` + `.claude/skills/verify-parsers/SKILL.md`.
-Hozir **38 ta tekshiruv, hammasi o'tadi**.
+Hozir **58 ta tekshiruv, hammasi o'tadi**.
 
 ### Qoldiq tenglamasi — ENDI DASTURDA
 Boshlang'ich qoldiq + kredit − debet = oxirgi qoldiq. 6 fayldan 5 tasida
@@ -252,16 +296,18 @@ ro'yxati:
 - 4-korxona qo'shishga urinish → cheklov ushlaydimi
 - ikkinchi akkaunt ochib, birinchisining korxonasi ko'rinmasligi
 
-### 2. UI ni qayta qurish — 2-5 bosqichlar
+### 2. UI ni qayta qurish — 4 va 5 bosqichlar QOLDI
 
-1-bosqich (lug'at) bajarildi. Qolgani:
-- **2)** dizayn tizimi: rang tokenlari, bitta jadval/kartochka/tugma
-- **3)** chiqim va kirim bitta sahifada tab bo'lib (hozir alohida sahifa,
-  alohida lug'at, alohida eksport — buxgalter uchun esa bu bitta ish)
-- **4)** natija ekrani: avval «nechta kontragentda farq bor va qancha»,
-  20 ustunli jadval — ikkinchi ekranda
-- **5)** yuklash oqimi: tizim nima topganini OLDIN aytadi (qaysi bank,
-  qaysi davr, qaysi korxona) → tasdiqla → natija
+- **1) lug'at** ✅ (2026-08-13)
+- **2) dizayn tizimi** ✅ (2026-08-15) — `globals.css` tokenlari,
+  `src/components/ui/` da 21 komponent
+- **3) chiqim va kirim bitta sahifada** ✅ (2026-08-16) —
+  `/korxonalar/[id]`, `ModuleScope` bilan rang tabga bog'landi
+- **4) natija ekrani** ❌ — hozir birinchi ko'rinadigan narsa hali ham
+  ko'p ustunli jadval. Ko'rinishi kerak: «nechta kontragentda farq
+  bor va qancha», jadval — ikkinchi ekranda
+- **5) yuklash oqimi** ❌ — tizim nima topganini OLDIN aytadi (qaysi
+  bank, qaysi davr, qaysi korxona) → tasdiqla → natija
 
 ### 3. «Ko'proq kerak» tugmasi
 
@@ -362,15 +408,353 @@ tushirsa bo'ladi. Ma'lumot bo'lmasa hech narsa qilmaydi.
 - Foydalanuvchi «hamma ishni qil» desa — bajarib bo'ladiganini qilib,
   bajarib bo'lmaydiganini SABABI bilan aytish kerak.
 
-## 7. Bu sessiyada tegilgan fayllar
+---
 
-Yangi: `src/lib/{workspace,plans}.ts`, `src/app/api/{signup,companies}/`,
-`scripts/migrate-workspaces.cjs`, `MAHSULOT-QARORLARI.md`.
+## 7a. Til va SEO qatlami (2026-08-17)
 
-O'zgargan: `src/lib/{bankStatements,statementAudit,incomeParser,incomeExcel,formatMemory,apiAuth}.ts`,
-`src/lib/i18n/dictionary.ts`, `src/context/AuthContext.tsx`,
-`src/app/login/page.tsx`, `src/app/excel-audit/**`, `src/app/income-audit/page.tsx`,
-`src/app/api/{upload-preview,counterparty-category,income-audit}/route.ts`,
-`firestore.rules`, `scripts/verify-parsers.cjs`.
+### Muammo o'lchov bilan qayd etildi
 
-**Hech biri commit qilinmagan.**
+Rus va ingliz tillari «umuman ishlamaydi» degan shikoyat o'lchandi:
+
+```
+UI dagi kirill matn : 410 ta
+lug'atda bor        : 200 ta
+TARJIMASIZ          : 210 ta  ->  qamrov 48,8%
+```
+
+Ya'ni rus tilida sahifaning yarmi o'zbekcha, inglizchada esa
+lotin-o'zbekcha chiqardi. Yangi landing deyarli butunlay tarjimasiz
+edi. **Hozir: 92,4%** — qolgan 31 tasi shablon parchalari
+(`${...}`), regex ichidagi matn va tashkilotlarning O'Z nomlari,
+ya'ni tarjima qilinmaydigan narsalar.
+
+Qamrovni o'lchash: `scripts` da emas, sessiya papkasida vaqtinchalik
+skript ishlatilgan. Kerak bo'lsa qayta yozish oson — u `src/components`
+va `src/app/[locale]` dagi barcha kirill literalni yig'ib, lug'at
+kalitlariga solishtiradi.
+
+### Arxitektura qarori: til URL'da, kalit tuzilishi TEGILMADI
+
+`t()` kaliti hali ham **kirill matnning O'ZI**. O'zgargani faqat
+tilning QAYERDAN kelishi:
+
+| | Ilgari | Hozir |
+|---|---|---|
+| Manba | `localStorage` | URL bo'lagi (`/ru/...`) |
+| Server bilan mos | yo'q (gidratatsiya xavfi) | ha, bir xil HTML |
+| Google ko'radimi | **yo'q** | ha, har til alohida sahifa |
+
+`LanguageProvider` endi `lang` ni PROP bo'lib oladi
+(`app/[locale]/layout.tsx` dan). `setLang` esa `router.push` qiladi va
+`NEXT_LOCALE` cookie qo'yadi — odam TURGAN sahifasida qoladi.
+
+### Nega `uz` va `uz-cyrl` alohida manzil
+
+Lotin va kirill — bir tilning ikki YOZUVI, mazmuni bir xil. Ularni
+alohida manzilga chiqarish dublikat kontent xavfini tug'diradi.
+Yagona himoya — `hreflang` da YOZUVNI ko'rsatish:
+
+```html
+<link rel="alternate" hrefLang="uz-Latn" href=".../uz/pricing">
+<link rel="alternate" hrefLang="uz-Cyrl" href=".../uz-cyrl/pricing">
+```
+
+Agar ikkalasi ham shunchaki `uz` bo'lsa, Google bittasini tashlaydi.
+`LOCALE_HREFLANG` (`src/lib/i18n/index.ts`) aynan shuning uchun bor.
+
+### SEO qatlami — nima qilindi
+
+| Narsa | Qayerda | Holat |
+|---|---|---|
+| Har til uchun QO'LDA yozilgan title/description/keywords | `src/lib/seo.ts` | 4 til × 5 sahifa |
+| `hreflang` × 5 (+ `x-default`) va o'ziga `canonical` | `src/lib/pageMeta.ts` | brauzerda tasdiqlangan |
+| `sitemap.xml` — 20 manzil, 100 ta alternate | `src/app/sitemap.ts` | tasdiqlangan |
+| `robots.txt` — app sahifalari yopiq | `src/app/robots.ts` | tasdiqlangan |
+| JSON-LD: Organization + WebSite + SoftwareApplication (narx bilan) | `src/components/JsonLd.tsx` | bosh sahifada |
+| JSON-LD: FAQPage — 8 savol | `src/lib/faq.ts` → JsonLd | bosh sahifa va qo'llanma |
+| JSON-LD: BreadcrumbList | JsonLd | ichki sahifalarda |
+| OpenGraph + Twitter card | `pageMeta.ts` | har sahifada |
+| `noindex` + `disallow` app sahifalariga | `pageMeta.ts` + `robots.ts` | ikki qatlamda |
+
+**FAQ BITTA MANBADAN** (`src/lib/faq.ts`): ekranda ko'rinadigan
+matn ham, `FAQPage` razметkasi ham o'sha yerdan. Google razmetka
+ko'rinadigan matnga AYNAN mos kelishini talab qiladi — ikkita nusxa
+bo'lsa, biri o'zgarganda razmetka yolg'on bo'lib qolardi.
+
+**Halol chegara:** bu TEXNIK poydevor. «Top 1» ni texnika bermaydi —
+uni kontent, tashqi havolalar va vaqt beradi. Hozir qilingani:
+qidiruv tizimi sahifani to'g'ri o'qiy oladi, to'rt tilni bog'lay
+oladi va narx/imkoniyat sahifalari mustaqil so'rovlar uchun mavjud.
+
+### Sinov hisobi — FAQAT dev rejimida
+
+`src/components/LoginForm.tsx` da email va parol oldindan
+to'ldirilgan. `process.env.NODE_ENV` qurish paytida matn bilan
+almashtirilgani uchun ishlab chiqarish qurilmasida butun shox
+o'chib ketadi. **Tekshirilgan:** `next build` dan keyin
+`.next/static` va `.next/server` da email TOPILMADI.
+
+---
+
+## 8. «Фарқ» ishorasi — buxgalteriya qoidasiga keltirildi (2026-08-16)
+
+Ilgari uch joyda uch xil edi. Endi bitta qoida:
+
+> **Farq = DEBET − KREDIT** (ya'ni sof saldo), har ikkala sverkada.
+
+| Sverka | Hisob | Debet | Kredit | Farq |
+|---|---|---|---|---|
+| **Chiqim** | 6010, **passiv** (yetkazib beruvchi) | to'langan pul | kelgan faktura | **to'lov − faktura** |
+| **Kirim** | 4010, **aktiv** (xaridor) | yozilgan faktura | tushgan pul | **faktura − to'lov** |
+
+Natijada ma'no ikkala tomonda BIR XIL bo'ladi:
+**musbat = ular qarzdor · manfiy = biz qarzdormiz.**
+
+**Nima o'zgardi.** Chiqim tomoni allaqachon to'g'ri edi. Ikki joy
+tuzatildi:
+
+1. `/excel-audit` ro'yxati `credit − debit` hisoblardi — butun tizimga
+   teskari. Endi `/korxonalar` da `tolov − faktura`.
+2. Kirim sverkasi `bankCredit − facturaSent` hisoblardi, ya'ni
+   **o'zining Akt sverkisiga teskari**: `aktSverki.ts` («Сальдо
+   конечное», etalon PDF bilan qatorma-qator mos) doim
+   `facturaSent − bankCredit` bo'lib kelgan. Bitta ekranda ikkita
+   qarama-qarshi ishora turardi.
+
+Tegilgan: `incomeParser.ts` (3 joy), `incomeExcel.ts` (4 joy),
+`KirimSverka.tsx`, `korxonalar/page.tsx`. **58 ta tekshiruv o'tdi** —
+harness `difference` ni faqat yig'adi, ishoraga da'vo qilmaydi.
+
+**Rang ishoraga emas, MA'NOga bog'langan** (ikkala sverkada bir xil):
+`bad` — PUL yetishmayapti (qarz) · `warn` — QOG'OZ yetishmayapti
+(faktura yozish/so'rash kerak).
+
+---
+
+## 9. O'lchangan kontrast xatolari (2026-08-16)
+
+Brauzerda `getComputedStyle` bilan o'lchangan, taxmin emas. Sahifada
+223 ta matn elementi supurildi — hozir yorug' va tungi rejimda **0 ta
+xato**, eng past nisbat 4,68:1.
+
+| Joy | Nima edi | O'lchov | Yechim |
+|---|---|---|---|
+| `Highlight` yorlig'i (qo'llanma) | `bg-mark text-white` | tungi **2,69:1** | `--mark-fg` tokeni: yorug'da oq, tungida to'q |
+| Animatsiyadagi ✓/✗ | `bg-ok/bg-bad text-white` | tungi **1,92 / 2,69:1** | `--fill-fg` tokeni |
+| Til ro'yxati, tanlangan qator | `text-accent` | tungi **2,37:1** | `text-accent-ink` (7,47) |
+| Til ro'yxati, qisqa belgi | `opacity-60` | yorug' **2,88:1** | `text-ink-3` (5,43) |
+| «Tez kunda» kartalari | `opacity-80` | **3,53:1** | shaffoflik olib tashlandi |
+
+**Umumiy sabab bitta:** tungi rejimda `--ok`, `--bad`, `--mark`,
+`--accent` OCHroq variantga o'tadi — ustidagi oq yozuv yiqiladi.
+Shuning uchun **to'ldirilgan** belgining yozuvi uchun alohida token
+kerak. Shaffoflik esa kontrastni har doim buzadi: sustlashtirish
+`opacity` bilan emas, RANG bilan qilinadi.
+
+**O'lchash haqida eslatma.** Brauzer paneli yopiq bo'lsa
+`IntersectionObserver` va `transition` ishlamaydi: `Reveal` bo'limlari
+`opacity:0` da qoladi va `transition-colors` bo'lgan element eski
+rangda qotib turadi. O'lchashdan oldin:
+`* { transition: none !important } [style*="opacity"] { opacity: 1 !important }`.
+Aks holda mavjud bo'lmagan xato «topiladi» (shu sessiyada 4 tasi
+aynan shunday soxta chiqdi).
+
+---
+
+## 10. O'chirilgan fayllar (2026-08-16)
+
+Hammasi tekshirilgan: hech qayerdan import qilinmagan yoki
+hozirgi qoidalarda ishlamaydi. Kod git tarixida qoladi.
+
+| Fayl | Sabab |
+|---|---|
+| `src/app/excel-audit/companies/page.tsx` | `workspaceId` siz so'rov (qoidalar RAD etadi), klientdan `addDoc` (`create: false`), mavjud bo'lmagan `/companies/{id}` havolasi |
+| `src/app/astatka/page.tsx` + `api/calculate-astatka/` | `ASTATKA_ENABLED = false` ortida edi |
+| `src/components/FileUpload.tsx` | import qiluvchi yo'q, `/api/upload` route'i mavjud emas |
+| `src/lib/excelParser.ts` | import qiluvchi yo'q (`detectCategory`, `parseHamkorbank` — o'lik) |
+| `src/components/ComingSoon.tsx` | eski bosh sahifa bilan birga keraksiz qoldi |
+| `src/app/favicon.ico` | o'rniga `src/app/icon.svg` (brend belgisi) |
+
+---
+
+## 11. Bu sessiyada tegilgan fayllar (2026-08-16)
+
+**Yangi:** `src/lib/brand.ts`, `src/components/Brand.tsx`,
+`src/components/AppShell.tsx`, `src/components/ui/Module.tsx`,
+`src/components/sverka/{ChiqimSverka,KirimSverka}.tsx`,
+`src/components/landing/Sections.tsx`, `src/app/icon.svg`,
+`src/app/korxonalar/{layout,page}.tsx`, `src/app/korxonalar/[id]/page.tsx`,
+`src/app/{login,qollanma}/layout.tsx`.
+
+**O'zgargan:** `src/app/page.tsx` (to'liq qayta yozildi),
+`src/app/{layout,globals.css}`, `src/app/{login,qollanma}/page.tsx`,
+`src/lib/{incomeParser,incomeExcel,bankStatements}.ts`,
+`src/lib/i18n/index.ts`, `src/context/AuthContext.tsx` (tiplandi),
+`src/components/ui/{Modal,PageHeader,index}.ts(x)`,
+`src/components/{LanguageToggle}.tsx`,
+`src/components/guide/{Guide,Annotate,SverkaAnimation}.tsx`,
+`src/app/api/admin/create-user/route.ts`, `next.config.ts`,
+`.claude/launch.json`.
+
+**Commit holati:** katta qismi `b4ab63c "big changes"` da. Undan
+keyin qilingan tuzatmalar (kontrast tokenlari `--fill-fg` / `--mark-fg`,
+`LanguageToggle`, `AppShell` ajratilishi, `login`/`qollanma` uchun
+`layout.tsx`, shu hujjatning o'zi) hali commit qilinmagan.
+
+### Tekshiruv holati (2026-08-17)
+
+```
+node scripts/verify-parsers.cjs   ->  58/58 ✔
+npx tsc --noEmit                  ->  toza
+npx eslint src --max-warnings=0   ->  toza
+npx next build                    ->  xatosiz, 20 ta ochiq sahifa statik
+lug'at qamrovi                    ->  92,4% (qolgani tarjimasiz narsalar)
+brauzer:
+  · 4 til ham to'g'ri <html lang> va tarjima bilan ochiladi
+  · 10 ta manzil yo'naltirishi, /xyz -> 404
+  · hreflang × 5, canonical, sitemap 20 URL, robots
+  · JSON-LD: Organization+WebSite+SoftwareApplication, FAQPage(8), Breadcrumb
+  · kontrast: /uz/pricing va /ru/features — 0 xato (yorug' + tungi)
+  · login dev prefill ishlaydi; email ishlab chiqarish bundle'ida YO'Q
+```
+
+`/[locale]/clients` va `/[locale]/clients/[id]` brauzerda
+**sinalmagan** — ular login ortida, parol esa endi bor
+(`webleaders.uz@gmail.com`), lekin jonli Firestore sinovi hali
+qilinmagan.
+
+---
+
+## 12. Gidratsiya xatosi — TUNGI REJIMDA HAR SAHIFADA (2026-08-17)
+
+Shikoyat «til almashtirsam xato chiqadi» edi. O'lchash ikkita
+**alohida** xatoni ochdi va ikkinchisi jiddiyroq bo'lib chiqdi.
+
+### 12a. Asosiy xato: `ThemeToggle` server bilan klientda BOSHQA
+### narsa chizardi
+
+```
+useState(() => typeof window !== "undefined" &&
+               document.documentElement.classList.contains("dark"))
+```
+
+Serverda `window` yo'q → `false` → **Moon** belgisi.
+Klientda tungi rejim yoqiq → `true` → **Sun** belgisi.
+
+Ikkitasi boshqa SVG, ya'ni **tuzilma** mos kelmasdi. Natijada:
+
+> Hydration failed because the server rendered HTML didn't match
+> the client.
+
+React butun daraxtni klientda QAYTA chizardi. Ўlchangan oqibat:
+DOM **ikkilanardi** — sahifada ikkita `<main>`, ikkita `header`,
+ikkita JSON-LD blok.
+
+`suppressHydrationWarning` buni YASHIRMAYDI: u faqat elementning
+O'Z atributi/matni uchun, ichidagi tuzilma uchun emas. Tugmada u
+turgan edi, lekin foyda bermagan.
+
+**Qachondan beri:** tungi rejim yoqilgan har qanday sahifa
+yuklanishida. Ilgari sezilmagan, chunki konsol tungi rejimda
+tekshirilmagan.
+
+**Yechim** (`src/components/ThemeToggle.tsx`): React holati
+BUTUNLAY olib tashlandi. Ikkala belgi ham har doim chiziladi,
+qaysi biri ko'rinishini CSS hal qiladi:
+
+```tsx
+<Moon className="h-4 w-4 dark:hidden" />
+<Sun  className="hidden h-4 w-4 dark:block" />
+```
+
+Holat yagona haqiqiy manbada — `<html>` elementining sinfida.
+Server va klient AYNAN bir xil HTML chiqaradi.
+
+**Tasdiq:** tungi rejim + toza yuklash → 0 ta konsol xatosi;
+`<main>` va `header` bittadan.
+
+### 12b. Ikkinchi xato: til almashganda `<script>` qayta yaratiladi
+
+Ildiz layout `[locale]` segmenti ichida. Til almashsa manzilning
+birinchi bo'lagi o'zgaradi va React butun daraxtni qayta montaj
+qiladi — layout'dagi tema skriptini **klientda yaratishga**
+urinadi. Brauzer JS orqali qo'shilgan inline skriptni bajarmaydi,
+shuning uchun React xato yozadi.
+
+**Sinalgan va YIQILGAN ikki yo'l** (takrorlamang):
+
+| Yo'l | Nega yiqildi |
+|---|---|
+| Skriptni klient komponentiga chiqarish | React `<script>` ni **gidratsiya qilmaydi** — har doim yangidan yaratadi. Natija: butun DOM ikkilandi |
+| `next/script` `strategy="beforeInteractive"` | App-router'da u ham aynan o'sha `<script>` elementini chizadi (`next/dist/client/script.js`) — xato o'zgarmaydi |
+| Cookie'dan o'qib `<html class>` ga qo'yish | `cookies()` layout'ni DINAMIK qiladi → 20 ta statik sahifa yo'qoladi |
+
+**Qabul qilingan yechim:** til almashinuvi endi **to'liq sahifa
+yuklashi** (`window.location.assign`), `router.push` emas —
+`src/context/LanguageContext.tsx`.
+
+Buning narxi YO'Q, chunki o'lchandi: yumshoq o'tishda ham
+`<main>` va `<header>` DOM tugunlari YANGIDAN yaratilardi, ya'ni
+komponent holati (yuklangan fayl, o'qilgan hisobot) `router.push`
+da ham saqlanmasdi.
+
+### 12c. Yo'l-yo'lakay: tema endi tizim sozlamasini ham biladi
+
+Skript avval faqat `localStorage` ni o'qirdi. Endi: saqlangan
+tanlov USTUN, u yo'q bo'lsa `prefers-color-scheme`. Ya'ni OS'da
+tungi rejim yoqilgan odam birinchi kirishdayoq to'g'ri rangda
+ko'radi.
+
+---
+
+## 13. Dizayn qatlami — material (2026-08-17)
+
+Rang o'qlari, kontrast qiymatlari va atamalar TEGILMADI. Qo'shilgani —
+**shrift, chuqurlik va o'lchov**.
+
+| Nima | Qayerda | Izoh |
+|---|---|---|
+| **Inter** (o'zgaruvchan) | `layout.tsx` + `globals.css` | `latin` + `latin-ext` + `cyrillic` + `cyrillic-ext`. Ilgari har OS o'z shriftini chizardi |
+| `--shadow-1/2/3` | `globals.css` | Uch pog'ona. Tungida soya ko'rinmaydi → yuqori qirrada `inset` yorug' chiziq |
+| `--text-display`, `--text-title` | `globals.css` | `clamp()` bilan: telefonda 36px, katta ekranda 64px |
+| `--radius-xl`, `--radius-2xl` | `globals.css` | FAQAT ochiq sahifalarning yirik sirtlari uchun |
+| `.glass`, `.grid-bg`, `.lift`, `.sheen` | `globals.css` | Shapka, hero foni, karta ko'tarilishi |
+| `.brand-gradient(-text)` | `globals.css` | Logotipning AYNAN ikki rangi: `--invoice` → `--cash` |
+| `Card` da `elevation` propi | `ui/Card.tsx` | Quyidagi tuzoqqa qarang |
+| `AppFrame` | `landing/Sections.tsx` | Hero animatsiyasi «dastur oynasi» ramkasida |
+
+### Uchta tuzoq va ular qanday yopilgani
+
+1. **`--font-inter` ni `:root` da ishlatib bo'lmaydi.** `next/font`
+   sinfi `<body>` da (`<html>` da tema skripti bilan to'qnashardi).
+   Maxsus xossa **e'lon qilingan joyda** hisoblanadi, ya'ni
+   `:root { --ui-font: var(--font-inter), ... }` yozilsa u yerda
+   `--font-inter` bo'sh bo'lib, BUTUN qiymat yaroqsiz bo'lardi.
+   Shuning uchun oraliq o'zgaruvchi yo'q — ro'yxat `body` da
+   to'g'ridan-to'g'ri yozilgan.
+
+2. **`@theme inline` o'zgaruvchini `:root` ga CHIQARMAYDI.**
+   `--font-sans` ni faqat o'sha yerda yozib qo'yish ishlamadi:
+   `var(--font-sans)` bo'sh chiqdi.
+
+3. **`globals.css` dagi sinf Tailwind utilitasidan KUCHLI.**
+   U qatlamsiz (`@layer` siz), shuning uchun `.elev { box-shadow }`
+   `shadow-2` yozilgan kartani ham 1-pog'onaga tushirardi
+   (brauzerda o'lchangan). Balandlik shuning uchun `className`
+   orqali emas, `Card` ning `elevation` propi orqali beriladi.
+
+### Bu sessiyadagi o'lchov
+
+```
+kontrast (yorug' + tungi, /uz, /uz/pricing, /uz/features,
+          /uz/guide, /uz/login):        203 element, 0 xato
+eng past nisbat (tungi bosh sahifa):    5,44:1
+gorizontal siljish (1280 va 375 px):    yo'q
+til almashinuvi (tungi rejim):          0 ta konsol xatosi
+`<main>` / `<header>` soni:             1 / 1  (ilgari 2 / 2)
+```
+
+**Diqqat: bu sessiyada SKRINSHOT olinmagan** — brauzer paneli
+yopiq edi (`Browser pane is not displayed`), shuning uchun barcha
+tekshiruv `getComputedStyle`, `getBoundingClientRect` va DOM
+o'qish orqali qilingan. Rasm bilan ko'rish hali kerak.

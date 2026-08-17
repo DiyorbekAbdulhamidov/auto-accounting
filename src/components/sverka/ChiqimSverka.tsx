@@ -3,7 +3,7 @@
 // ------------------------------------------------------------
 // Илгари бу `app/excel-audit/companies/[id]/page.tsx` эди. Энди
 // компонент: битта корхона саҳифасида кирим сверкаси билан ЁНМА-ЁН,
-// таб бўлиб туради. Буxгалтер учун бу битта иш — «шу корхонани
+// таб бўлиб туради. Бухгалтер учун бу битта иш — «шу корхонани
 // солиштир» — шунинг учун саҳифа ҳам битта.
 //
 // Саҳифа ўрами (`data-module="out"`, сарлавҳа, орқага тугмаси) ота
@@ -32,10 +32,10 @@ import {
   FileDrop,
   Num,
   NumTd,
-  PageLoader,
   RowCheckbox,
   SearchInput,
   Select,
+  Spinner,
   StatCard,
   Table,
   TableFrame,
@@ -148,7 +148,7 @@ function sortedPeriods(monthlyData: Record<string, MonthlyBucket>): string[] {
 
 // ФАРҚ = ТЎЛАНГАН ПУЛ − КЕЛГАН ФАКТУРА (сальдо).
 //
-// Ишора буxгалтерия қоидасидан: етказиб берувчи ҳисоби (6010
+// Ишора бухгалтерия қоидасидан: етказиб берувчи ҳисоби (6010
 // «Етказиб берувчиларга тўланадиган счётлар») — ПАССИВ ҳисоб, унда
 // тўлов ДЕБЕТ, келган фактура КРЕДИТ. Сальдо = дебет − кредит.
 //
@@ -791,8 +791,16 @@ export default function ChiqimSverka({
     saveAs(blob, `Chiqim_sverka_${safe}_${today}.xlsx`);
   };
 
+  // БУТУН ЭКРАНЛИ юклагич ЭМАС: бу компонент энди саҳифанинг ЎЗИ
+  // эмас, таб ичидаги бўлак. `min-h-screen` спиннер сарлавҳа ва
+  // табларни пастга суриб юборарди.
   if (isFetchingData) {
-    return <PageLoader text={t("Маълумотлар юкланмоқда...")} />;
+    return (
+      <Card className="flex items-center justify-center gap-3 py-12">
+        <Spinner className="h-5 w-5 text-accent-ink" />
+        <span className="text-body text-ink-3">{t("Маълумотлар юкланмоқда...")}</span>
+      </Card>
+    );
   }
 
   return (
@@ -852,7 +860,7 @@ export default function ChiqimSverka({
 
           {/* ЎҚИШ ҲИСОБОТИ — қайси файлдан нима ўқилгани, нима ўқилмагани.
               Бу ерда БАНК ТИЛИ ишлатилади (дебет/кредит/Итого) — бу
-              атайлаб: буxгалтер шу ерда файлни текширади. */}
+              атайлаб: бухгалтер шу ерда файлни текширади. */}
           {showReport && sheetReports.length > 0 && (
             <div className="overflow-hidden rounded-lg border border-line">
               <div className="custom-scrollbar overflow-x-auto">

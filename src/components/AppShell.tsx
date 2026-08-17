@@ -1,5 +1,5 @@
 // ============================================================
-// ИЛОВА ҚАТЛАМИ — кириш талаб қиладиган ҳамма саҳифа шу остида
+// ИЛОВА ЎРАМИ — кириш талаб қиладиган саҳифалар учун
 // ------------------------------------------------------------
 // Иккита нарса шу ерда БИР МАРТА қилинади:
 //   1. Кириш текшируви. Илгари ҳар саҳифа ўзи текширарди —
@@ -8,6 +8,10 @@
 //
 // Модуль ранги бу ерда ЙЎҚ: юқори қатор бренд, у кирим ёки чиқимга
 // боғлиқ эмас. Ранг фақат сверка саҳифасининг ичида.
+//
+// Нега `layout.tsx` нинг ЎЗИ эмас: у сервер компоненти бўлиб қолиши
+// керак, акс ҳолда саҳифанинг `metadata` си (брaуzer ёрлиғи ва
+// қидирув матни) ёзилмайди.
 // ============================================================
 "use client";
 
@@ -19,17 +23,19 @@ import Logo from "@/components/Brand";
 import ThemeToggle from "@/components/ThemeToggle";
 import LanguageToggle from "@/components/LanguageToggle";
 import { useAuth } from "@/context/AuthContext";
-import { useT } from "@/context/LanguageContext";
+import { useLocale, useT } from "@/context/LanguageContext";
+import { path } from "@/lib/routes";
 import { Button, PageLoader, buttonClasses, layout } from "@/components/ui";
 
-export default function AppLayout({ children }: { children: React.ReactNode }) {
+export default function AppShell({ children }: { children: React.ReactNode }) {
   const { user, loading, logout } = useAuth();
   const router = useRouter();
   const t = useT();
+  const locale = useLocale();
 
   useEffect(() => {
-    if (!loading && !user) router.replace("/login");
-  }, [loading, user, router]);
+    if (!loading && !user) router.replace(path("login", locale));
+  }, [loading, user, locale, router]);
 
   if (loading || !user) {
     return <PageLoader text={t("Хавфсизлик текшируви...")} />;
@@ -37,15 +43,19 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   return (
     <div className={layout.page}>
-      <header className="sticky top-0 z-40 border-b border-line bg-surface/95 backdrop-blur">
+      {/* Очиқ саҳифалардаги шапка билан БИР ХИЛ материал (`.glass`):
+          одам кириш ва иш саҳифаси орасида ўтганда сирт ўзгармайди.
+          Бренд градиенти бу ерда ЙЎҚ — иш саҳифасида диққат
+          жадвалда бўлиши керак. */}
+      <header className="glass sticky top-0 z-40 border-b border-line">
         <div className="mx-auto flex w-full max-w-[1500px] items-center justify-between gap-3 px-4 py-2.5 md:px-6">
-          <NextLink href="/korxonalar" aria-label={t("Бош саҳифа")}>
+          <NextLink href={path("clients", locale)} aria-label={t("Мижозлар")}>
             <Logo size="sm" />
           </NextLink>
 
           <div className="flex items-center gap-2">
             <NextLink
-              href="/qollanma"
+              href={path("guide", locale)}
               className={buttonClasses("ghost", "sm")}
               title={t("Қўлланма")}
             >

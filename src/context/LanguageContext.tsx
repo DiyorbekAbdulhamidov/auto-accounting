@@ -1,78 +1,85 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useSyncExternalStore } from "react";
-import { DEFAULT_LANG, isLang, translate, type Lang } from "@/lib/i18n";
+import { createContext, useCallback, useContext, useMemo } from "react";
+import { usePathname } from "next/navigation";
+import { translate, LANG_TO_LOCALE, type Lang, type Locale } from "@/lib/i18n";
+import { switchLocale } from "@/lib/routes";
 
-const STORAGE_KEY = "lang";
-
+// ============================================================
+// ТИЛ — энди МАНЗИЛДА
 // ------------------------------------------------------------
-// Тил — localStorage'да турадиган ТАШҚИ ҳолат. Уни useState +
-// useEffect билан ўқиш иккита муаммо туғдирарди: сервер ва браузер
-// ҳар хил HTML чиқариши (hydration хатоси) ва эффект ичида setState
-// (кетма-кет рендерлар). useSyncExternalStore айнан шунинг учун
-// мўлжалланган: серверда getServerSnapshot, браузерда getSnapshot.
-// ------------------------------------------------------------
+// Илгари тил `localStorage` да турарди. Иккита муаммо бор эди:
+//   1. Google уни УМУМАН кўрмасди — қидирув тизими фақат битта
+//      (стандарт) вариантни индекслайди, русча қидирган буxгалтер
+//      эса ҳеч қачон топмасди.
+//   2. Сервер ва браузер ҳар хил HTML чиқарарди (гидратация).
+//
+// Энди тил `app/[locale]/layout.tsx` дан ПРОП бўлиб келади, яъни
+// сервер ва клиент айнан бир хил матн чизади. `useSyncExternalStore`
+// ва localStorage'дан ўқиш КЕРАК ЭМАС.
+//
+// Тил алмаштирилганда одам ЎША саҳифасида қолади — фақат манзилнинг
+// биринчи бўлаги ўзгаради (`switchLocale`).
+// ============================================================
 
-const listeners = new Set<() => void>();
-
-function subscribe(cb: () => void): () => void {
-  listeners.add(cb);
-  // Бошқа ойнада тил ўзгарса, бу ойна ҳам хабардор бўлсин
-  window.addEventListener("storage", cb);
-  return () => {
-    listeners.delete(cb);
-    window.removeEventListener("storage", cb);
-  };
-}
-
-function getSnapshot(): Lang {
-  try {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    return isLang(saved) ? saved : DEFAULT_LANG;
-  } catch {
-    // localStorage ёпиқ бўлса — стандарт тилда ишлайверамиз
-    return DEFAULT_LANG;
-  }
-}
-
-/** Серверда ва гидратация пайтида ҲАР ДОИМ стандарт тил */
-function getServerSnapshot(): Lang {
-  return DEFAULT_LANG;
-}
-
-function writeLang(l: Lang): void {
-  try {
-    localStorage.setItem(STORAGE_KEY, l);
-  } catch {}
-  for (const cb of listeners) cb();
-}
+/** Проxи келгуси сафар тўғри тилга йўналтириши учун */
+const LOCALE_COOKIE = "NEXT_LOCALE";
 
 interface LanguageValue {
   lang: Lang;
+  locale: Locale;
   setLang: (l: Lang) => void;
   /** Кирилл матнни жорий тилга ўгиради */
   t: (text: string) => string;
 }
 
 const LanguageContext = createContext<LanguageValue>({
-  lang: DEFAULT_LANG,
+  lang: "uz-latn",
+  locale: "uz",
   setLang: () => {},
   t: (text) => text,
 });
 
-export function LanguageProvider({ children }: { children: React.ReactNode }) {
-  const lang = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
+export function LanguageProvider({
+  lang,
+  locale,
+  children,
+}: {
+  lang: Lang;
+  locale: Locale;
+  children: React.ReactNode;
+}) {
+  const pathname = usePathname();
 
-  // <html lang> ни жорий тилга мослаш — браузер ва скрин-ридерлар учун
-  useEffect(() => {
-    document.documentElement.lang = lang === "ru" ? "ru" : lang === "en" ? "en" : "uz";
-  }, [lang]);
-
-  const setLang = useCallback((l: Lang) => writeLang(l), []);
+  const setLang = useCallback(
+    (l: Lang) => {
+      const next = LANG_TO_LOCALE[l];
+      try {
+        // Бир йил — тил танлови камдан-кам ўзгаради
+        document.cookie = `${LOCALE_COOKIE}=${next}; path=/; max-age=31536000; samesite=lax`;
+      } catch {}
+      // ТЎЛИҚ саҳифа юклаш, `router.push` ЭМАС. Иккита сабаб, иккиси
+      // ҳам браузерда ЎЛЧАНГАН (2026-08-17):
+      //
+      //  1. Тил манзилнинг БИРИНЧИ бўлагида, яъни илдиз layout
+      //     алмашади. React бутун дарахтни қайта монтаж қилади ва
+      //     layout'даги тема скриптини КЛИЕНТДА яратишга уринади —
+      //     браузер уни бажармайди, консолда хато чиқади.
+      //  2. Юмшоқ ўтишнинг фойдаси ҳам йўқ эди: ўлчовда `<main>` ва
+      //     `<header>` тугунлари барибир ЯНГИДАН яратилди, яъни
+      //     компонент ҳолати (юкланган файл, ўқилган ҳисобот)
+      //     `router.push` да ҳам сақланмасди.
+      //
+      // Тўлиқ юклашда `<html lang>`, мета маълумот ва cookie бир
+      // марта, аниқ ҳолда қўйилади.
+      window.location.assign(switchLocale(pathname, next));
+    },
+    [pathname]
+  );
 
   const t = useCallback((text: string) => translate(text, lang), [lang]);
 
-  const value = useMemo(() => ({ lang, setLang, t }), [lang, setLang, t]);
+  const value = useMemo(() => ({ lang, locale, setLang, t }), [lang, locale, setLang, t]);
 
   return <LanguageContext.Provider value={value}>{children}</LanguageContext.Provider>;
 }
@@ -85,4 +92,9 @@ export function useLanguage(): LanguageValue {
 /** Фақат таржима функцияси керак бўлганда: `const t = useT()` */
 export function useT(): (text: string) => string {
   return useContext(LanguageContext).t;
+}
+
+/** Ҳавола қуриш учун: `path("pricing", useLocale())` */
+export function useLocale(): Locale {
+  return useContext(LanguageContext).locale;
 }

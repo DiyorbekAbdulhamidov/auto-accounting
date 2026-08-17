@@ -20,14 +20,24 @@ export function cx(...parts: Array<string | false | null | undefined>): string {
 export type ButtonVariant = "primary" | "secondary" | "ghost" | "danger";
 export type ButtonSize = "sm" | "md";
 
+// `transition-colors` EMAS, `transition-[...]`: tugma endi bosilganda
+// bir oz «cho'kadi» (`active:translate-y-px`) va asosiy tugmada soya
+// bor. Ikkalasi ham RANG emas — shuning uchun o'lchangan kontrast
+// raqamlariga tegmaydi.
 const BUTTON_BASE =
   "inline-flex items-center justify-center gap-2 rounded-md font-medium whitespace-nowrap " +
-  "transition-colors disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:opacity-50";
+  "transition-[color,background-color,border-color,box-shadow,transform] duration-150 " +
+  "active:translate-y-px motion-reduce:active:translate-y-0 " +
+  "disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:opacity-50 " +
+  "disabled:active:translate-y-0";
 
 const BUTTON_VARIANT: Record<ButtonVariant, string> = {
-  // Modul rangi (`--accent`): chiqimda ko'k, kirimda yashil
-  primary: "bg-accent text-accent-fg hover:opacity-90",
-  secondary: "bg-surface text-ink-2 border border-line hover:bg-surface-2 hover:text-ink",
+  // Modul rangi (`--accent`): chiqimda ko'k, kirimda yashil.
+  // Soya tugmani sahifadan AJRATADI — asosiy harakat qaysi ekanini
+  // rang emas, chuqurlik ham aytadi.
+  primary: "bg-accent text-accent-fg shadow-1 hover:opacity-90 hover:shadow-2",
+  secondary:
+    "bg-surface text-ink-2 border border-line shadow-1 hover:bg-surface-2 hover:text-ink hover:border-line-strong",
   ghost: "text-ink-3 hover:bg-surface-2 hover:text-ink",
   danger: "bg-surface text-bad border border-line hover:bg-bad-soft hover:border-bad",
 };

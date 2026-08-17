@@ -3,13 +3,14 @@
 Bu hujjat KOD emas, QAROR saqlaydi. `HANDOFF.md` texnik holatni yozadi,
 bu esa «nima uchun shunday atadik / shunday chizdik» ni.
 
-> **QABUL QILINGAN QARORLAR (2026-08-13)**
-> - **Yo'nalish: A** — mahsulot BUXGALTER uchun sverka vositasi.
->   YATT/soliq moduli hozircha yozilmaydi.
-> - **Nom: kutiladi.** Shuning uchun UI atamalari brenddan MUSTAQIL
->   qilib to'g'rlandi — nom keyin qanday bo'lishidan qat'i nazar
->   ular o'zgarmaydi.
-> - **1-bosqich (lug'at) BAJARILDI** — 3-bo'limga qarang.
+> **QABUL QILINGAN QARORLAR**
+> - **Yo'nalish: A** (2026-08-13) — mahsulot BUXGALTER uchun sverka
+>   vositasi. YATT/soliq moduli hozircha yozilmaydi.
+> - **Nom: `Moslik`** (2026-08-16). Domen `moslik.uz`. Sabab quyida.
+> - **Standart alifbo: o'zbek LOTIN** (2026-08-16). Kalit va manba
+>   matn kirill holicha qoladi — o'zgargani faqat birinchi marta
+>   kirgan odam nimani ko'rishi.
+> - **UI 1, 2, 3-bosqichlar BAJARILDI** — 3-bo'limga qarang.
 
 ---
 
@@ -100,13 +101,133 @@ Shulardan mahsulotga mazmunan mos uchtasi:
 | **Tenglik** | Qoldiq TENGLAMASI — mahsulotning texnik yadrosi aynan shu. Debet = kredit tengligi buxgalteriyaning o'zagi | «Tenglik» ijtimoiy ma'noga ham ega |
 | **Yakun** | Buxgalterning eng og'ir kuni — yakun (oy yopish). «Yakun» — natija, hisobot | Kengroq, sverkani anglatmaydi |
 
-**Tavsiyam: `Moslik`** (domen `moslik.uz`, tagline yuqorida). Sabab: u
-mahsulot NIMA QILISHINI aytadi, kimga qarshi ekanini emas; ikkala yo'lda
-ham ishlaydi; qisqa va o'zbekcha.
-
 **3-yo'l — hech narsa o'zgarmaydi**, «Buxgaltersiz» qoladi, mahsulot A da
 qoladi. Eng arzon, lekin nom bilan mahsulot bir-biriga qarama-qarshi
 turaveradi.
+
+---
+
+### ✅ QAROR (2026-08-16): nom — **Moslik**
+
+2-yo'l tanlandi. Nomni tanlash foydalanuvchi tomonidan topshirilgan edi
+(«shundan kelib chiqib nom qo'y o'zing»), manba esa yuqoridagi rasmiy
+ta'rifning o'zi.
+
+**Qanday chiqarildi.** Ta'rifning o'zagi — oxirgi so'z: «...tez aniqlash
+**SOLISHTIRMASI**». Solishtirmaning NATIJASI bitta so'z bilan aytiladi:
+mos keldi yoki mos kelmadi. Ilova ham aynan shu javobni beradi.
+
+```
+solishtirma  ->  mos kelish  ->  MOSLIK
+```
+
+**Nega boshqasi emas:**
+
+| Nom | Nega rad etildi |
+|---|---|
+| «Buxgaltersiz» | Mahsulot buxgalter UCHUN. Nom unga qarshi va'da beradi — mijozni haydaydi |
+| «Tezhisob» / «Aniqhisob» | «Hisob» butun buxgalteriyani va'da qiladi, mahsulot esa sverka qiladi. Ortiqcha va'da |
+| «Tenglik» | Qidiruvda ijtimoiy ma'no bilan aralashadi |
+| Ta'rifning o'zi | 12 so'z, 96 belgi — nom emas, ta'rif |
+
+**«Moslik» nimasi bilan mos:** natijaning O'ZI; ikkala yo'nalishga ham
+neytral (kirim ham, chiqim ham); YATT moduli qo'shilsa ham buzilmaydi;
+sof o'zbekcha, 6 harf, tarjima talab qilmaydi.
+
+**Rasmiy ta'rif tashlanmadi** — u `src/lib/brand.ts` da saqlanadi va
+saytning podvalida to'liq holicha turadi (Tashabbus arizasi bilan
+bog'lanish uchun).
+
+> **Domen holati (2026-08-17 da rasmiy WHOIS'dan tekshirildi).**
+> `cctld.uz/whois` javobi: **«moslik.uz домени мавжуд эмас»** —
+> ya'ni hali BAND EMAS, olish mumkin. 2026-08-04 dagi holat
+> o'zgarmagan. Uni olish keyingi ishlar ro'yxatining boshiga
+> qo'yilsin: nom kodda, hujjatlarda va SEO qatlamida allaqachon
+> ishlatilyapti (`NEXT_PUBLIC_SITE_URL` ning standart qiymati ham
+> `https://moslik.uz`).
+
+### Logotip
+
+Belgi — **teng belgisining o'zi: ikkita chiziq**.
+Yuqorigi `--cash` (pul), pastkisi `--invoice` (faktura), ikkalasi TENG
+uzunlikda. Mahsulotning butun javobi shu.
+
+Yangi rang O'YLAB TOPILMADI: ilovada «pul» va «faktura» allaqachon shu
+ikki token bilan ko'rsatiladi va ular ikkala sverkada ham bir xil.
+Logotip ham aynan shu ikki tushunchani anglatgani uchun mavjudi olindi.
+Tunggi rejimda tokenlar o'zidan ochroq variantga o'tadi — logotip uchun
+alohida tungi rang yozilmagan.
+
+Fayllar: `src/components/Brand.tsx` (ilova ichida),
+`src/app/icon.svg` (brauzer yorlig'i).
+
+### Shior (2026-08-16 da almashtirildi)
+
+**«Бухгалтер учун автоматик текширув тизими»**
+
+Ilgari «Пул билан фактура мос келдими» edi. Muammo: u faqat BUGUNGI
+modulni tasvirlardi. Ombor qoldig'i (Astatka), soliq xavfi yoki AI
+tahlili qo'shilsa, shior yolg'onga aylanardi.
+
+Yangi shior TOIFAni e'lon qiladi va shuning uchun eskirmaydi. Lekin
+uning zaif tomoni bor va u qabul qilib olindi: **toifa shiori o'zi
+«nima qilishini» aytmaydi.** Shu sababli `BRAND.promise` MAJBURIY
+juftlik qilib qo'yilgan — sarlavha ostida doim shu turadi:
+
+> Банк кўчирмаси билан фактура рўйхатини юкланг — тизим ҳар бир
+> контрагент бўйича рақамларни солиштиради ва фарқ борларини
+> ажратиб беради.
+
+Ikkalasi `src/lib/brand.ts` da yonma-yon turadi — biri ikkinchisisiz
+ishlatilmasin.
+
+### Til manzilda (2026-08-17)
+
+**`/uz` · `/uz-cyrl` · `/ru` · `/en`** — har doim prefiks bilan.
+
+Sabab o'lchov bilan aniqlandi: 410 ta UI matndan 210 tasi tarjimasiz
+edi (qamrov 48,8%), ya'ni rus tilida sahifaning yarmi o'zbekcha
+chiqardi. Lekin asosiy muammo tarjimaning o'zi emas edi — **til
+`localStorage` da turardi va Google uni umuman ko'rmasdi.** Ruscha
+qidirgan buxgalter saytni hech qachon topa olmasdi.
+
+Uchta qaror:
+
+1. **Har doim prefiks** (`/` ham `/uz` ga yo'naltiriladi). Sanoat
+   standarti; hreflang va canonical shundagina bir ma'noli bo'ladi.
+2. **Kirill alohida manzil** (`/uz-cyrl`). Xavfi bor — bir xil matn
+   ikki manzilda. Yagona himoya: `hreflang` da YOZUV ko'rsatiladi
+   (`uz-Latn` / `uz-Cyrl`), aks holda Google bittasini tashlaydi.
+3. **Kalit tuzilishiga TEGILMADI** — `t()` kaliti hali ham kirill
+   matnning o'zi. O'zgargani faqat tilning qayerdan kelishi.
+
+### Marshrut nomlari — inglizcha va vazifa bo'yicha
+
+| Eski | Yangi | Nega |
+|---|---|---|
+| `/excel-audit` | `/clients` | Eskisi VOSITAni nomlagan (Excel), ishni emas |
+| `/korxonalar` | `/clients` | O'zbekcha nom qidiruvda ko'rinmaydi |
+| `/qollanma` | `/guide` | — |
+| — | `/pricing` | «narx» mustaqil qidiruv so'rovi, alohida sahifa kerak |
+| — | `/features` | — |
+
+`/clients` (`/companies` emas): buxgalter uchun ular korxona emas,
+MIJOZ. Ingliz tilida `/companies` esa «bizning kompaniyalarimiz»
+deb tushuniladi.
+
+### Alifbo — nega lotin standart bo'ldi
+
+`DEFAULT_LANG = 'uz-latn'`. Bitta qator, kalitlarga tegilmadi.
+
+1. Davlat rasmiy alifbosi — lotin.
+2. Yosh foydalanuvchi lotinni bemalol, kirillni qiynalib o'qiydi;
+   teskarisi kamroq to'sqinlik qiladi.
+3. Brend, domen va marketing baribir lotin.
+4. Tanlov `localStorage` da saqlanadi va **standartdan ustun turadi** —
+   ya'ni kirill tanlagan odam uchun hech narsa o'zgarmaydi.
+
+Manba matn va `t()` kaliti **kirill holicha qoladi** — transliteratsiya
+avtomatik (`src/lib/i18n/translit.ts`).
 
 ---
 
@@ -184,14 +305,30 @@ manba deb o'qilib, summa ikkilanardi). Endi eski va yangi sarlavha
 ikkalasi ham taniladi, ustiga harnessda sinov bor: eksport qilinadi va
 qaytadan o'qiladi.
 
-**2-bosqich — dizayn tizimi.** Hozir har sahifa o'z rangi va o'z
-oralig'i bilan yozilgan. Kerak bo'ladi: rang tokenlari (kirim `#10B981`,
-chiqim `#4F46E5` — logotipdagi ranglar), bitta shrift shkalasi, bitta
-kartochka/jadval/tugma komponenti. `globals.css` + `src/components/ui/`.
+**2-bosqich — dizayn tizimi. ✅ BAJARILDI (2026-08-15).**
+Rang tokenlari (kirim `#10B981`, chiqim `#4F46E5`), bitta shrift
+shkalasi, `src/components/ui/` da 21 komponent.
 
-**3-bosqich — bitta sahifa, ikki yo'nalish.** Hozir chiqim va kirim
-alohida sahifa, alohida lug'at, alohida eksport. Buxgalter uchun bu bitta
-ish: «shu korxonani solishtir». Yo'nalish — sahifa emas, tab.
+Eng muhim qoida: **ikki rang o'qi aralashtirilmaydi.** Modul rangi
+(`--accent`) faqat tugma/tab/fokus uchun; ma'lumot rangi
+(`--cash`/`--invoice`/`--ok`/`--warn`/`--bad`) moduldan MUSTAQIL —
+pul ikkala sverkada bir xil rangda bo'lishi shart.
+
+**3-bosqich — bitta sahifa, ikki yo'nalish. ✅ BAJARILDI (2026-08-16).**
+Korxonalar ro'yxati endi bitta (`/korxonalar`), yo'nalish esa korxona
+sahifasidagi tab (`/korxonalar/[id]`). Kirim sverkasida ilgari korxona
+tushunchasi umuman yo'q edi — u mustaqil sahifa bo'lib, o'z ko'rinishi
+bilan turardi.
+
+Ikki texnik qaror:
+- **Ikkala komponent ham montajda qoladi**, ko'rinmagani `hidden` bilan
+  yashiriladi. Aks holda tab almashtirilganda yuklangan fayl, o'qilgan
+  hisobot va belgilangan qatorlar yo'qolardi.
+- **`ModuleScope`** (`src/components/ui/Module.tsx`) — modulni
+  `data-module` bilan birga KONTEKSTGA ham beradi. Sabab: `Modal`
+  `<body>` ga portal orqali chiqadi, ya'ni sahifadagi `data-module`
+  unga yetib bormaydi — kirim sverkasining «Акт сверки» oynasi ko'k
+  tugma bilan ochilardi (brauzerda o'lchab tasdiqlangan).
 
 **4-bosqich — natija ekranini qayta chizish.** Hozir birinchi ko'rinadigan
 narsa — 20 ustunli jadval. Ko'rinishi kerak bo'lgan narsa: **nechta
@@ -441,7 +578,141 @@ tekshiruv esa cheklov emas — uni har kim chetlab o'tadi.
 
 ---
 
-## 6. Keyingi qadam
+---
 
-Hammasi bitta savolga tayanadi: **A yo'lmi, B yo'lmi, ikkalasimi.**
-Nom ham, UI ham, narx ham shundan keyin bir ma'noli bo'ladi.
+## 6. Atamalar lug'ati — 5-nomuvofiqlik YOPILDI
+
+2-bo'limdagi jadvalda «5) Ikki sahifa teskari lug'at ishlatadi» degan
+muammo bor edi. U faqat so'zlarda emas, **RAQAM ISHORASIDA** ham
+mavjud ekan — va bu jiddiyroq.
+
+**Qaror (2026-08-16): farq = debet − kredit, ikkala sverkada.**
+
+| Sverka | Hisob | Debet | Kredit | Farq |
+|---|---|---|---|---|
+| Chiqim | 6010, **passiv** | to'langan pul | kelgan faktura | to'lov − faktura |
+| Kirim | 4010, **aktiv** | yozilgan faktura | tushgan pul | faktura − to'lov |
+
+Ma'nosi ikkala tomonda bir xil bo'ladi va 2-bo'limdagi lug'atga aynan
+mos tushadi: **musbat = «Улар қарздор» · manfiy = «Биз қарздормиз».**
+
+Bu tanlov emas, **buxgalteriya qoidasi**: har qanday hisobda saldo =
+debet − kredit. Tasdiq loyihaning o'z ichida bor edi — `aktSverki.ts`
+(«Сальдо конечное», etalon PDF bilan qatorma-qator mos) doim
+`faktura − to'lov` hisoblab kelgan, ekrandagi «Фарқ» esa unga teskari
+turardi. Ya'ni bitta oynada ikkita qarama-qarshi ishora bor edi.
+
+Rang esa ishoraga emas, **nima yetishmayotganiga** bog'lanadi:
+`bad` — pul yetishmayapti (qarz), `warn` — qog'oz yetishmayapti
+(faktura yozish yoki so'rash kerak).
+
+---
+
+## 7. Keyingi qadam
+
+A yo'l tanlandi, nom qo'yildi, UI 3-bosqichgacha bajarildi. Qolgani:
+
+1. **Jonli Firestore'da sinash** — ro'yxatdan o'tish, ish maydoni va
+   3 korxona cheklovi hech qachon haqiqiy bazada ishlamagan.
+2. **UI 4-bosqich** — natija ekrani: avval «nechta kontragentda farq
+   bor va qancha», jadval keyin.
+3. **UI 5-bosqich** — yuklash oqimi: tizim nima topganini OLDIN aytadi.
+4. **Ekran tomonida test yo'q** — parser 58 ta tekshiruv bilan
+   qoplangan, sahifalar nol.
+5. **«Ko'proq kerak» tugmasi** — haqiqiy talab o'lchovi.
+
+---
+
+## 8. Raqobat — 2026-08-17 da tekshirilgan
+
+### 8.1. «Bitimchi AI» — RAQIB EMAS
+
+So'ralgan mahsulot topildi: **`bitimchi.uz`**, o'zini «Bitimchi AI»
+deb ataydi.
+
+| | |
+|---|---|
+| **Nima qiladi** | Elektron imzo bilan **shartnoma imzolash** platformasi: hujjatni yuklaysan → imzolovchilarni qo'shasan → yuborasan → arxivlanadi |
+| **Kimga** | Kadrlar bo'limi, yuristlar, ta'lim muassasalari |
+| **Kirish nuqtasi** | Telegram bot: `t.me/bitimchi_ai_bot` |
+| **Narx** | E'lon qilinmagan. «30 kunlik bepul sinov, karta so'ralmaydi» |
+| **Aloqa** | Faqat Telegram: `@Bitimchi_support` |
+| **Sayt** | Lovable'da yig'ilgan (footer'da yozib qo'yilgan) |
+
+**Bizga o'xshash narsa qilmayapti.** Saytida buxgalteriya, bank
+ko'chirmasi, faktura yoki sverka haqida bitta so'z ham yo'q. «AI»
+so'zi nomida, lekin sahifada AI aynan nima qilishi yozilmagan.
+
+Nom o'xshashligi tasodif: *bitim* = shartnoma, ya'ni «bitimchi» =
+shartnoma tuzuvchi. Bizniki *moslik* = solishtirish natijasi.
+
+**Ular o'z toifasida ham yolg'iz emas:** `e-bitim.uz` va `DOCCO`
+(`docco.uz`) aynan shu ishni qiladi va DOCCO E-IMZO bilan
+shartnomalar reyestrini allaqachon beradi.
+
+**Xulosa:** kuzatishga arzimaydi. Bir joyda kesishishi mumkin —
+agar kelajakda «akt sverkini imzolash» kerak bo'lsa, ular
+sherik bo'lishi mumkin, raqib emas.
+
+### 8.2. HAQIQIY qo'shni o'yinchilar
+
+Bular topildi va ular Bitimchi'dan **ancha muhimroq**:
+
+| Kim | Nima qiladi | Nega muhim |
+|---|---|---|
+| **Didox.uz** | EDO operatori, **250 000+ korxona**. E-faktura yuborish BEPUL. Bank ko'chirmasini yuklash bor. SDK/API bor | Fakturaning MANBASI ularda. Sverkani funksiya sifatida qo'shsa — bir kunda |
+| **Faktura.uz** | Birinchi rasmiy EDO operatori. **Ochiq REST API**: `api.faktura.uz/help` | Bizga fakturani Excel'siz olish yo'li — shu yerda |
+| **Dibank.uz** | 1C yoki Didox ichidan **25+ bank** bilan to'g'ridan-to'g'ri almashuv | Bankning MANBASI ularda. Sverka yo'q — hujjat uzatish |
+| **1UZ Buxgalteriya** | «Загрузить выписки банка» — 6 ta bank | Bizning Excel parserimizga eng yaqin narsa. Lekin bu buxgalteriya dasturining ichidagi funksiya |
+| **Salom AI** (`salom-ai.uz`) | Kichik biznesga AI buxgalteriya maslahati | Boshqa toifa: maslahat, tekshiruv emas |
+
+**Kontragent kesimida bank ↔ faktura sverkasini avtomatik qilib,
+farqni ko'rsatadigan MUSTAQIL mahsulot topilmadi.** Ya'ni bo'sh
+joy bor.
+
+### 8.3. Loyiha yuradimi — halol javob
+
+**Mahsulot sifatida — HA. Biznes sifatida — HALI EMAS,
+va oyna tor.**
+
+**Foydasiga (taxmin emas, o'lchov):**
+- Tizim buxgalter O'TKAZIB YUBORGAN farqlarni topdi: HUDUDGAZ
+  50 278 000, pochta 227 503, Zero Waste 1 366 176.
+- Eng qiyin texnik qism tayyor: 6 ta bank formati, qoldiq
+  tenglamasi, 58 ta tekshiruv, toifa himoyasi.
+- 2026 dan o'zini o'zi band qilganlar ham e-faktura yozadi —
+  hisob yuritishi kerak bo'lganlar soni o'sdi.
+- Narx haqiqiy buxgalterdan olingan (9 999), taxminan emas.
+
+**Qarshi — muhimlik tartibida:**
+
+1. **PLATFORMA XAVFI — eng jiddiysi.** Didox'da 250 000 korxona
+   bor va faktura ularning ichidan chiqadi; Dibank esa 25 ta
+   bank bilan ulangan. Ikkovi ham bizning yagona texnik
+   ustunligimizni — «Excel'ni o'qiy olish» ni — bir kunda
+   keraksiz qilib qo'yishi mumkin. Excel parseri **himoya
+   devori emas, vaqtinchalik ko'prik**.
+2. **Oyiga bir marta ochiladi.** Obuna sotish qiyin (4-bo'limda
+   allaqachon yozilgan).
+3. **Hech kim ishlatib ko'rmagan.** Jonli Firestore sinovi
+   qilinmagan, bitta ham haqiqiy foydalanuvchi yo'q. Bu
+   TEXNIK ish emas, mahsulotning eng katta noma'lumi.
+4. **To'lov ulanmagan** — yuridik maqom kerak.
+
+**Nima qilish kerak (tartib bilan):**
+
+1. **10 ta haqiqiy buxgalterga bering.** Yangi funksiya emas.
+   O'lchov: nechtasi IKKINCHI marta qaytadi. Shu raqamsiz
+   qolgan hamma qaror taxmin.
+2. **`api.faktura.uz` bilan gaplashing — hoziroq.** API ochiq va
+   hujjatlashtirilgan. Faktura tomonini API'dan olsak,
+   foydalanuvchi ikkita fayl o'rniga bittasini yuklaydi, biz
+   esa platforma xavfini SHERIKLIKKA aylantiramiz.
+3. **Pozitsiya: «hujjat aylanmasi» emas, TEKSHIRUV.** Didox
+   hujjatni tashiydi, biz uni TEKSHIRAMIZ. Qoldiq tenglamasi,
+   toifa himoyasi va farq ishorasi intizomi — birortasida yo'q.
+   Nom ham shunga mos: `Moslik` = mos keldimi.
+
+**Qaror nuqtasi:** 10 ta buxgalterdan 3 tasi ikkinchi oyda ham
+ishlatsa — davom etiladi. Bittasi ham qaytmasa, muammo kodda
+emas: sverka ular uchun og'riq emas ekan.

@@ -33,76 +33,108 @@ import {
   ShieldCheck,
   SlidersHorizontal,
 } from "lucide-react";
-import { useT } from "@/context/LanguageContext";
+import { useAuth } from "@/context/AuthContext";
+import { useLocale, useT } from "@/context/LanguageContext";
 import { BRAND } from "@/lib/brand";
+import { path } from "@/lib/routes";
 import { PLANS } from "@/lib/plans";
 import { LogoMark } from "@/components/Brand";
 import SverkaAnimation, { SverkaAnimationText } from "@/components/guide/SverkaAnimation";
 import { ColourKey } from "@/components/guide/Guide";
 import { Badge, Card, Num, Reveal, buttonClasses, cx } from "@/components/ui";
 
+/**
+ * Кирганми-йўқми.
+ *
+ * Бўлимлар буни ПРОП сифатида қабул қилмайди: саҳифалар СЕРВЕР
+ * компоненти (мета маълумот учун), сервердан клиентга эса функция
+ * ҳам, ҳисоб ҳолати ҳам узатилмайди. Ҳар бўлим ўзи ўқигани — энг
+ * содда ва хатосиз йўл.
+ */
+function useSignedIn(): boolean {
+  const { user, loading } = useAuth();
+  return !loading && !!user;
+}
+
 /** Икки модуль рангининг юмшоқ нурланиши — hero ва CTA фони учун */
 const GLOW = {
   background:
-    "radial-gradient(55% 55% at 8% 0%, color-mix(in srgb, var(--brand-out) 14%, transparent) 0%, transparent 70%), " +
-    "radial-gradient(55% 55% at 92% 100%, color-mix(in srgb, var(--brand-in) 14%, transparent) 0%, transparent 70%)",
+    "radial-gradient(55% 55% at 8% 0%, color-mix(in srgb, var(--brand-out) 18%, transparent) 0%, transparent 70%), " +
+    "radial-gradient(55% 55% at 92% 100%, color-mix(in srgb, var(--brand-in) 18%, transparent) 0%, transparent 70%)",
 };
 
 /* ============================================================
    HERO
    ============================================================ */
 
-export function Hero({ signedIn }: { signedIn: boolean }) {
+export function Hero() {
   const t = useT();
+  const locale = useLocale();
+  const signedIn = useSignedIn();
   return (
     <section className="relative overflow-hidden border-b border-line">
+      {/* Уч қатлам фон: тўр -> нурланиш -> мазмун. Учаласи ҳам
+          `pointer-events-none`, яъни бирортаси босишни тўсмайди. */}
+      <div className="pointer-events-none absolute inset-0 grid-bg opacity-60" />
       <div className="pointer-events-none absolute inset-0" style={GLOW} />
-      <div className="relative mx-auto w-full max-w-7xl px-4 py-14 md:px-6 md:py-20">
-        <div className="grid grid-cols-1 items-center gap-10 lg:grid-cols-2">
+
+      <div className="relative mx-auto w-full max-w-7xl px-4 py-16 md:px-6 md:py-24">
+        <div className="grid grid-cols-1 items-center gap-12 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,1fr)]">
           <div>
             <Badge tone="muted" icon={<Scale className="h-3 w-3" />}>
-              {t("Буxгалтер учун сверка воситаси")}
+              {t("Ўзбекистондаги бухгалтерлар учун")}
             </Badge>
 
-            <h1 className="mt-4 text-h1 font-semibold tracking-tight text-ink md:text-[2.5rem] md:leading-[1.15]">
-              {t("Пул билан фактура мос келдими?")}
-            </h1>
+            {/* ШИОР — тоифани эълон қилади, битта модулни эмас.
+                Остидаги қатор МАЖБУРИЙ: шиорнинг ўзи «нима қилишини»
+                айтмайди, шунинг учун иккови доим бирга юради.
 
-            <p className="mt-4 max-w-xl text-lead text-ink-2">
-              {t("Банк кўчирмангизни ва фактура рўйхатини юкланг — тизим ҳар бир контрагент бўйича солиштиради ва ФАРҚ борларини ажратиб беради. Қўлда бир неча кун кетадиган иш бир неча сонияда.")}
+                Ўлчов `--text-display`: телефонда 36px, катта экранда
+                64px. Битта қиймат ярамасди — 64px телефонда шиорни
+                беш қаторга ёярди. */}
+            <h1 className="mt-5 text-display font-semibold text-ink">{t(BRAND.tagline)}</h1>
+
+            <p className="mt-5 max-w-xl text-lead text-ink-2">{t(BRAND.promise)}</p>
+            <p className="mt-2 max-w-xl text-body text-ink-3">
+              {t("Қўлда бир неча кун кетадиган иш бир неча сонияда.")}
             </p>
             <SverkaAnimationText />
 
-            <div className="mt-6 flex flex-wrap items-center gap-3">
-              {signedIn ? (
-                <NextLink href="/korxonalar" className={buttonClasses("primary", "md")}>
-                  {t("Иш столига ўтиш")} <ArrowRight className="h-4 w-4" />
-                </NextLink>
-              ) : (
-                <NextLink href="/login" className={buttonClasses("primary", "md")}>
-                  {t("Бепул бошлаш")} <ArrowRight className="h-4 w-4" />
-                </NextLink>
-              )}
-              <a href="#qanday" className={buttonClasses("secondary", "md")}>
+            <div className="mt-7 flex flex-wrap items-center gap-3">
+              <NextLink
+                href={signedIn ? path("clients", locale) : path("login", locale)}
+                className={buttonClasses("primary", "md")}
+              >
+                {signedIn ? t("Иш столига ўтиш") : t("Бепул бошлаш")}{" "}
+                <ArrowRight className="h-4 w-4" />
+              </NextLink>
+              <NextLink href={path("guide", locale)} className={buttonClasses("secondary", "md")}>
                 {t("Қандай ишлайди")}
-              </a>
+              </NextLink>
             </div>
 
             <p className="mt-3 text-caption text-ink-3">
               {t("Карта сўралмайди. Бепул режада 3 та корхона, сверка чексиз.")}
             </p>
 
-            <div className="mt-6">
+            <div className="mt-7">
               <ColourKey />
             </div>
           </div>
 
-          <SverkaAnimation />
+          {/* Анимация энди «дастур ойнаси» рамкасида: одам буни
+              РАСМ эмас, ЭКРАН деб ўқийди. Рамка — учта нуқта ва
+              манзил қатори, бошқа безак йўқ. */}
+          <AppFrame label={`${BRAND.domain} · ${t("сверка")}`}>
+            <SverkaAnimation />
+          </AppFrame>
         </div>
 
         {/* Ишонч қатори — умумий сўз эмас, ЎЛЧОВ */}
-        <div className="mt-12 grid grid-cols-1 gap-4 border-t border-line pt-8 sm:grid-cols-3">
-          <Fact value="1,37 mlrd" label={t("сўм айланмада синовдан ўтган")} />
+        <div className="mt-16 grid grid-cols-1 gap-6 border-t border-line pt-10 sm:grid-cols-3">
+          {/* Раqamning O'ZI ham tarjima qilinadi: «млрд» qisqartmasi
+              har tilda boshqacha (mlrd / млрд / bn). */}
+          <Fact value={t("1,37 млрд")} label={t("сўм айланмада синовдан ўтган")} />
           <Fact value="58" label={t("та автомат текширув, ҳар ўзгаришдан кейин")} />
           <Fact value="6" label={t("та ҳақиқий банк файли — эталон тўплам")} />
         </div>
@@ -111,11 +143,44 @@ export function Hero({ signedIn }: { signedIn: boolean }) {
   );
 }
 
+/**
+ * «Дастур ойнаси» рамкаси.
+ *
+ * Ичидаги нарса ЭКРАН экани кўриниб турсин деб қўйилган. Рангли
+ * нуқта ЙЎҚ — уччала доира ҳам бетараф, чунки ранг бу маҳсулотда
+ * МАЪНО ташийди (пул, фактура, фарқ) ва безак учун сарфланмайди.
+ */
+function AppFrame({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="overflow-hidden rounded-xl border border-line bg-surface shadow-3">
+      <div className="flex items-center gap-2 border-b border-line bg-surface-2 px-4 py-2.5">
+        <span className="flex gap-1.5">
+          <span className="h-2.5 w-2.5 rounded-full bg-line-strong" />
+          <span className="h-2.5 w-2.5 rounded-full bg-line-strong" />
+          <span className="h-2.5 w-2.5 rounded-full bg-line-strong" />
+        </span>
+        <span className="ml-2 truncate text-caption text-ink-3">{label}</span>
+      </div>
+      {/* Телефонда ички оралиқ КИЧИК: рамка ва анимациянинг ўз
+          ички оралиғи қўшилиб, кўрсаткич жадвали қисилиб қоларди. */}
+      <div className="p-2 md:p-5">{children}</div>
+    </div>
+  );
+}
+
+/**
+ * Ишонч рақами.
+ *
+ * Рақам бренд градиенти билан: юқориси `--invoice`, пасти `--cash` —
+ * логотипдаги АЙНАН ўша икки ранг. Контраст иккала учида ҳам
+ * ўлчанган (globals.css, `.brand-gradient-text` изоҳи), шунинг учун
+ * градиент матнга қўйилса ҳам ўқилади.
+ */
 function Fact({ value, label }: { value: string; label: string }) {
   return (
     <div>
-      <p className="text-num font-semibold tabular text-ink">{value}</p>
-      <p className="mt-1 text-caption text-ink-3">{label}</p>
+      <p className="brand-gradient-text text-title font-semibold tabular">{value}</p>
+      <p className="mt-1.5 text-caption text-ink-3">{label}</p>
     </div>
   );
 }
@@ -143,15 +208,15 @@ export function Comparison() {
   ];
 
   return (
-    <section className="mx-auto w-full max-w-7xl px-4 py-14 md:px-6">
+    <section className="mx-auto w-full max-w-7xl px-4 py-16 md:px-6 md:py-20">
       <Reveal>
-        <h2 className="text-h2 font-semibold text-ink">{t("Ойлик сверка — икки хил кун")}</h2>
-        <p className="mt-2 max-w-2xl text-body text-ink-2">
+        <h2 className="text-title font-semibold text-ink">{t("Ойлик сверка — икки хил кун")}</h2>
+        <p className="mt-3 max-w-2xl text-lead text-ink-2">
           {t("Ҳақиқий синовда: 1,37 млрд сўм айланма, 152 ўтказма, 159 фактура, 35 контрагент.")}
         </p>
 
-        <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-2">
-          <Card className="flex flex-col">
+        <div className="mt-8 grid grid-cols-1 gap-5 md:grid-cols-2">
+          <Card lift className="flex flex-col">
             <div className="flex items-center gap-2.5">
               <Clock className="h-5 w-5 text-ink-3" />
               <h3 className="text-h3 font-semibold text-ink-2">{t("Қўлда")}</h3>
@@ -169,7 +234,10 @@ export function Comparison() {
             </ul>
           </Card>
 
-          <Card className="flex flex-col border-l-4 border-l-accent">
+          <Card lift className="relative flex flex-col overflow-hidden">
+            {/* Чап қиррадаги 4px модуль ранги ЎРНИГА бренд градиенти:
+                бу карта «биз» томони, яъни модуль эмас, БРЕНД. */}
+            <span className="brand-gradient absolute inset-y-0 left-0 w-1" />
             <div className="flex items-center gap-2.5">
               <LogoMark size="sm" />
               <h3 className="text-h3 font-semibold text-ink">{BRAND.name}</h3>
@@ -247,21 +315,48 @@ const FEATURES = [
   },
 ];
 
-export function Features() {
+/**
+ * @param limit — nechta ko'rsatilsin. Bosh sahifada QISQARTIRILGAN
+ *   ro'yxat turadi va «hammasi» havolasi `/features` ga olib boradi.
+ *   Sabab: bir xil matnni ikkala sahifada to'liq takrorlash Google
+ *   uchun dublikat bo'ladi va ikkalasining ham kuchini pasaytiradi.
+ * @param heading — `false` bo'lsa sarlavha chizilmaydi (alohida
+ *   sahifada u `<h1>` sifatida yuqorida turadi).
+ */
+export function Features({
+  limit,
+  heading = true,
+}: {
+  limit?: number;
+  heading?: boolean;
+}) {
   const t = useT();
-  return (
-    <section id="imkoniyatlar" className="border-y border-line bg-surface-2/40">
-      <div className="mx-auto w-full max-w-7xl px-4 py-14 md:px-6">
-        <Reveal>
-          <h2 className="text-h2 font-semibold text-ink">{t("Нима бор")}</h2>
-          <p className="mt-2 max-w-2xl text-body text-ink-2">
-            {t("Ҳар бири ҳақиқий файлда чиққан муаммодан келиб чиққан — рўйхат тўлдириш учун эмас.")}
-          </p>
+  const locale = useLocale();
+  const shown = limit ? FEATURES.slice(0, limit) : FEATURES;
+  const hidden = FEATURES.length - shown.length;
 
-          <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
-            {FEATURES.map((f) => (
-              <Card key={f.title} className="flex h-full flex-col">
-                <span className="w-fit rounded-md bg-accent-soft p-2.5 text-accent-ink">
+  return (
+    <section className="border-y border-line bg-surface-2/40">
+      <div className="mx-auto w-full max-w-7xl px-4 py-16 md:px-6 md:py-20">
+        <Reveal>
+          {heading && (
+            <>
+              <h2 className="text-title font-semibold text-ink">{t("Нима бор")}</h2>
+              <p className="mt-3 max-w-2xl text-lead text-ink-2">
+                {t("Ҳар бири ҳақиқий файлда чиққан муаммодан келиб чиққан — рўйхат тўлдириш учун эмас.")}
+              </p>
+            </>
+          )}
+
+          <div
+            className={cx(
+              "grid grid-cols-1 gap-5 md:grid-cols-2 lg:grid-cols-4",
+              heading && "mt-8"
+            )}
+          >
+            {shown.map((f) => (
+              <Card key={f.title} lift className="flex h-full flex-col">
+                <span className="w-fit rounded-lg bg-accent-soft p-2.5 text-accent-ink">
                   <f.icon className="h-5 w-5" />
                 </span>
                 <h3 className="mt-4 text-h3 font-semibold text-ink">{t(f.title)}</h3>
@@ -269,6 +364,15 @@ export function Features() {
               </Card>
             ))}
           </div>
+
+          {hidden > 0 && (
+            <NextLink
+              href={path("features", locale)}
+              className={cx(buttonClasses("secondary", "md"), "mt-8")}
+            >
+              {t("Яна")} {hidden} {t("та имконият")} <ArrowRight className="h-4 w-4" />
+            </NextLink>
+          )}
         </Reveal>
       </div>
     </section>
@@ -286,8 +390,9 @@ function money(n: number): string {
   return n.toLocaleString("ru-RU");
 }
 
-export function Pricing() {
+export function Pricing({ heading = true }: { heading?: boolean }) {
   const t = useT();
+  const locale = useLocale();
   const items = [
     {
       plan: PLANS.free,
@@ -299,7 +404,7 @@ export function Pricing() {
     {
       plan: PLANS.buxgalter,
       key: "buxgalter",
-      forWhom: "Мижозлари бор буxгалтер учун",
+      forWhom: "Мижозлари бор бухгалтер учун",
       lines: ["Корхона чексиз", "1 фойдаланувчи", "Сверка чексиз", "Барча ҳисоботлар"],
       highlight: true,
     },
@@ -313,22 +418,33 @@ export function Pricing() {
   ];
 
   return (
-    <section id="narx" className="mx-auto w-full max-w-7xl px-4 py-14 md:px-6">
+    <section className="mx-auto w-full max-w-7xl px-4 py-16 md:px-6 md:py-20">
       <Reveal>
-        <h2 className="text-h2 font-semibold text-ink">{t("Нарх")}</h2>
-        <p className="mt-2 max-w-2xl text-body text-ink-2">
-          {t("Чеклов сверка сонига эмас, КОРХОНА сонига. Сверкани қанча хоҳласангиз шунча марта қайта юкласангиз бўлади.")}
-        </p>
+        {heading && (
+          <>
+            <h2 className="text-title font-semibold text-ink">{t("Нарх")}</h2>
+            <p className="mt-3 max-w-2xl text-lead text-ink-2">
+              {t("Чеклов сверка сонига эмас, КОРХОНА сонига. Сверкани қанча хоҳласангиз шунча марта қайта юкласангиз бўлади.")}
+            </p>
+          </>
+        )}
 
-        <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-3">
+        <div className={cx("grid grid-cols-1 gap-5 md:grid-cols-3", heading && "mt-8")}>
           {items.map((it) => (
             <Card
               key={it.key}
+              lift
+              // Танланган режа РАМКА билан эмас, БАЛАНДЛИК билан
+              // ажралади: у қоғоздан бир поғона юқорида туради.
+              elevation={it.highlight ? 2 : 1}
               className={cx(
-                "flex h-full flex-col",
-                it.highlight && "border-accent ring-1 ring-accent"
+                "relative flex h-full flex-col overflow-hidden",
+                it.highlight && "border-accent"
               )}
             >
+              {it.highlight && (
+                <span className="brand-gradient absolute inset-x-0 top-0 h-1" />
+              )}
               <div className="flex items-center justify-between gap-2">
                 <h3 className="text-h3 font-semibold text-ink">{t(it.plan.label)}</h3>
                 {it.highlight && <Badge tone="info">{t("Кўпчиликка мос")}</Badge>}
@@ -358,13 +474,13 @@ export function Pricing() {
               </ul>
 
               <NextLink
-                href="/login"
+                href={path("login", locale)}
                 className={cx(
                   buttonClasses(it.highlight ? "primary" : "secondary", "md", { block: true }),
                   "mt-5"
                 )}
               >
-                {it.plan.priceUzs === 0 ? t("Бепул бошлаш") : t("Бепул бошлаш")}
+                {t("Бепул бошлаш")}
               </NextLink>
             </Card>
           ))}
@@ -385,7 +501,7 @@ export function Pricing() {
    ЙЎЛ ХАРИТАСИ
    ------------------------------------------------------------
    Илгари бу иккита «Тез кунда» картаси ИШ САҲИФАСИДА турарди.
-   Буxгалтер ҳар куни кирганда қулфланган картани кўриши керак
+   Бухгалтер ҳар куни кирганда қулфланган картани кўриши керак
    эмас — ваъда бош саҳифада, иш эса иш жойида.
    ============================================================ */
 
@@ -410,15 +526,19 @@ export function Roadmap() {
   ];
   return (
     <section className="border-y border-line bg-surface-2/40">
-      <div className="mx-auto w-full max-w-7xl px-4 py-14 md:px-6">
+      <div className="mx-auto w-full max-w-7xl px-4 py-16 md:px-6 md:py-20">
         <Reveal>
-          <h2 className="text-h2 font-semibold text-ink">{t("Кейин нима бўлади")}</h2>
-          <p className="mt-2 max-w-2xl text-body text-ink-2">
+          <h2 className="text-title font-semibold text-ink">{t("Кейин нима бўлади")}</h2>
+          <p className="mt-3 max-w-2xl text-lead text-ink-2">
             {t("Булар ҳали ЙЎҚ. Ваъда сифатида эмас, йўналиш сифатида ёзилган.")}
           </p>
-          <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-3">
+          <div className="mt-8 grid grid-cols-1 gap-5 md:grid-cols-3">
+            {/* `opacity-80` ЙЎҚ. Ўлчанган: у матн контрастини 5,43 дан
+                3,53 га туширарди (чегара 4,5). «Тез кунда» ҳолати
+                шаффофлик билан эмас, БЕЛГИ ва бетараф ранг билан
+                айтилади — иккиси ҳам контрастни бузмайди. */}
             {items.map((r) => (
-              <Card key={r.title} className="flex h-full flex-col opacity-80">
+              <Card key={r.title} className="flex h-full flex-col">
                 <div className="flex items-start justify-between gap-3">
                   <span className="rounded-md bg-surface-2 p-2.5 text-ink-3">
                     <r.icon className="h-5 w-5" />
@@ -442,29 +562,32 @@ export function Roadmap() {
    ЯКУНИЙ ЧАҚИРИҚ + ПОДВАЛ
    ============================================================ */
 
-export function FinalCta({ signedIn }: { signedIn: boolean }) {
+export function FinalCta() {
   const t = useT();
+  const locale = useLocale();
+  const signedIn = useSignedIn();
   return (
     <section className="relative overflow-hidden">
+      <div className="pointer-events-none absolute inset-0 grid-bg opacity-50" />
       <div className="pointer-events-none absolute inset-0" style={GLOW} />
-      <div className="relative mx-auto w-full max-w-7xl px-4 py-16 text-center md:px-6">
+      <div className="relative mx-auto w-full max-w-7xl px-4 py-24 text-center md:px-6">
         <Reveal>
           <LogoMark size="lg" className="mx-auto" />
-          <h2 className="mt-5 text-h1 font-semibold tracking-tight text-ink">
+          <h2 className="mt-6 text-title font-semibold text-ink">
             {t("Битта корхонада синаб кўринг")}
           </h2>
-          <p className="mx-auto mt-3 max-w-xl text-lead text-ink-2">
+          <p className="mx-auto mt-4 max-w-xl text-lead text-ink-2">
             {t("Энг чалкаш мижозингизнинг банк кўчирмаси ва фактура рўйхатини юкланг. Фарқ борми — бир дақиқада биласиз.")}
           </p>
           <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
             <NextLink
-              href={signedIn ? "/korxonalar" : "/login"}
+              href={signedIn ? path("clients", locale) : path("login", locale)}
               className={buttonClasses("primary", "md")}
             >
               {signedIn ? t("Иш столига ўтиш") : t("Бепул бошлаш")}{" "}
               <ArrowRight className="h-4 w-4" />
             </NextLink>
-            <NextLink href="/qollanma" className={buttonClasses("secondary", "md")}>
+            <NextLink href={path("guide", locale)} className={buttonClasses("secondary", "md")}>
               {t("Тўлиқ қўлланма")}
             </NextLink>
           </div>
@@ -476,6 +599,7 @@ export function FinalCta({ signedIn }: { signedIn: boolean }) {
 
 export function Footer() {
   const t = useT();
+  const locale = useLocale();
   return (
     <footer className="border-t border-line bg-surface">
       <div className="mx-auto w-full max-w-7xl px-4 py-10 md:px-6">
@@ -490,13 +614,16 @@ export function Footer() {
           </div>
 
           <nav className="flex flex-col gap-2 text-body">
-            <NextLink href="/qollanma" className="text-ink-2 hover:text-ink">
+            <NextLink href={path("features", locale)} className="text-ink-2 hover:text-ink">
+              {t("Нима бор")}
+            </NextLink>
+            <NextLink href={path("pricing", locale)} className="text-ink-2 hover:text-ink">
+              {t("Нарх")}
+            </NextLink>
+            <NextLink href={path("guide", locale)} className="text-ink-2 hover:text-ink">
               {t("Қўлланма")}
             </NextLink>
-            <a href="#narx" className="text-ink-2 hover:text-ink">
-              {t("Нарх")}
-            </a>
-            <NextLink href="/login" className="text-ink-2 hover:text-ink">
+            <NextLink href={path("login", locale)} className="text-ink-2 hover:text-ink">
               {t("Кириш")}
             </NextLink>
           </nav>

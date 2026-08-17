@@ -33,8 +33,22 @@ export const BRAND = {
   name: 'Moslik',
   domain: 'moslik.uz',
 
-  /** Qisqa va'da. Kirill kalit — t() orqali lotin/rus/inglizga o'giriladi. */
-  tagline: 'Пул билан фактура мос келдими — бир дақиқада',
+  /**
+   * SHIOR (2026-08-16 da almashtirildi).
+   *
+   * Ilgari «Пул билан фактура мос келдими» edi — u faqat BUGUNGI
+   * modulni tasvirlardi. Ombor qoldig'i yoki soliq xavfi qo'shilsa,
+   * shior yolg'onga aylanardi. Endi u TOIFAni e'lon qiladi.
+   *
+   * Toifa shiori o'zi «nima qilishini» aytmaydi — shuning uchun
+   * `promise` MAJBURIY juftlik: sarlavha ostida doim shu turadi.
+   */
+  tagline: 'Бухгалтер учун автоматик текширув тизими',
+
+  /** Shiorning ostidagi qator — bugun aynan nima qilishini aytadi */
+  promise:
+    'Банк кўчирмаси билан фактура рўйхатини юкланг — тизим ҳар бир контрагент ' +
+    'бўйича рақамларни солиштиради ва фарқ борларини ажратиб беради.',
 
   /**
    * Rasmiy ta'rif (Tashabbus arizasi va hujjatlar uchun).
@@ -44,8 +58,4 @@ export const BRAND = {
     'Корхона товар-моддий бойликларини олиш учун юборилган пул маблағларини ' +
     'ҳамда келган маҳсулотлар ҳисоб-варақаларини тез аниқлаш солиштирмаси',
 
-  /** Bir gapda: mahsulot nima qiladi */
-  summary:
-    'Банк кўчирмасини ва фактура рўйхатини юкласангиз, тизим ҳар бир контрагент ' +
-    'бўйича пул билан фактурани солиштиради ва фарқ борларини ажратиб беради.',
 } as const;

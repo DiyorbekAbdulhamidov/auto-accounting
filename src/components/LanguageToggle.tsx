@@ -102,13 +102,19 @@ export default function LanguageToggle() {
                 className={cx(
                   "flex w-full items-center justify-between gap-2 px-3 py-2.5 text-left text-body transition-colors",
                   l === lang
-                    ? "bg-accent-soft font-medium text-accent"
+                    // `text-accent` ЭМАС: ўлчанган — тунги режимда у
+                    // `--accent-soft` устида 2,37:1 берарди (талаб 4,5).
+                    // `--accent-ink` айнан шунинг учун ажратилган: 7,47.
+                    ? "bg-accent-soft font-medium text-accent-ink"
                     : "text-ink-2 hover:bg-surface-2 hover:text-ink"
                 )}
               >
                 <span>{LANG_LABELS[l]}</span>
                 <span className="flex items-center gap-2">
-                  <span className="text-caption opacity-60">{LANG_SHORT[l]}</span>
+                  {/* `opacity-60` ЭМАС: у ёруғ режимда 2,88:1 берарди.
+                      Бетараф ранг токени эса 5,43 — шаффофлик ўрнига
+                      РАНГ билан сустлаштирилади. */}
+                  <span className="text-caption text-ink-3">{LANG_SHORT[l]}</span>
                   {l === lang && <Check className="h-3.5 w-3.5" />}
                 </span>
               </button>

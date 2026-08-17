@@ -3,18 +3,45 @@
 import { cx, toneText, type Tone } from "./styles";
 import { CountUp } from "./Motion";
 
-/** Oddiy sirt: ramka + radius + fon. Ichki oraliqni `padded` beradi. */
+/** Balandlik pog'onasi — `globals.css` dagi `--shadow-*` tokenlari. */
+const ELEVATION = { 1: "shadow-1", 2: "shadow-2", 3: "shadow-3" } as const;
+
+/**
+ * Oddiy sirt: ramka + radius + fon. Ichki oraliqni `padded` beradi.
+ *
+ * @param lift — sichqoncha ostida bir pog'ona ko'tariladi. FAQAT
+ *   bosiladigan yoki ochiq sahifadagi karta uchun. Jadval yonidagi
+ *   ish kartasida ishlatilmaydi: u yerda harakat diqqatni oladi,
+ *   foyda esa yo'q.
+ * @param elevation — chuqurlik. PROP, `className` EMAS: soyani
+ *   tashqaridan `shadow-2` bilan bermoqchi bo'lsangiz ishlamaydi —
+ *   Card o'z sinfini ham qo'shadi va ikkitasi to'qnashadi
+ *   (brauzerda o'lchangan: `shadow-2` yozilgan narx kartasi
+ *   baribir 1-pog'onada chiqardi).
+ */
 export function Card({
   padded = true,
+  lift = false,
+  elevation = 1,
   className,
   children,
 }: {
   padded?: boolean;
+  lift?: boolean;
+  elevation?: 1 | 2 | 3;
   className?: string;
   children: React.ReactNode;
 }) {
   return (
-    <div className={cx("rounded-lg border border-line bg-surface", padded && "p-5", className)}>
+    <div
+      className={cx(
+        "rounded-lg border border-line bg-surface",
+        ELEVATION[elevation],
+        lift && "lift",
+        padded && "p-5",
+        className
+      )}
+    >
       {children}
     </div>
   );

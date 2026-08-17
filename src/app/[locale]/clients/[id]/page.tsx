@@ -1,7 +1,7 @@
 // ============================================================
 // БИТТА КОРХОНА — иккала сверка ёнма-ён
 // ------------------------------------------------------------
-// Йўналиш энди САҲИФА эмас, ТАБ. Буxгалтер учун «шу мижозни
+// Йўналиш энди САҲИФА эмас, ТАБ. Бухгалтер учун «шу мижозни
 // солиштир» — битта иш; илгари эса чиқим бир саҳифада, кирим
 // бутунлай бошқасида, ўз луғати ва ўз кўриниши билан эди.
 //
@@ -15,7 +15,8 @@ import { use, useEffect, useState } from "react";
 import { doc, getDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/context/AuthContext";
-import { useT } from "@/context/LanguageContext";
+import { useLocale, useT } from "@/context/LanguageContext";
+import { path } from "@/lib/routes";
 import { ArrowDownToLine, ArrowUpFromLine } from "lucide-react";
 import ChiqimSverka from "@/components/sverka/ChiqimSverka";
 import KirimSverka from "@/components/sverka/KirimSverka";
@@ -39,9 +40,14 @@ interface Company {
   workspaceId?: string;
 }
 
-export default function KorxonaPage({ params }: { params: Promise<{ id: string }> }) {
+export default function ClientPage({
+  params,
+}: {
+  params: Promise<{ id: string; locale: string }>;
+}) {
   const { id } = use(params);
   const t = useT();
+  const locale = useLocale();
   const { user } = useAuth();
   const workspaceId: string | undefined = user?.workspaceId;
 
@@ -85,7 +91,7 @@ export default function KorxonaPage({ params }: { params: Promise<{ id: string }
     return (
       <div className={`${layout.container} ${layout.stack}`}>
         <PageHeader
-          backHref="/korxonalar"
+          backHref={path("clients", locale)}
           title={t("Корхона топилмади")}
           description={t("Бу корхона ўчирилган ёки сизнинг иш майдонингизга тегишли эмас.")}
         />
@@ -107,7 +113,7 @@ export default function KorxonaPage({ params }: { params: Promise<{ id: string }
       className={`${layout.containerWide} ${layout.stack}`}
     >
       <PageHeader
-        backHref="/korxonalar"
+        backHref={path("clients", locale)}
         title={company.name}
         description={
           yonalish === "OUT"
@@ -124,7 +130,7 @@ export default function KorxonaPage({ params }: { params: Promise<{ id: string }
       {/* ИККАЛА КОМПОНЕНТ ҲАМ МОНТАЖДА ҚОЛАДИ, кўринмагани фақат
           яширилади. Сабаб: таб алмаштирилса компонент ўчиб кетарди ва
           юкланган файл, ўқилган ҳисобот, белгиланган қаторлар —
-          ҳаммаси йўқоларди. Буxгалтер эса иккала йўналишни кетма-кет
+          ҳаммаси йўқоларди. Бухгалтер эса иккала йўналишни кетма-кет
           қилади ва орқага қайтади. */}
       <div className={yonalish === "OUT" ? undefined : "hidden"} aria-hidden={yonalish !== "OUT"}>
         <ChiqimSverka companyId={id} companyName={company.name} />
