@@ -551,3 +551,25 @@ table td,
 table th {
   font-variant-numeric: tabular-nums;
 }
+
+/* ------------------------------------------------------------
+   XABAR (sonner) — izoh matnining rangi
+   ------------------------------------------------------------
+   Sonner izohni O'Z кулрангида чизади ва уни CSS ўзгарувчидан
+   ОЛМАЙДИ. Тунги режимда ўлчанди: rgb(63,63,63) матн, rgb(17,24,39)
+   фон = **1,68:1** — ўқиб бўлмайди.
+
+   Иккита йўл СИНАЛДИ ва ЙИҚИЛДИ (такрорламанг):
+     · `toastOptions.classNames.description` — Tailwind утилитаси
+       битта синф (0,1,0), sonner эса (0,3,0) билан ёзади;
+     · уч даражали ўз қоидамиз — sonner'ники ҲАМ (0,3,0), лекин
+       унинг `<style>` и ишга тушганда head'га КЕЙИН қўшилади,
+       демак тенг оғирликда у ютади.
+
+   Шунинг учун бу ерда ТЎРТ даража (0,4,0) — `!important` сиз.
+   Sonner'нинг ўз селектори: `[data-sonner-toast][data-styled="true"]
+   [data-description]`.
+   ------------------------------------------------------------ */
+[data-sonner-toaster] [data-sonner-toast][data-styled="true"] [data-description] {
+  color: var(--ink-2);
+}

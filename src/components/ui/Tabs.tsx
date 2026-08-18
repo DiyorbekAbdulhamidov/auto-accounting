@@ -27,6 +27,7 @@ export default function Tabs<K extends string>({
   items: TabItem<K>[];
   value: K;
   onChange: (k: K) => void;
+  /** O'ng chetdagi tugma (masalan Excel yuklash) */
   actions?: React.ReactNode;
   className?: string;
 }) {

@@ -43,7 +43,7 @@ const PAIRS: Pair[] = [
 /** 0 бўш · 1 чиқади · 2 марказга юради · 3 қулфланади · 4 хулоса */
 const STEP_MS = [400, 900, 900, 900, 2600];
 
-export default function SverkaAnimation() {
+export default function ReconciliationAnimation() {
   const t = useT();
   const reduced = usePrefersReducedMotion();
   const [raw, setRaw] = useState(0);
@@ -211,7 +211,7 @@ export default function SverkaAnimation() {
 }
 
 /** Экран ўқийдиган дастур учун — анимациянинг маъноси матн билан */
-export function SverkaAnimationText() {
+export function ReconciliationAnimationText() {
   const t = useT();
   return (
     <p className="sr-only">

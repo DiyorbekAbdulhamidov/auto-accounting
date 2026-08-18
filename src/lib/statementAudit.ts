@@ -107,6 +107,16 @@ export interface SheetReport {
  *  u invariant ikkala sverkaga ham (chiqim va kirim) tegishli. */
 export type { BalanceCheck };
 
+/** Fayldan topilgan davr chegarasi (YYYY-MM). Ikkala tomon uchun
+ *  alohida: bank ko'chirmasi va faktura ro'yxati boshqa-boshqa davrni
+ *  qamrashi mumkin va aynan shu jimgina xatoning manbai. */
+export interface PeriodRange {
+  from: string | null;
+  to: string | null;
+  /** Sanasi aniqlanmagan qatorlar soni */
+  undated: number;
+}
+
 export interface AuditResult {
   data: AggEntry[];
   detectedFormats: string[];
@@ -114,6 +124,9 @@ export interface AuditResult {
   sheets: SheetReport[];
   /** Har fayl uchun qoldiq tenglamasi natijasi */
   balanceChecks: BalanceCheck[];
+  /** Ikkala tomonning topilgan davri. Ekranda foydalanuvchiga
+   *  KO'RSATILADI — «tizim nima topdi» degan savolga javob. */
+  periods: { bank: PeriodRange; faktura: PeriodRange };
   /** Raqamini TASDIQLAB bo'lmaydigan fayllar: na «Итого» qatori, na
    *  qoldiq tenglamasi. Ya'ni fayl to'liq o'qilganini isbotlaydigan
    *  hech narsa yo'q — foydalanuvchi qo'lda solishtirishi kerak. */
@@ -213,7 +226,7 @@ const MONTH_WORDS = ['ЯНВАР', 'ФЕВРАЛ', 'МАРТ', 'АПРЕЛ', 'М
 /** «Акт сверки» - ikki tomonlama dalolatnoma. Unda ham sana/summa
  *  ustunlari bor, lekin bu manba emas: o'qilsa o'sha o'tkazmalar
  *  ikkinchi marta hisoblanadi. */
-function isAktSverki(rows: Cell[][]): boolean {
+function isReconciliationAct(rows: Cell[][]): boolean {
   const limit = Math.min(6, rows.length);
   for (let r = 0; r < limit; r++) {
     for (const v of rows[r] || []) {
@@ -237,7 +250,7 @@ function isPivotSheet(rows: Cell[][]): boolean {
   return false;
 }
 
-interface FakturaLayout {
+interface InvoiceLayout {
   headerRow: number;
   status: number;
   doc: number;
@@ -253,13 +266,13 @@ interface FakturaLayout {
  *  o'zgartiradi (ID / ТИП ЭСФ / ДОГОВОР / филиал qo'shilgan, СУММА К
  *  ОПЛАТЕ 8-o'rindan 14-o'ringa surilgan), shuning uchun ustunlar
  *  faqat nom bo'yicha topiladi. */
-function findFakturaLayout(rows: Cell[][]): FakturaLayout | null {
+function findInvoiceLayout(rows: Cell[][]): InvoiceLayout | null {
   const limit = Math.min(25, rows.length);
   for (let r = 0; r < limit; r++) {
     const row = rows[r];
     if (!row || row.length < 4) continue;
 
-    const L: FakturaLayout = {
+    const L: InvoiceLayout = {
       headerRow: r, status: -1, doc: -1, id: -1,
       sellerInn: -1, sellerName: -1, buyerInn: -1, buyerName: -1, amount: -1,
     };
@@ -295,7 +308,7 @@ const CONFIRMED_RE = /ПОДТВЕРЖД|ТАСДИҚ|ТАСДИК|TASDIQ/;
 // 27 001 500 aynan imzo kutilayotgan 3 062 500 bilan birga to'g'ri keladi.
 const REJECTED_RE = /ОТМЕН|ОТКАЗ|НЕДЕЙСТВ|АННУЛИР|BEKOR|RAD ET/;
 
-interface FakturaRow {
+interface InvoiceRow {
   inn: string;
   name: string;
   date: Date | null;
@@ -308,8 +321,8 @@ interface FakturaRow {
   keys: string[];
 }
 
-interface FakturaResult {
-  rows: FakturaRow[];
+interface InvoiceResult {
+  rows: InvoiceRow[];
   skipped: Map<string, { count: number; amount: number }>;
   /** Hisoblangan, lekin hali tasdiqlanmagan (imzo kutilayotgan) */
   pending: Map<string, { count: number; amount: number }>;
@@ -334,8 +347,8 @@ function dominantInn(rows: Cell[][], from: number, col: number): { value: string
   return { value: best, share: total ? bestN / total : 0 };
 }
 
-function parseFakturaSheet(rows: Cell[][], L: FakturaLayout, includePending: boolean): FakturaResult {
-  const out: FakturaRow[] = [];
+function parseInvoiceSheet(rows: Cell[][], L: InvoiceLayout, includePending: boolean): InvoiceResult {
+  const out: InvoiceRow[] = [];
   const skipped = new Map<string, { count: number; amount: number }>();
   const pending = new Map<string, { count: number; amount: number }>();
 
@@ -454,6 +467,11 @@ export interface AuditOptions {
   categoryGlobalHints?: Record<string, GlobalHint>;
 }
 
+/** Ikkinchi fayl qamramagan davrdagi pul ulushi shu chegaradan oshsa
+ *  ogohlantiriladi. 10%: iyul тўлови июн фактурасини ёпиши — нормал ҳол
+ *  ва у одатда бир неча фоиз бўлади; 7 ойлик фарқ эса 80% дан ошади. */
+const PERIOD_MISMATCH_SHARE = 0.10;
+
 export function auditFiles(files: InputFile[], options: AuditOptions = {}): AuditResult {
   const includePending = options.includePending === true;
   const categoryOverrides = options.categoryOverrides;
@@ -546,6 +564,20 @@ export function auditFiles(files: InputFile[], options: AuditOptions = {}): Audi
     return e;
   }
 
+  // ============================================================
+  // DAVR KUZATUVI — qaysi tomon qaysi oylarni qamragan
+  // ------------------------------------------------------------
+  // `GENERIC_DOC` (universal o'quvchi) ATAYLAB hisobga olinmaydi:
+  // u bank ko'chirmasimi yoki faktura ro'yxatimi — aniq emas, ya'ni
+  // uni bir tomonga yozib qo'yish YOLG'ON ogohlantirish berardi.
+  // ============================================================
+  const monthsBy: Record<'BANK' | 'FAKTURA', Map<string, number>> = {
+    BANK: new Map(),
+    FAKTURA: new Map(),
+  };
+  const undatedBy: Record<'BANK' | 'FAKTURA', number> = { BANK: 0, FAKTURA: 0 };
+  let hasGeneric = false;
+
   function addTx(
     name: string,
     inn: string,
@@ -559,6 +591,18 @@ export function auditFiles(files: InputFile[], options: AuditOptions = {}): Audi
     account?: string
   ) {
     if (debit <= 0 && credit <= 0) return;
+
+    if (docType === 'GENERIC_DOC') {
+      hasGeneric = true;
+    } else if (docType === 'BANK' || docType === 'FAKTURA') {
+      const side = docType;
+      if (date) {
+        const m = `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, '0')}`;
+        monthsBy[side].set(m, (monthsBy[side].get(m) || 0) + debit + credit);
+      } else {
+        undatedBy[side] += 1;
+      }
+    }
     const e = entryFor(cleanInn(inn), name);
     if (account && !e.account) e.account = account;
 
@@ -665,16 +709,16 @@ export function auditFiles(files: InputFile[], options: AuditOptions = {}): Audi
         carriedTitle = [];
         continue;
       }
-      if (isAktSverki(sd.rows)) {
+      if (isReconciliationAct(sd.rows)) {
         sheets.push({ file: file.name, sheet: sd.sheet, format: 'AKT_SVERKI', rows: 0, debit: 0, credit: 0, note: 'Акт сверки — манба сифатида ўқилмади' });
         carriedTitle = [];
         continue;
       }
 
       // 2) Faktura reestri
-      const fakturaLayout = findFakturaLayout(sd.rows);
-      if (fakturaLayout) {
-        const res = parseFakturaSheet(sd.rows, fakturaLayout, includePending);
+      const invoiceLayout = findInvoiceLayout(sd.rows);
+      if (invoiceLayout) {
+        const res = parseInvoiceSheet(sd.rows, invoiceLayout, includePending);
         if (res.rows.length > 0) {
           noteFormat('FAKTURA');
           let added = 0, sum = 0, dup = 0;
@@ -701,11 +745,11 @@ export function auditFiles(files: InputFile[], options: AuditOptions = {}): Audi
             warnings.push(`«${label}» — ${dup} та фактура олдинги файлда аллақачон бор эди, такрор ҳисобланмади.`);
           }
           // Faktura shaklini ham xotiraga yozib qo'yamiz
-          remember('FAKTURA', 'FAKTURA', sd.rows[fakturaLayout.headerRow], {
-            status: fakturaLayout.status, doc: fakturaLayout.doc, id: fakturaLayout.id,
-            sellerInn: fakturaLayout.sellerInn, sellerName: fakturaLayout.sellerName,
-            buyerInn: fakturaLayout.buyerInn, buyerName: fakturaLayout.buyerName,
-            amount: fakturaLayout.amount,
+          remember('FAKTURA', 'FAKTURA', sd.rows[invoiceLayout.headerRow], {
+            status: invoiceLayout.status, doc: invoiceLayout.doc, id: invoiceLayout.id,
+            sellerInn: invoiceLayout.sellerInn, sellerName: invoiceLayout.sellerName,
+            buyerInn: invoiceLayout.buyerInn, buyerName: invoiceLayout.buyerName,
+            amount: invoiceLayout.amount,
           }, file.name);
 
           sheets.push({ file: file.name, sheet: sd.sheet, format: 'FAKTURA', rows: added, debit: 0, credit: sum, note: dup ? `${dup} та такрор` : undefined });
@@ -998,12 +1042,68 @@ export function auditFiles(files: InputFile[], options: AuditOptions = {}): Audi
     );
   }
 
+  // ============================================================
+  // DAVR KELISHUVI — «bir xil davrmi?»
+  // ------------------------------------------------------------
+  // Haqiqiy fayllarda o'lchangan: 1 oylik ko'chirma + 7 oylik faktura
+  // = 3 258 650 804 so'mlik SOXTA farq va bitta ham ogohlantirish yo'q
+  // edi. Endi bu jim o'tmaydi.
+  //
+  // Qoida qattiq EMAS: iyul to'lovi iyun fakturasini yopishi normal
+  // hol. Shuning uchun chegara — QAMRALMAGAN oylardagi PULNING ulushi.
+  // ============================================================
+  const rangeOf = (m: Map<string, number>): PeriodRange => {
+    const keys = [...m.keys()].sort();
+    return { from: keys[0] ?? null, to: keys[keys.length - 1] ?? null, undated: 0 };
+  };
+  const bankRange = rangeOf(monthsBy.BANK);
+  const facturaRange = rangeOf(monthsBy.FAKTURA);
+  bankRange.undated = undatedBy.BANK;
+  facturaRange.undated = undatedBy.FAKTURA;
+
+  if (bankRange.from && facturaRange.from && !hasGeneric) {
+    /** Ikkinchi tomon UMUMAN qamramagan oylardagi pul ulushi */
+    const outsideShare = (mine: Map<string, number>, other: PeriodRange) => {
+      let outside = 0;
+      let total = 0;
+      for (const [month, amount] of mine) {
+        total += amount;
+        if (month < other.from! || month > other.to!) outside += amount;
+      }
+      return { outside, total, share: total > 0 ? outside / total : 0 };
+    };
+
+    const noOverlap = bankRange.to! < facturaRange.from! || facturaRange.to! < bankRange.from!;
+    const b = outsideShare(monthsBy.BANK, facturaRange);
+    const f = outsideShare(monthsBy.FAKTURA, bankRange);
+    const worst = f.share >= b.share ? { ...f, label: 'фактура рўйхатининг' } : { ...b, label: 'банк кўчирмасининг' };
+
+    const shown = (r: PeriodRange) => (r.from === r.to ? r.from : `${r.from} … ${r.to}`);
+
+    if (noOverlap) {
+      warnings.push(
+        `ДАВРЛАР УМУМАН МОС КЕЛМАЙДИ: банк кўчирмаси ${shown(bankRange)}, ` +
+        `фактура рўйхати ${shown(facturaRange)} даврини қамрайди. Бу иккитаси ` +
+        `бошқа-бошқа давр — уларни солиштириб бўлмайди. Бир хил давр учун файл юкланг.`
+      );
+    } else if (worst.share >= PERIOD_MISMATCH_SHARE) {
+      warnings.push(
+        `ДАВРЛАР МОС КЕЛМАЙДИ: банк кўчирмаси ${shown(bankRange)}, фактура рўйхати ` +
+        `${shown(facturaRange)} даврини қамрайди. Шу сабабли ${worst.label} ` +
+        `${MONEY_FMT(worst.outside)} сўми (${Math.round(worst.share * 100)}%) иккинчи файлда ` +
+        `УМУМАН ЙЎҚ даврга тегишли ва фарқ сифатида кўринади. Икки файл бир хил ` +
+        `даврни қамраши керак.`
+      );
+    }
+  }
+
   return {
     data,
     detectedFormats,
     warnings,
     sheets,
     balanceChecks,
+    periods: { bank: bankRange, faktura: facturaRange },
     unverifiedFiles,
     learnedFormats: [...learned.values()],
     skippedInvoices: [...skippedInvoices].map(([status, v]) => ({ status, ...v })),

@@ -14,7 +14,8 @@
 //   workspaces/{id}                  name, ownerEmail, createdAt, plan
 //   workspaces/{id}/members/{email}   role, status
 //   companies/{id}                    + workspaceId
-//   sverka_reports/{id}               + workspaceId
+//   sverka_reports/{id}               + workspaceId   (CHIQIM sverkasi)
+//   income_reports/{id}               + workspaceId   (KIRIM sverkasi)
 //
 // Foydalanuvchining ish maydoni `allowed_users/{email}.workspaceId` da
 // yoziladi — mijoz uni o'z hujjatidan o'qiy oladi (qoida ruxsat beradi),
@@ -24,6 +25,14 @@
 export const WORKSPACES = 'workspaces';
 export const MEMBERS = 'members';
 export const ALLOWED_USERS = 'allowed_users';
+
+/** Chiqim sverkasi hisobotlari (tarixiy nom — o'zgartirilmaydi:
+ *  bazada allaqachon ma'lumot bor) */
+export const SVERKA_REPORTS = 'sverka_reports';
+
+/** Kirim sverkasi hisobotlari. Alohida kolleksiya — sabab
+ *  `firestore.rules` da yozilgan. */
+export const INCOME_REPORTS = 'income_reports';
 
 export type WorkspaceRole = 'owner' | 'member';
 

@@ -12,13 +12,15 @@
 "use client";
 
 import { useState, useEffect, useMemo, useCallback } from "react";
+import { INCOME_REPORTS, SVERKA_REPORTS } from "@/lib/workspace";
 import { db } from "@/lib/firebase";
 import { authFetch } from "@/lib/authFetch";
 import { useAuth } from "@/context/AuthContext";
-import { collection, getDocs, query, doc, where, writeBatch } from "firebase/firestore";
+import { addDoc, collection, doc, getDocs, query, serverTimestamp, where, writeBatch } from "firebase/firestore";
 import NextLink from "next/link";
-import { Building2, Plus, ArrowRight, FolderOpen, Trash2 } from "lucide-react";
+import { Building2, Plus, ArrowRight, FolderOpen, Trash2, Users } from "lucide-react";
 import SortHeader from "@/components/SortHeader";
+import TeamModal from "@/components/TeamModal";
 import { useLocale, useT } from "@/context/LanguageContext";
 import { clientPath } from "@/lib/routes";
 import {
@@ -27,6 +29,7 @@ import {
   Card,
   Code,
   EmptyState,
+  notify,
   Field,
   Input,
   Modal,
@@ -54,11 +57,14 @@ interface Company {
   createdAt?: { toMillis?: () => number };
 }
 
-interface SverkaReport {
+interface ReconciliationReport {
   id: string;
   companyId: string;
   savedAt: { toDate?: () => Date } | null;
   totals: { debit: number; credit: number; diff: number };
+  /** Saqlangan kontragentlar. Hujjat baribir to'liq o'qiladi,
+   *  shuning uchun «nechtasida farq bor» ni sanash BEPUL. */
+  firmsData?: { totalDebit: number; totalCredit: number }[];
 }
 
 /**
@@ -92,7 +98,7 @@ export default function ClientsPage() {
   const { user } = useAuth();
   const workspaceId: string | undefined = user?.workspaceId;
   const [companies, setCompanies] = useState<Company[]>([]);
-  const [reports, setReports] = useState<SverkaReport[]>([]);
+  const [reports, setReports] = useState<ReconciliationReport[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
   const [loading, setLoading] = useState(true);
@@ -101,10 +107,14 @@ export default function ClientsPage() {
   const [sortDir, setSortDir] = useState<SortDir>("asc");
 
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [teamOpen, setTeamOpen] = useState(false);
   const [newCompanyName, setNewCompanyName] = useState("");
   const [newCompanyInn, setNewCompanyInn] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [addError, setAddError] = useState("");
+  /** Reja chekloviga yetildi — xato matni o'rniga YO'L ko'rsatiladi */
+  const [limitHit, setLimitHit] = useState<{ plan: string; limit: number; current: number } | null>(null);
+  const [interestSent, setInterestSent] = useState(false);
 
   const [totals, setTotals] = useState<Totals>({ tolov: 0, faktura: 0, farq: 0 });
 
@@ -120,7 +130,7 @@ export default function ClientsPage() {
   // hisoboti qolib ketgan bo'lsa ("yetim" hisobot), u umumiy summaga kirmasligi kerak —
   // aks holda ro'yxat bo'sh bo'lsa ham yuqorida raqam turaveradi.
   const calculateTotals = useCallback(
-    (reportsList: SverkaReport[], year: number, companiesList: Company[]) => {
+    (reportsList: ReconciliationReport[], year: number, companiesList: Company[]) => {
       const liveCompanyIds = new Set(companiesList.map((c) => c.id));
       let tolov = 0;
       let faktura = 0;
@@ -164,9 +174,9 @@ export default function ClientsPage() {
       setCompanies(companiesList);
 
       const reportsSnapshot = await getDocs(
-        query(collection(db, "sverka_reports"), where("workspaceId", "==", workspaceId))
+        query(collection(db, SVERKA_REPORTS), where("workspaceId", "==", workspaceId))
       );
-      const reportsList = reportsSnapshot.docs.map((d) => ({ id: d.id, ...d.data() } as SverkaReport));
+      const reportsList = reportsSnapshot.docs.map((d) => ({ id: d.id, ...d.data() } as ReconciliationReport));
       setReports(reportsList);
 
       calculateTotals(reportsList, selectedYear, companiesList);
@@ -189,15 +199,37 @@ export default function ClientsPage() {
       let tolov = 0;
       let faktura = 0;
       let saved = false;
+      // Oxirgi sverka sanasi va farqi bor kontragentlar soni — ular
+      // ENG SO'NGGI hisobotdan olinadi, yig'indidan emas: «nechtasida
+      // farq bor» ni bir necha hisobot bo'yicha qo'shib bo'lmaydi
+      // (bitta kontragent ikkala hisobotda ham sanaladi).
+      let lastAt: Date | null = null;
+      let lastMs = -1;
+      let withDiff: number | null = null;
+
       reports.forEach((report) => {
-        const reportYear = report.savedAt?.toDate ? report.savedAt.toDate().getFullYear() : new Date().getFullYear();
-        if (report.companyId === companyId && reportYear === selectedYear && report.totals) {
+        const at = report.savedAt?.toDate ? report.savedAt.toDate() : null;
+        const reportYear = at ? at.getFullYear() : new Date().getFullYear();
+        if (report.companyId !== companyId || reportYear !== selectedYear) return;
+        if (report.totals) {
           tolov += Number(report.totals.debit) || 0;
           faktura += Number(report.totals.credit) || 0;
           saved = true;
         }
+        const ms = at ? at.getTime() : 0;
+        if (ms > lastMs) {
+          lastMs = ms;
+          lastAt = at;
+          const firms = report.firmsData;
+          withDiff = Array.isArray(firms)
+            ? firms.filter(
+                (f) => Math.abs((Number(f.totalDebit) || 0) - (Number(f.totalCredit) || 0)) > 0.01
+              ).length
+            : null;
+        }
       });
-      return { tolov, faktura, farq: tolov - faktura, saved };
+
+      return { tolov, faktura, farq: tolov - faktura, saved, lastAt, withDiff };
     },
     [reports, selectedYear]
   );
@@ -210,6 +242,7 @@ export default function ClientsPage() {
     try {
       setSubmitting(true);
       setAddError("");
+      setLimitHit(null);
       // Korxona SERVER orqali qo'shiladi: reja cheklovi hujjat sanog'iga
       // bog'liq va uni Firestore qoidalarida yozib bo'lmaydi.
       const res = await authFetch("/api/companies", {
@@ -218,6 +251,18 @@ export default function ClientsPage() {
         body: JSON.stringify({ name: newCompanyName.trim(), inn: newCompanyInn.trim() }),
       });
       const data = await res.json();
+
+      if (!res.ok && data?.limitReached) {
+        // Cheklov — bu XATO emas, HOLAT. Shuning uchun qizil xato
+        // matni emas, tushuntirish va tugma ko'rsatiladi.
+        setLimitHit({
+          plan: String(data.plan || "free"),
+          limit: Number(data.limit) || 0,
+          current: Number(data.current) || 0,
+        });
+        setAddError("");
+        return;
+      }
 
       if (!res.ok) {
         // Хато ойнанинг ИЧИДА кўрсатилади. `alert()` ойнани ёпмасди ва
@@ -239,11 +284,56 @@ export default function ClientsPage() {
     }
   };
 
+  /** «Ko'proq kerak» bosildi. Bu — TALAB O'LCHOVI: to'lov
+   *  ulanmasidan oldin nechta odam chegaraga urilganini bilish
+   *  kerak. Yozuv yozilmasa, keyin bu raqamni tiklab bo'lmaydi. */
+  /** A'zolar cheklovi uchun talab o'lchovi. Korxona cheklovidan
+   *  alohida sanaladi — `reason` maydoni ikkalasini ajratadi. */
+  const handleNeedMoreMembers = async () => {
+    if (!workspaceId) return;
+    try {
+      await addDoc(collection(db, "plan_interest"), {
+        workspaceId,
+        email: user?.email || null,
+        reason: "members",
+        createdAt: serverTimestamp(),
+      });
+      notify.ok(t("Раҳмат! Тариф тайёр бўлганда хабар берамиз."));
+    } catch (err) {
+      console.error("Talabni yozishda xatolik:", err);
+      notify.warn(t("Хабарингиз юборилмади, лекин биз билан боғланишингиз мумкин."));
+    }
+  };
+
+  const handleNeedMore = async () => {
+    if (!workspaceId || !limitHit) return;
+    try {
+      await addDoc(collection(db, "plan_interest"), {
+        workspaceId,
+        email: user?.email || null,
+        plan: limitHit.plan,
+        companiesAtRequest: limitHit.current,
+        createdAt: serverTimestamp(),
+      });
+      setInterestSent(true);
+      notify.ok(t("Раҳмат! Тариф тайёр бўлганда хабар берамиз."));
+    } catch (err) {
+      console.error("Talabni yozishda xatolik:", err);
+      // Foydalanuvchi uchun bu ish TO'XTAMAYDI — u baribir bog'lana oladi
+      setInterestSent(true);
+      notify.warn(t("Хабарингиз юборилмади, лекин биз билан боғланишингиз мумкин."));
+    }
+  };
+
   // 🗑️ Firmani va uning BARCHA sverka hisobotlarini o'chirish.
   //
   // Firestore'da kaskad o'chirish YO'Q — firma hujjatini o'chirish uning
-  // `sverka_reports` yozuvlarini o'chirmaydi. Ular qolib ketsa, firma
-  // ro'yxatdan yo'qolgani bilan summalari tizimda osilib qoladi.
+  // hisobotlarini o'chirmaydi. Ular qolib ketsa, firma ro'yxatdan
+  // yo'qolgani bilan summalari tizimda osilib qoladi.
+  //
+  // IKKALA kolleksiya ham tozalanadi: chiqim (`sverka_reports`) va
+  // kirim (`income_reports`). Bittasi unutilsa — jimgina yetim
+  // ma'lumot qoladi.
   const handleDeleteCompany = async (companyId: string, companyName: string) => {
     if (!confirm(`"${companyName}" — ${t("корхонасини ва унинг барча сверка ҳисоботларини бутунлай ўчириб ташламоқчимисиз?")}`)) {
       return;
@@ -252,16 +342,19 @@ export default function ClientsPage() {
     try {
       setLoading(true);
 
-      const reportsSnap = await getDocs(
-        query(
-          collection(db, "sverka_reports"),
-          where("workspaceId", "==", workspaceId),
-          where("companyId", "==", companyId)
-        )
-      );
+      const refs: import("firebase/firestore").DocumentReference[] = [];
+      for (const name of [SVERKA_REPORTS, INCOME_REPORTS]) {
+        const snap = await getDocs(
+          query(
+            collection(db, name),
+            where("workspaceId", "==", workspaceId),
+            where("companyId", "==", companyId)
+          )
+        );
+        snap.docs.forEach((d) => refs.push(d.ref));
+      }
 
       // Bitta batch'da 500 tagacha amal bo'ladi — bo'laklarga bo'lamiz
-      const refs = reportsSnap.docs.map((d) => d.ref);
       const CHUNK = 450;
       for (let i = 0; i < refs.length; i += CHUNK) {
         const batch = writeBatch(db);
@@ -278,7 +371,7 @@ export default function ClientsPage() {
       await loadDashboardData();
     } catch (error) {
       console.error("O'chirishda xatolik:", error);
-      alert(t("Ўчириб бўлмади, қайта уриниб кўринг."));
+      notify.error(t("Ўчириб бўлмади, қайта уриниб кўринг."));
       setLoading(false);
     }
   };
@@ -344,6 +437,16 @@ export default function ClientsPage() {
               <option value={2025}>2025</option>
               <option value={2024}>2024</option>
             </Select>
+            {/* ЖАМОА — «Бюро» режаси 5 фойдаланувчи ваъда қилади,
+                лекин одам қўшиш йўли йўқ эди. */}
+            <Button
+              variant="secondary"
+              onClick={() => setTeamOpen(true)}
+              icon={<Users className="h-4 w-4" />}
+              title={t("Иш майдони аъзолари")}
+            >
+              <span className="hidden sm:inline">{t("Жамоа")}</span>
+            </Button>
             <Button
               variant="primary"
               onClick={() => {
@@ -413,6 +516,9 @@ export default function ClientsPage() {
                 <Th align="right" width="w-44">
                   <SortHeader label={t("Фарқ")} k="farq" align="right" activeKey={sortKey} dir={sortDir} onToggle={toggleSort} />
                 </Th>
+                <Th align="center" width="w-44">
+                  {t("Ҳолат")}
+                </Th>
                 <Th align="center" width="w-36">
                   {t("Ҳаракат")}
                 </Th>
@@ -421,7 +527,7 @@ export default function ClientsPage() {
             <Tbody>
               {tableRows.length === 0 ? (
                 <tr>
-                  <td colSpan={6}>
+                  <td colSpan={7}>
                     <EmptyState
                       icon={<FolderOpen className="h-8 w-8" />}
                       title={t("Фирма топилмади")}
@@ -472,6 +578,33 @@ export default function ClientsPage() {
                         {t("бу йил учун сақланган сверка йўқ")}
                       </Td>
                     )}
+                    {/* ҲОЛАТ — «шу мижозга қараш керакми». Бухгалтер
+                        рўйхатни очганда биринчи кўрадиган нарса шу
+                        бўлиши керак, ҳар бирига кириб чиқиш эмас. */}
+                    <Td align="center" className="whitespace-nowrap">
+                      {company.saved ? (
+                        <div className="flex flex-col items-center gap-0.5">
+                          {company.withDiff === null ? (
+                            <span className="text-caption text-ink-3">—</span>
+                          ) : company.withDiff === 0 ? (
+                            <span className="text-caption font-medium text-ok">
+                              ✓ {t("ҳаммаси мос")}
+                            </span>
+                          ) : (
+                            <span className="text-caption font-medium text-warn">
+                              {company.withDiff} {t("тасида фарқ")}
+                            </span>
+                          )}
+                          {company.lastAt && (
+                            <span className="text-caption text-ink-3">
+                              {(company.lastAt as Date).toLocaleDateString("ru-RU")}
+                            </span>
+                          )}
+                        </div>
+                      ) : (
+                        <span className="text-caption text-ink-3">—</span>
+                      )}
+                    </Td>
                     <Td align="center">
                       <div className="flex items-center justify-center gap-2">
                         <NextLink
@@ -533,6 +666,30 @@ export default function ClientsPage() {
 
           {addError && <Alert tone="bad">{addError}</Alert>}
 
+          {/* ЧЕКЛОВГА ЕТИЛДИ — хато эмас, ҲОЛАТ */}
+          {limitHit && (
+            <Alert tone="info" title={t("Режа чекловига етдингиз")}>
+              <p>
+                {t("Ҳозирги режада")} <b>{limitHit.limit}</b> {t("тагача корхона қўшиш мумкин.")}{" "}
+                {t("Сизда")} <b>{limitHit.current}</b> {t("та бор.")}
+              </p>
+              <p className="mt-1.5">
+                {t("Кўпроқ корхона керак бўлса — айтинг. Тариф ҳали ишга туширилмаган, шунинг учун ҳозир пул сўралмайди.")}
+              </p>
+              <div className="mt-2.5">
+                {interestSent ? (
+                  <span className="text-caption font-medium text-ok">
+                    ✓ {t("Сўровингиз қайд этилди")}
+                  </span>
+                ) : (
+                  <Button variant="primary" size="sm" onClick={handleNeedMore}>
+                    {t("Кўпроқ керак")}
+                  </Button>
+                )}
+              </div>
+            </Alert>
+          )}
+
           <div className="flex justify-end gap-2 pt-1">
             <Button type="button" variant="secondary" onClick={() => setIsModalOpen(false)}>
               {t("Бекор қилиш")}
@@ -543,6 +700,13 @@ export default function ClientsPage() {
           </div>
         </form>
       </Modal>
+
+      {/* ИШ МАЙДОНИ АЪЗОЛАРИ */}
+      <TeamModal
+        open={teamOpen}
+        onClose={() => setTeamOpen(false)}
+        onNeedMore={handleNeedMoreMembers}
+      />
     </div>
   );
 }

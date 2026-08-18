@@ -330,9 +330,23 @@ Ikki texnik qaror:
   unga yetib bormaydi — kirim sverkasining «Акт сверки» oynasi ko'k
   tugma bilan ochilardi (brauzerda o'lchab tasdiqlangan).
 
-**4-bosqich — natija ekranini qayta chizish.** Hozir birinchi ko'rinadigan
-narsa — 20 ustunli jadval. Ko'rinishi kerak bo'lgan narsa: **nechta
-kontragentda farq bor va u qancha**. Jadval — ikkinchi ekranda.
+**4-bosqich — natija ekrani. ❌ SINALDI VA RAD ETILDI (2026-08-18).**
+Reja «avval javob, keyin jadval» edi. Yasaldi (`ResultPanel.tsx`:
+«N ta kontragentda farq bor» + uch guruh + eng katta 5 farq),
+o'lchandi va **olib tashlandi**.
+
+Sabab: panel yangi ma'lumot bermadi. «Nechta kontragentda farq bor»
+allaqachon `StatCard` va jadval tepasidagi qatorda bor edi — panel
+faqat qatlam qo'shdi. Foydalanuvchi ikki marta rad etdi: avval jadval
+yashirilgani uchun, keyin panelning o'zi uchun («chalg'ityapti»).
+
+**To'g'ri qo'yilgan savol:** buxgalterga «farq bor» degan raqam emas,
+**qaysi faktura yopilmagani** kerak. Ma'lumot allaqachon bor
+(`aging.ts` FIFO bilan hisoblaydi), ekranda ochilmagan. Batafsil:
+`docs/TAHLIL-2026-08-18.md`.
+
+Saqlanib qolgan qoida: guruhlash farq ISHORASI bo'yicha emas,
+`verdict()` toni bo'yicha (HANDOFF §14).
 
 **5-bosqich — yuklash oqimi.** Hozir: fayl tanla → yukla → natija.
 Kerak: fayl tashla → tizim nima topganini AYTADI (qaysi bank, qaysi davr,

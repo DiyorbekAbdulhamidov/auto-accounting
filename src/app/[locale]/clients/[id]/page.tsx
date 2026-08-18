@@ -18,8 +18,8 @@ import { useAuth } from "@/context/AuthContext";
 import { useLocale, useT } from "@/context/LanguageContext";
 import { path } from "@/lib/routes";
 import { ArrowDownToLine, ArrowUpFromLine } from "lucide-react";
-import ChiqimSverka from "@/components/sverka/ChiqimSverka";
-import KirimSverka from "@/components/sverka/KirimSverka";
+import OutgoingReconciliation from "@/components/reconciliation/OutgoingReconciliation";
+import IncomingReconciliation from "@/components/reconciliation/IncomingReconciliation";
 import {
   Alert,
   Card,
@@ -32,7 +32,7 @@ import {
   type TabItem,
 } from "@/components/ui";
 
-type Yonalish = "OUT" | "IN";
+type Direction = "OUT" | "IN";
 
 interface Company {
   name: string;
@@ -54,7 +54,7 @@ export default function ClientPage({
   const [company, setCompany] = useState<Company | null>(null);
   const [notFound, setNotFound] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [yonalish, setYonalish] = useState<Yonalish>("OUT");
+  const [direction, setDirection] = useState<Direction>("OUT");
 
   useEffect(() => {
     let alive = true;
@@ -102,21 +102,21 @@ export default function ClientPage({
     );
   }
 
-  const TABS: TabItem<Yonalish>[] = [
+  const TABS: TabItem<Direction>[] = [
     { key: "OUT", label: t("Чиқим сверкаси"), icon: ArrowUpFromLine },
     { key: "IN", label: t("Кирим сверкаси"), icon: ArrowDownToLine },
   ];
 
   return (
     <ModuleScope
-      module={yonalish === "OUT" ? "out" : "in"}
+      module={direction === "OUT" ? "out" : "in"}
       className={`${layout.containerWide} ${layout.stack}`}
     >
       <PageHeader
         backHref={path("clients", locale)}
         title={company.name}
         description={
-          yonalish === "OUT"
+          direction === "OUT"
             ? t("Тўланган пул ↔ келган фактура: фарқни топади")
             : t("Тушган пул ↔ ёзилган фактура: фарқни топади")
         }
@@ -124,7 +124,7 @@ export default function ClientPage({
       />
 
       <Card padded={false}>
-        <Tabs items={TABS} value={yonalish} onChange={setYonalish} />
+        <Tabs items={TABS} value={direction} onChange={setDirection} />
       </Card>
 
       {/* ИККАЛА КОМПОНЕНТ ҲАМ МОНТАЖДА ҚОЛАДИ, кўринмагани фақат
@@ -132,11 +132,11 @@ export default function ClientPage({
           юкланган файл, ўқилган ҳисобот, белгиланган қаторлар —
           ҳаммаси йўқоларди. Бухгалтер эса иккала йўналишни кетма-кет
           қилади ва орқага қайтади. */}
-      <div className={yonalish === "OUT" ? undefined : "hidden"} aria-hidden={yonalish !== "OUT"}>
-        <ChiqimSverka companyId={id} companyName={company.name} />
+      <div className={direction === "OUT" ? undefined : "hidden"} aria-hidden={direction !== "OUT"}>
+        <OutgoingReconciliation companyId={id} companyName={company.name} />
       </div>
-      <div className={yonalish === "IN" ? undefined : "hidden"} aria-hidden={yonalish !== "IN"}>
-        <KirimSverka companyName={company.name} />
+      <div className={direction === "IN" ? undefined : "hidden"} aria-hidden={direction !== "IN"}>
+        <IncomingReconciliation companyId={id} companyName={company.name} />
       </div>
     </ModuleScope>
   );

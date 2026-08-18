@@ -20,7 +20,7 @@ import {
 } from "@/components/ui";
 import { Reveal } from "@/components/ui";
 import { Highlight, MockFrame, Step } from "./Annotate";
-import SverkaAnimation, { SverkaAnimationText } from "./SverkaAnimation";
+import ReconciliationAnimation, { ReconciliationAnimationText } from "./ReconciliationAnimation";
 
 /* ============================================================
    QO'LLANMA — «bu tizim nima qiladi» degan savolga javob
@@ -197,12 +197,12 @@ export function GuideHero() {
           <p className="mt-3 max-w-xl text-lead text-ink-2">
             {t("Банк кўчирмангизни ва фактура рўйхатини юкласангиз, тизим ҳар бир контрагент бўйича пул билан фактурани солиштиради ва ФАРҚ борларини ажратиб беради. Қўлда бир неча кун кетадиган иш — бир неча сонияда.")}
           </p>
-          <SverkaAnimationText />
+          <ReconciliationAnimationText />
           <div className="mt-5">
             <ColourKey />
           </div>
         </div>
-        <SverkaAnimation />
+        <ReconciliationAnimation />
       </div>
     </Card>
   );

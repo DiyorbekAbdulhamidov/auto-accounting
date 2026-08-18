@@ -1,5 +1,6 @@
 "use client";
 import { createContext, useContext, useEffect, useRef, useState } from "react";
+import { notify } from "@/components/ui";
 import { auth, db } from "@/lib/firebase";
 import {
   onAuthStateChanged,
@@ -80,7 +81,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             await signOut(auth);
             setUser(null);
             if (!isPath(pathnameRef.current, "login")) {
-              alert("Sizga bu tizimga kirishga ruxsat berilmagan!");
+              notify.error("Sizga bu tizimga kirishga ruxsat berilmagan!");
               router.replace(path("login", localeRef.current));
             }
           }
@@ -92,7 +93,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setUser(null);
         await signOut(auth).catch(() => {});
         if (!isPath(pathnameRef.current, "login")) {
-          alert("Tizimga ulanishda xatolik. Qayta urinib ko'ring.");
+          notify.error("Tizimga ulanishda xatolik. Qayta urinib ko'ring.");
           router.replace(path("login", localeRef.current));
         }
       } finally {
@@ -117,7 +118,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       await signInWithEmailAndPassword(auth, email, pass);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      alert("Login yoki parol xato: " + message);
+      notify.error("Login yoki parol xato", message);
       setLoading(false);
     }
   };

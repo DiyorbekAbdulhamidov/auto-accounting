@@ -1,6 +1,6 @@
 ---
 name: verify-parsers
-description: Sverka parserlarini haqiqiy bank fayllariga qarshi tekshirish. Har qanday o'zgarish `src/lib/statementAudit.ts`, `bankStatements.ts`, `incomeParser.ts`, `universalParser.ts`, `excelWorkbook.ts`, `formatMemory.ts` yoki `counterpartyCategory.ts` ga tegsa — SHU skill ishga tushirilsin. Yangi bank fayli kelganda ham shu.
+description: Sverka parserlarini haqiqiy bank fayllariga qarshi tekshirish. Har qanday o'zgarish `src/lib/statementAudit.ts`, `bankStatements.ts`, `incomeParser.ts`, `universalParser.ts`, `excelWorkbook.ts`, `formatMemory.ts`, `counterpartyCategory.ts`, `aging.ts` yoki `counterpartyMerge.ts` ga tegsa — SHU skill ishga tushirilsin. Yangi bank fayli kelganda ham shu.
 ---
 
 # Parserlarni tekshirish
@@ -32,6 +32,17 @@ Chiqish kodi 0 — hammasi o'tdi, 1 — kamida bitta tekshiruv yiqilgan.
    shu xatoni keltirgan edi.
 3. **Toifalar** — kommunal/byudjet kesimlari yig'indisi umumiy JAMIga
    teng bo'lishi shart (toifalash pul yo'qotmasligi kerak).
+4. **Davr kelishuvi** — bank ko'chirmasi va faktura ro'yxati bir xil
+   davrni qamrashi kerak. 1 oylik ko'chirma + 7 oylik faktura haqiqiy
+   fayllarda 3 258 650 804 so'mlik soxta farq bergan edi.
+5. **Yopilmagan fakturalar** — FIFO qoldig'i jadvaldagi «Фарқ» bilan
+   bir xil narsani aytishi shart: `sum(outstanding) − advance =
+   kredit − debet`.
+6. **Birlashtirish** — qatorlar qo'shilganda `sum(totalDebit)`,
+   `sum(totalCredit)`, o'tkazmalar soni va oylik kesim
+   O'ZGARMASLIGI shart. Shuningdek nom, STIR va TOIFA ASOSIY
+   qatordan olinishi tekshiriladi: «kommunal» a'zo butun guruhni
+   asosiy sverkadan chiqarib yuborishi mumkin edi.
 
 ## Qoidalar
 

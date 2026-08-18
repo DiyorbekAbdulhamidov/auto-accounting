@@ -39,7 +39,7 @@ import { BRAND } from "@/lib/brand";
 import { path } from "@/lib/routes";
 import { PLANS } from "@/lib/plans";
 import { LogoMark } from "@/components/Brand";
-import SverkaAnimation, { SverkaAnimationText } from "@/components/guide/SverkaAnimation";
+import ReconciliationAnimation, { ReconciliationAnimationText } from "@/components/guide/ReconciliationAnimation";
 import { ColourKey } from "@/components/guide/Guide";
 import { Badge, Card, Num, Reveal, buttonClasses, cx } from "@/components/ui";
 
@@ -98,7 +98,7 @@ export function Hero() {
             <p className="mt-2 max-w-xl text-body text-ink-3">
               {t("Қўлда бир неча кун кетадиган иш бир неча сонияда.")}
             </p>
-            <SverkaAnimationText />
+            <ReconciliationAnimationText />
 
             <div className="mt-7 flex flex-wrap items-center gap-3">
               <NextLink
@@ -126,7 +126,7 @@ export function Hero() {
               РАСМ эмас, ЭКРАН деб ўқийди. Рамка — учта нуқта ва
               манзил қатори, бошқа безак йўқ. */}
           <AppFrame label={`${BRAND.domain} · ${t("сверка")}`}>
-            <SverkaAnimation />
+            <ReconciliationAnimation />
           </AppFrame>
         </div>
 

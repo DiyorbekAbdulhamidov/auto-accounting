@@ -8,6 +8,12 @@ import { auditFiles, type InputFile } from '@/lib/statementAudit';
 import type { LearnedFormat } from '@/lib/formatMemory';
 import { MIN_COMPANIES_FOR_HINT, type Category, type GlobalHint } from '@/lib/counterpartyCategory';
 import { assertCompanyAccess, requireUser } from '@/lib/apiAuth';
+import {
+  MERGES_COLLECTION,
+  mergeOutgoingRows,
+  suggestMerges,
+  type MergeGroup,
+} from '@/lib/counterpartyMerge';
 import type { Firestore } from 'firebase-admin/firestore';
 
 export const runtime = 'nodejs';
@@ -66,31 +72,67 @@ async function loadGlobalHints(
   }
 }
 
+/** Kim va qachon o'zgartirgani — AUDIT IZI. Byuroda bir necha odam
+ *  ishlaydi va «kim buni коммунал деб белгилаган?» degan savolga
+ *  javob bo'lishi kerak. Ma'lumot allaqachon yozilardi, faqat
+ *  ekranga chiqmasdi. */
+export interface CategoryAuthor {
+  by: string;
+  at: string;
+}
+
 async function loadCategoryOverrides(
   db: Firestore,
   companyId: string
-): Promise<Record<string, Category>> {
-  if (!companyId) return {};
+): Promise<{ map: Record<string, Category>; authors: Record<string, CategoryAuthor> }> {
+  if (!companyId) return { map: {}, authors: {} };
   try {
     const snap = await db
       .collection('companies').doc(companyId)
       .collection(CATEGORIES_COLLECTION).get();
     const out: Record<string, Category> = {};
+    const authors: Record<string, CategoryAuthor> = {};
     for (const doc of snap.docs) {
-      const d = doc.data() as { key?: string; inn?: string; category?: Category };
+      const d = doc.data() as {
+        key?: string; inn?: string; category?: Category;
+        updatedBy?: string; updatedAt?: string;
+      };
       if (!d.category) continue;
       // STIR bo'yicha ham, kalit bo'yicha ham yozib qo'yiladi: STIRsiz
       // kontragentlar faqat kalit bilan topiladi.
       if (d.inn && d.inn !== '-') out[d.inn] = d.category;
       if (d.key) out[d.key] = d.category;
+      if (d.updatedBy) {
+        const a = { by: d.updatedBy, at: d.updatedAt || '' };
+        if (d.inn && d.inn !== '-') authors[d.inn] = a;
+        if (d.key) authors[d.key] = a;
+      }
     }
-    return out;
+    return { map: out, authors };
   } catch (err) {
     // Toifa ro'yxati o'qilmasa ham sverka ishlashi kerak — shunda
     // hamma kontragent 'korxona' bo'lib qoladi, ya'ni hech narsa
     // yashirilmaydi (xavfsiz tomon).
     console.error("counterparty_categories o'qilmadi:", err);
-    return {};
+    return { map: {}, authors: {} };
+  }
+}
+
+/** Qo'lda birlashtirilgan kontragent guruhlari (korxona darajasida).
+ *  O'qilmasa sverka baribir ishlaydi — shunchaki qatorlar ajratilgan
+ *  holicha qoladi, ya'ni hech narsa YASHIRILMAYDI (xavfsiz tomon). */
+async function loadMergeGroups(db: Firestore, companyId: string): Promise<MergeGroup[]> {
+  if (!companyId) return [];
+  try {
+    const snap = await db
+      .collection('companies').doc(companyId)
+      .collection(MERGES_COLLECTION).get();
+    return snap.docs
+      .map((d) => d.data() as MergeGroup)
+      .filter((g) => g && g.primary && Array.isArray(g.members));
+  } catch (err) {
+    console.error("counterparty_merges o'qilmadi:", err);
+    return [];
   }
 }
 
@@ -118,6 +160,31 @@ async function saveFormats(db: Firestore, formats: LearnedFormat[]): Promise<voi
   }
 }
 
+// ============================================================
+// YUKLASH CHEKLOVI
+// ------------------------------------------------------------
+// Cheklovsiz bitta katta fayl butun xizmatni qotirib qo'yadi:
+// `arrayBuffer()` faylni BUTUNLAY xotiraga oladi. Eng katta etalon
+// bank ko'chirmasi ~5 MB, shuning uchun 15 MB — keng zaxira bilan.
+// Xato JIM emas: qaysi fayl va qancha ekani aytiladi.
+// ============================================================
+const MAX_FILE_BYTES = 15 * 1024 * 1024;
+const MAX_FILES = 20;
+
+function checkUpload(files: File[]): string | null {
+  if (files.length > MAX_FILES) {
+    return `Бир вақтда кўпи билан ${MAX_FILES} та файл юклаш мумкин. Ҳозир ${files.length} та танланди.`;
+  }
+  for (const f of files) {
+    if (f.size > MAX_FILE_BYTES) {
+      const mb = (f.size / 1024 / 1024).toFixed(1);
+      const lim = MAX_FILE_BYTES / 1024 / 1024;
+      return `«${f.name}» ҳажми ${mb} МБ — чегара ${lim} МБ. Файлни даврларга бўлиб юкланг.`;
+    }
+  }
+  return null;
+}
+
 export async function POST(req: Request) {
   const auth = await requireUser(req);
   if (!auth.ok) return auth.response;
@@ -129,6 +196,9 @@ export async function POST(req: Request) {
     if (!files || files.length === 0) {
       return NextResponse.json({ error: "Fayl(lar) yuklanmadi!" }, { status: 400 });
     }
+
+    const tooBig = checkUpload(files);
+    if (tooBig) return NextResponse.json({ error: tooBig }, { status: 413 });
 
     const inputs: InputFile[] = [];
     for (const file of files) {
@@ -145,15 +215,28 @@ export async function POST(req: Request) {
     const denied = await assertCompanyAccess(auth.admin, companyId, auth.user.workspaceId);
     if (denied) return denied;
 
-    const [knownFormats, categoryOverrides, categoryGlobalHints] = await Promise.all([
+    const [knownFormats, categoryOverrides, categoryGlobalHints, mergeGroups] = await Promise.all([
       loadKnownFormats(auth.admin.db),
       loadCategoryOverrides(auth.admin.db, companyId),
       loadGlobalHints(auth.admin.db, companyId),
+      loadMergeGroups(auth.admin.db, companyId),
     ]);
     const result = auditFiles(inputs, {
-      knownFormats, includePending, categoryOverrides, categoryGlobalHints,
+      knownFormats,
+      includePending,
+      categoryOverrides: categoryOverrides.map,
+      categoryGlobalHints,
     });
     await saveFormats(auth.admin.db, result.learnedFormats);
+
+    // BIRLASHTIRISH — parserdan KEYIN, alohida qadam.
+    //
+    // Ataylab shunday: `auditFiles` 90 ta regress tekshiruvi bilan
+    // qoplangan va unga tegilmaydi. Birlashtirish esa faqat qatorlarni
+    // qo'shadi — yig'indi o'zgarmaydi, ya'ni `result.totals` va
+    // `categoryTotals` shundayligicha to'g'ri qoladi.
+    const mergedData = mergeOutgoingRows(result.data, mergeGroups);
+    const mergeSuggestions = suggestMerges(result.data, mergeGroups, 'out');
 
     if (result.data.length === 0) {
       return NextResponse.json({
@@ -166,7 +249,12 @@ export async function POST(req: Request) {
 
     return NextResponse.json({
       success: true,
-      data: result.data,
+      data: mergedData,
+      // Қўлда бирлаштирилган гуруҳлар — экранда «ажратиш» тугмаси учун
+      merges: mergeGroups.filter((g) => g.side === 'out'),
+      // ТАКЛИФ: бир хил СТИР ёки бир хил номли қаторлар. Ҳеч қачон
+      // ўзи қўлланмайди — қарор бухгалтерники.
+      mergeSuggestions,
       detectedFormats: result.detectedFormats,
       warnings: result.warnings,
       sheets: result.sheets,
@@ -176,6 +264,11 @@ export async function POST(req: Request) {
       balanceChecks: result.balanceChecks,
       // Рақамини ТАСДИҚЛАБ бўлмайдиган файллар (на «Итого», на қолдиқ)
       unverifiedFiles: result.unverifiedFiles,
+      // Ҳар икки томоннинг ТОПИЛГАН даври. Экранда кўрсатилади:
+      // бухгалтер файлни очмасдан «тўғри файл юкладимми» деб билади.
+      periods: result.periods,
+      // AUDIT IZI: toifani kim va qachon o'zgartirgani
+      categoryAuthors: categoryOverrides.authors,
       totals: result.totals,
       categoryTotals: result.categoryTotals,
       // Qaysi shakllar tanish bo'lgani/yangi o'rganilgani

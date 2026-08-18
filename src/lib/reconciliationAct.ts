@@ -13,18 +13,44 @@
 
 import ExcelJS from 'exceljs';
 
-export interface AktPayment { date: string | null; amount: number; doc: string }
-export interface AktInvoice { date: string | null; number: string; amount: number }
-export interface AktParty {
+// НОМЛАР НЕЙТРАЛ — «фактура» ва «тўлов» ЭМАС.
+//
+// Сабаб: акт иккала сверкада ҳам ишлатилади ва ролллар ТЕСКАРИ:
+//   · кирим (харидор, 4010 актив): биз ёзган фактура — ДЕБЕТ,
+//     келган пул — КРЕДИТ;
+//   · чиқим (етказиб берувчи, 6010 пассив): биз тўлаган пул —
+//     ДЕБЕТ, келган фактура — КРЕДИТ.
+// Майдон «invoices» деб аталса, чиқим томонида унга ТЎЛОВ
+// узатилиши керак бўларди — бу эртами-кечми хатога олиб келади.
+export interface ActDoc {
+  date: string | null;
+  /** Ҳужжат рақами (фактура №, тўлов топшириқномаси №) */
+  number: string;
+  amount: number;
+}
+export interface ActParty {
   name: string;
   inn: string;
-  bankCredit: number;
-  facturaSent: number;
-  payments: AktPayment[];
-  invoices: AktInvoice[];
+  /** Дебет айланмаси жами */
+  debitTotal: number;
+  /** Кредит айланмаси жами */
+  creditTotal: number;
+  /** ДЕБЕТ томонидаги ҳужжатлар (қарзни ОШИРАДИ) */
+  debitDocs: ActDoc[];
+  /** КРЕДИТ томонидаги ҳужжатлар (қарзни КАМАЙТИРАДИ) */
+  creditDocs: ActDoc[];
 }
-export interface AktOptions {
+export interface ActOptions {
   ownName: string;
+  /** Давр БОШИДАГИ қолдиқ (сальдо начальное), дебет томонда мусбат.
+   *
+   *  МУҲИМ: тизим буни ЎЗИ БИЛМАЙДИ. Банк кўчирмасидаги «Остаток на
+   *  начало периода» — ҲИСОБВАРАҚ қолдиғи, контрагент бўйича эмас.
+   *  Шунинг учун берилмаса, ҳужжат остига қоldиқ ҲИСОБГА ОЛИНМАГАНИ
+   *  ёзиб қўйилади — акс ҳолда акт «нол эди» деб ЁЛҒОН айтарди. */
+  openingBalance?: number;
+  /** Ҳужжат қамраган давр (экранда топилгани), изоҳ учун */
+  periodLabel?: string;
 }
 
 const THIN = { style: 'thin' as const };
@@ -120,7 +146,7 @@ export function amountInWords(value: number): string {
 // ------------------------------------------------------------
 // Excel hujjatini qurish
 // ------------------------------------------------------------
-export function buildAktWorkbook(party: AktParty, opts: AktOptions): ExcelJS.Workbook {
+export function buildReconciliationActWorkbook(party: ActParty, opts: ActOptions): ExcelJS.Workbook {
   const wb = new ExcelJS.Workbook();
   const ws = wb.addWorksheet('Акт сверки');
 
@@ -163,13 +189,22 @@ export function buildAktWorkbook(party: AktParty, opts: AktOptions): ExcelJS.Wor
     return r;
   };
 
-  bodyRow(['Сальдо начальное', '', 0, 0, 'Сальдо начальное', '', 0, 0], true);
+  // Сальдо начальное. Берилмаса 0 — лекин бу «нол эди» дегани ЭМАС,
+  // «ҳисобга олинмади» дегани. Фарқи жадвал остида ёзилади.
+  const opening = opts.openingBalance ?? 0;
+  const openingKnown = opts.openingBalance !== undefined;
+  bodyRow([
+    'Сальдо начальное', '',
+    opening > 0 ? opening : 0, opening < 0 ? -opening : 0,
+    'Сальдо начальное', '',
+    opening < 0 ? -opening : 0, opening > 0 ? opening : 0,
+  ], true);
 
   // ---- Ҳужжатлар (фактура = дебет, тўлов = кредит) ----
   type Doc = { date: string | null; doc: string; debit: number; credit: number };
   const docs: Doc[] = [
-    ...party.invoices.map((i) => ({ date: i.date, doc: docNumber(i.number), debit: i.amount, credit: 0 })),
-    ...party.payments.map((p) => ({ date: p.date, doc: p.doc || '', debit: 0, credit: p.amount })),
+    ...party.debitDocs.map((d) => ({ date: d.date, doc: docNumber(d.number), debit: d.amount, credit: 0 })),
+    ...party.creditDocs.map((d) => ({ date: d.date, doc: docNumber(d.number), debit: 0, credit: d.amount })),
   ];
   docs.sort((a, b) => (a.date || '').localeCompare(b.date || '') || b.debit - a.debit);
 
@@ -178,9 +213,10 @@ export function buildAktWorkbook(party: AktParty, opts: AktOptions): ExcelJS.Wor
     bodyRow([dt, d.doc, d.debit, d.credit, dt, d.doc, d.credit, d.debit]);
   }
 
-  const debit = party.facturaSent;
-  const credit = party.bankCredit;
-  const saldo = debit - credit;
+  const debit = party.debitTotal;
+  const credit = party.creditTotal;
+  // Охирги сальдо бошланғич қолдиқни ҲАМ ҳисобга олади
+  const saldo = opening + debit - credit;
 
   bodyRow(['Обороты за период', '', debit, credit, 'Обороты за период', '', credit, debit], true);
   bodyRow([
@@ -189,6 +225,22 @@ export function buildAktWorkbook(party: AktParty, opts: AktOptions): ExcelJS.Wor
     'Сальдо конечное', '',
     saldo < 0 ? -saldo : 0, saldo > 0 ? saldo : 0,
   ], true);
+
+  // ОГОҲЛАНТИРИШ ИЗОҲИ — жадвалдан ТАШҚАРИДА, яъни расмий шаклга
+  // тегилмайди. Бошланғич қолдиқ киритилмаган бўлса, ҳужжат буни
+  // ЯШИРМАЙДИ: акс ҳолда шерик «нол эди» деб ўқирди.
+  if (!openingKnown) {
+    const note = ws.addRow([
+      'Диққат: сальдо начальное киритилмаган — акт фақат юкланган давр' +
+      (opts.periodLabel ? ` (${opts.periodLabel})` : '') +
+      ' ҳаракатини кўрсатади. Аввалги давр қолдиғи ҳисобга олинмаган.',
+    ]);
+    ws.mergeCells(note.number, 1, note.number, 8);
+    const c = note.getCell(1);
+    c.font = { name: FONT, size: 9, italic: true };
+    c.alignment = { horizontal: 'left', vertical: 'middle', wrapText: true };
+    note.height = 26;
+  }
 
   // Босма учун: А4 бўйига, бир саҳифа энига
   ws.pageSetup = {

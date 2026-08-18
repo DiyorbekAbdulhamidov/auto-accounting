@@ -10,6 +10,7 @@
 // ============================================================
 
 import type { Metadata } from "next";
+import { Toaster } from "@/components/ui";
 import { Inter } from "next/font/google";
 import { notFound } from "next/navigation";
 import { AuthProvider } from "@/context/AuthContext";
@@ -108,6 +109,8 @@ export default async function RootLayout({
               uchun server va klient bir xil HTML chiqaradi. */}
           <LanguageProvider lang={lang} locale={locale}>
             {children}
+            {/* Xabarlar (`alert()` o'rniga) — ildizda BIR MARTA */}
+            <Toaster />
           </LanguageProvider>
         </AuthProvider>
       </body>

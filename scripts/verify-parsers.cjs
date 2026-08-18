@@ -23,6 +23,21 @@
  *
  *  3) TOIFALAR — kommunal/byudjet kesimlari yig'indisi umumiy
  *     JAMIga teng bo'lishi shart (toifalash pul yo'qotmasligi kerak).
+ *
+ *  5) YOPILMAGAN FAKTURALAR — FIFO bilan yopilgandan keyin
+ *     qolgan qoldiq matematikaga MOS bo'lishi shart:
+ *
+ *         sum(outstanding) − advance = kredit − debet
+ *
+ *     Ya'ni ekranda ko'rsatiladigan «shu fakturalar yopilmagan»
+ *     ro'yxati jadvaldagi «Фарқ» raqami bilan bir xil narsani
+ *     aytadi. Aks holda ikkita raqam bir-biriga qarshi turardi.
+ *
+ *  4) DAVR KELISHUVI — bank ko'chirmasi va faktura ro'yxati BIR XIL
+ *     davrni qamrashi kerak. Aks holda tizim ikkalasini baribir
+ *     qo'shib ayiradi va soxta farq chiqadi. Haqiqiy fayllarda
+ *     o'lchangan: 1 oylik ko'chirma + 7 oylik faktura = 3 258 650 804
+ *     so'mlik soxta farq, ogohlantirishsiz.
  * ============================================================ */
 
 const fs = require('fs');
@@ -38,7 +53,15 @@ const XLSX = require(path.join(PROJ, 'node_modules/xlsx'));
 const { auditFiles } = jiti(path.join(PROJ, 'src/lib/statementAudit.ts'));
 const { analyzeIncome } = jiti(path.join(PROJ, 'src/lib/incomeParser.ts'));
 const { buildIncomeWorkbook } = jiti(path.join(PROJ, 'src/lib/incomeExcel.ts'));
+const { buildAging } = jiti(path.join(PROJ, 'src/lib/aging.ts'));
 const { readWorkbookSmart } = jiti(path.join(PROJ, 'src/lib/excelWorkbook.ts'));
+const {
+  mergeOutgoingRows,
+  mergeIncomingRows,
+  normalizeName,
+  suggestMerges,
+  buildMergeMap,
+} = jiti(path.join(PROJ, 'src/lib/counterpartyMerge.ts'));
 
 const DIR = process.argv[2] || 'C:/Users/hp/Downloads/Telegram Desktop';
 
@@ -414,6 +437,328 @@ function runSwapTest() {
   for (const w of rBad.warnings) console.log('  ⚠  ' + w);
 }
 
+/** DAVR KELISHUVI. Ikkita holat tekshiriladi:
+ *    - TO'G'RI juftlik (7 oylik ko'chirma + 7 oylik faktura) —
+ *      ogohlantirish BO'LMASLIGI kerak (yolg'on signal bermasin);
+ *    - NOTO'G'RI juftlik (1 oylik ko'chirma + 7 oylik faktura) —
+ *      ogohlantirish CHIQISHI va sababni AYTISHI kerak.
+ *  Ikkinchisi eng muhim: ilgari bu holat jimgina o'tib ketardi. */
+function runPeriodTest() {
+  console.log(`\n============================================================`);
+  console.log('DAVR KELISHUVI: kо\'chirma ↔ faktura');
+
+  const hasDavr = (r) => r.warnings.some((w) => w.startsWith('ДАВРЛАР'));
+  const load = (n) => {
+    const fp = path.join(DIR, n);
+    if (!fs.existsSync(fp)) return null;
+    return { name: n, buffer: fs.readFileSync(fp) };
+  };
+  const inputs = (names) => {
+    const out = names.map(load);
+    return out.some((x) => !x) ? null : out;
+  };
+  const goodIn = inputs(['IMANMAX 7 oylik OBOROTKA.xlsx', 'IMANMAX 7 oylik FAKTURA.xlsx']);
+  const badIn = inputs(['IMANMAX   Июл.xls', 'IMANMAX 7 oylik FAKTURA.xlsx']);
+  if (!goodIn || !badIn) {
+    console.log("  [O'TKAZILDI] etalon fayllar topilmadi");
+    return;
+  }
+
+  const good = auditFiles(goodIn, {});
+  ok(!hasDavr(good), "to'g'ri juftlikda davr ogohlantirishi YO'Q (yolg'on signal yo'q)");
+  ok(
+    good.periods.bank.from === '2026-01' && good.periods.bank.to === '2026-07',
+    `bank davri to'g'ri topildi: ${good.periods.bank.from} … ${good.periods.bank.to}`
+  );
+  ok(
+    good.periods.faktura.from === '2026-01' && good.periods.faktura.to === '2026-07',
+    `faktura davri to'g'ri topildi: ${good.periods.faktura.from} … ${good.periods.faktura.to}`
+  );
+
+  const bad = auditFiles(badIn, {});
+  ok(hasDavr(bad), "1 oylik ko'chirma + 7 oylik faktura — OGOHLANTIRISH chiqdi");
+  ok(
+    bad.periods.bank.from === '2026-07' && bad.periods.faktura.from === '2026-01',
+    'ikkala davr alohida ko\'rsatildi (bank 2026-07, faktura 2026-01 dan)'
+  );
+  const w = bad.warnings.find((x) => x.startsWith('ДАВРЛАР')) || '';
+  ok(w.includes('2026-07') && w.includes('2026-01'), 'ogohlantirish IKKALA davrni aytdi');
+  ok(/\d{2}%/.test(w), 'ogohlantirish qancha pul tashqarida qolganini AYTDI');
+  for (const x of bad.warnings.filter((y) => y.startsWith('ДАВРЛАР'))) console.log('  ⚠  ' + x);
+}
+
+/** YOPILMAGAN FAKTURALAR — ekran komponenti ishlatadigan AYNAN o'sha
+ *  moslashtirish (chiqim tomonida to'lov va faktura bitta ro'yxatda).
+ *  Bu yerda tekshiriladigan narsa — ro'yxat jadvaldagi «Фарқ» bilan
+ *  bir xil narsani aytadimi. */
+function runOpenInvoiceTest() {
+  console.log(`\n============================================================`);
+  console.log('YOPILMAGAN FAKTURALAR: FIFO qoldig\'i «Фарқ»қа мос келадими');
+
+  const names = ['IMANMAX 7 oylik OBOROTKA.xlsx', 'IMANMAX 7 oylik FAKTURA.xlsx'];
+  const inputs = [];
+  for (const n of names) {
+    const fp = path.join(DIR, n);
+    if (!fs.existsSync(fp)) {
+      console.log("  [O'TKAZILDI] etalon fayllar topilmadi");
+      return;
+    }
+    inputs.push({ name: n, buffer: fs.readFileSync(fp) });
+  }
+
+  const res = auditFiles(inputs, {});
+  const rows = res.data.filter((d) => (d.category || 'korxona') === 'korxona');
+
+  const agingInput = rows.map((tx) => ({
+    key: tx.key,
+    inn: tx.inn,
+    name: tx.name,
+    invoices: (tx.transactions || [])
+      .filter((r) => (r.credit || 0) > 0)
+      .map((r) => ({ date: r.date || null, number: r.doc || '', amount: r.credit })),
+    payments: (tx.transactions || [])
+      .filter((r) => (r.debit || 0) > 0)
+      .map((r) => ({ date: r.date || null, amount: r.debit })),
+  }));
+
+  const report = buildAging(agingInput, null);
+  const byKey = new Map(report.parties.map((x) => [x.key, x]));
+
+  let bad = 0;
+  let withOpen = 0;
+  for (const tx of rows) {
+    const a = byKey.get(tx.key);
+    if (!a) continue;
+    const outstanding = a.openInvoices.reduce((s2, i) => s2 + i.outstanding, 0);
+    // sum(outstanding) − advance  ===  kredit − debet
+    const left = outstanding - a.advance;
+    const right = tx.totalCredit - tx.totalDebit;
+    if (Math.abs(left - right) > 0.02) {
+      bad++;
+      if (bad <= 3) {
+        console.log(`     ${tx.name}: ${left.toFixed(2)} != ${right.toFixed(2)}`);
+      }
+    }
+    if (a.openInvoices.length > 0) withOpen++;
+  }
+
+  ok(bad === 0, `${rows.length} ta kontragentda qoldiq «Фарқ» bilan mos keldi`);
+  ok(withOpen > 0, `yopilmagan faktura topilgan kontragent: ${withOpen} ta`);
+
+  // Har fakturaning qoldig'i o'z summasidan katta bo'la olmaydi
+  let overflow = 0;
+  for (const party of report.parties) {
+    for (const inv of party.openInvoices) {
+      if (inv.outstanding > inv.amount + 0.01 || inv.outstanding < -0.01) overflow++;
+    }
+  }
+  ok(overflow === 0, 'hech bir fakturaning qoldig\'i o\'z summasidan oshmadi');
+}
+
+
+/* ============================================================
+ * KONTRAGENTLARNI BIRLASHTIRISH
+ * ------------------------------------------------------------
+ * Bitta firma ikki xil yozilsa (bankda «МЧЖ "X"», fakturada
+ * «X MCHJ») tizim ikki qator ko'rsatadi va IKKALASIDA ham soxta
+ * farq chiqadi. Birlashtirish buni yopadi.
+ *
+ * ENG MUHIM INVARIANT: birlashtirish PUL YO'QOTMASLIGI shart.
+ * Yig'indi o'zgarsa — bu «to'g'rilash» emas, ma'lumotni buzish.
+ * ============================================================ */
+function runMergeTest() {
+  console.log(`\n============================================================`);
+  console.log('BIRLASHTIRISH: yig\'indi saqlanadimi');
+
+  // --- nom normallashtirish (taklif shu bilan ishlaydi) ---
+  ok(
+    normalizeName('МЧЖ "ИМАНМАКС"') === normalizeName('IMANMAX MCHJ'),
+    'kirill va lotin yozuvidagi bir xil nom bitta o\'zakka keldi'
+  );
+  // Lotin «x» ikki xil o'qiladi: «ТЕХНО»/«TEXNO» (h tovushi) va
+  // «ИМАНМАКС»/«IMANMAX» (кс tovushi). Ikkalasi ham tanilishi shart.
+  ok(
+    normalizeName('ХК "ТЕХНО"') === normalizeName('TEXNO XK'),
+    '«х» tovushidagi x ham tanildi (ТЕХНО = TEXNO)'
+  );
+  ok(
+    normalizeName('ЎЗБЕКҚУРИЛИШ') === normalizeName('OZBEKQURILISH'),
+    "o'zbek kirilli (ў, қ) lotin yozuvi bilan mos keldi"
+  );
+  ok(
+    normalizeName('ЯТТ Каримов') === normalizeName('Karimov YATT'),
+    "tashkiliy-huquqiy shakl (ЯТТ/YATT) o'zakka ta'sir qilmadi"
+  );
+  ok(
+    normalizeName('ООО "ALFA"') !== normalizeName('ООО "BETA"'),
+    'har xil firma har xil o\'zak berdi (yolg\'on birlashuv yo\'q)'
+  );
+
+  // --- kalit ikki guruhda: to'qnashuv JIM ketmasin ---
+  const conf = buildMergeMap(
+    [
+      { primary: 'A', members: ['X'], side: 'out' },
+      { primary: 'B', members: ['X'], side: 'out' },
+    ],
+    'out'
+  );
+  ok(conf.conflicts.includes('X'), 'bitta kalit ikki guruhda — to\'qnashuv aytildi');
+
+  const names = ['IMANMAX 7 oylik OBOROTKA.xlsx', 'IMANMAX 7 oylik FAKTURA.xlsx'];
+  const inputs = [];
+  for (const n of names) {
+    const fp = path.join(DIR, n);
+    if (!fs.existsSync(fp)) {
+      console.log("  [O'TKAZILDI] etalon fayllar topilmadi");
+      return;
+    }
+    inputs.push({ name: n, buffer: fs.readFileSync(fp) });
+  }
+
+  // ---------- CHIQIM TOMONI ----------
+  const res = auditFiles(inputs, {});
+  const rows = res.data;
+  if (rows.length < 3) {
+    console.log("  [O'TKAZILDI] kontragent kam");
+    return;
+  }
+
+  const sum = (list, f) => list.reduce((a, x) => a + f(x), 0);
+  const beforeD = sum(rows, (r) => r.totalDebit);
+  const beforeC = sum(rows, (r) => r.totalCredit);
+  const beforeTx = sum(rows, (r) => (r.transactions || []).length);
+
+  // Eng katta aylanmali ikkitasi birlashtiriladi — natija ko'rinarli
+  const sorted = [...rows].sort(
+    (a, b) => b.totalDebit + b.totalCredit - (a.totalDebit + a.totalCredit)
+  );
+  const [p, m] = sorted;
+  const groups = [{ primary: p.key, members: [m.key], side: 'out' }];
+
+  // Chuqur nusxa: birlashtirish KIRISHNI o'zgartirmasligi kerak
+  const input = JSON.parse(JSON.stringify(rows));
+  const merged = mergeOutgoingRows(input, groups);
+
+  ok(merged.length === rows.length - 1, `qator soni 1 taga kamaydi (${rows.length} → ${merged.length})`);
+  ok(
+    Math.abs(sum(merged, (r) => r.totalDebit) - beforeD) < 0.01,
+    `debet yig'indisi o'zgarmadi: ${M(beforeD)}`
+  );
+  ok(
+    Math.abs(sum(merged, (r) => r.totalCredit) - beforeC) < 0.01,
+    `kredit yig'indisi o'zgarmadi: ${M(beforeC)}`
+  );
+  ok(
+    sum(merged, (r) => (r.transactions || []).length) === beforeTx,
+    `bitta ham o'tkazma yo'qolmadi (${beforeTx} ta)`
+  );
+
+  const row = merged.find((r) => r.key === p.key);
+  ok(!!row, 'birlashgan qator asosiy kalit bilan turibdi');
+  ok(
+    Math.abs(row.totalDebit - (p.totalDebit + m.totalDebit)) < 0.01 &&
+      Math.abs(row.totalCredit - (p.totalCredit + m.totalCredit)) < 0.01,
+    'birlashgan qator summasi ikkalasining yig\'indisiga teng'
+  );
+  ok(
+    Math.abs(row.difference - (row.totalDebit - row.totalCredit)) < 0.01,
+    '«Фарқ» qayta hisoblandi: debet − kredit'
+  );
+  ok(
+    Array.isArray(row.mergedFrom) && row.mergedFrom.length === 2,
+    'qaysi kalitlardan yig\'ilgani yozib qo\'yildi (ajratib bo\'ladi)'
+  );
+
+  // Oylik kesim ham yig'ilishi shart — aks holda oyma-oy jadval
+  // birlashgan qatorda bo'sh chiqadi.
+  const monthBefore = {};
+  for (const r of [p, m]) {
+    for (const [k, v] of Object.entries(r.monthlyData || {})) {
+      monthBefore[k] = (monthBefore[k] || 0) + v.debit + v.credit;
+    }
+  }
+  let monthBad = 0;
+  for (const [k, v] of Object.entries(monthBefore)) {
+    const got = row.monthlyData[k];
+    if (!got || Math.abs(got.debit + got.credit - v) > 0.01) monthBad++;
+  }
+  ok(monthBad === 0, `oylik kesim ham yig'ildi (${Object.keys(monthBefore).length} ta oy)`);
+
+  // ---------- TOIFA ASOSIY QATORDAN ----------
+  // Bu jimgina xatoning eng qimmat turi edi: guruhning BIRINCHI
+  // uchragan qatori «kommunal» bo'lsa, u butun guruhni asosiy
+  // sverkadan chiqarib yuborardi va millionlar jadvaldan yo'qolardi.
+  // Endi toifa ASOSIY qatordan olinadi, tartibdan qat'i nazar.
+  {
+    const a = JSON.parse(JSON.stringify(sorted[0]));
+    const b = JSON.parse(JSON.stringify(sorted[1]));
+    // Ro'yxatda «kommunal» a'zo BIRINCHI turadi, asosiy — ikkinchi
+    b.category = 'kommunal';
+    b.categoryLabel = 'Коммунал';
+    a.category = 'korxona';
+    const res2 = mergeOutgoingRows([b, a], [{ primary: a.key, members: [b.key], side: 'out' }]);
+    const m2 = res2.find((r) => r.key === a.key);
+    ok(
+      m2 && m2.category === 'korxona',
+      "birlashgan qator toifasi ASOSIY qatordan olindi (a'zo «kommunal» bo'lsa ham)"
+    );
+    ok(
+      m2 && m2.name === a.name && m2.inn === a.inn,
+      'nom va STIR ham asosiy qatordan olindi'
+    );
+    ok(
+      m2 && Math.abs(m2.totalDebit - (a.totalDebit + b.totalDebit)) < 0.01,
+      "tartib teskari bo'lganda ham summa to'g'ri yig'ildi"
+    );
+  }
+
+  // Guruhsiz chaqiruv massivni O'ZGARTIRMASLIGI kerak
+  ok(mergeOutgoingRows(rows, []) === rows, 'guruh yo\'q bo\'lsa ro\'yxat tegilmaydi');
+
+  // ---------- TAKLIF ----------
+  const sug = suggestMerges(rows, groups, 'out');
+  ok(
+    !sug.some((x) => x.keys.includes(p.key) && x.keys.includes(m.key)),
+    'allaqachon birlashtirilgan juftlik qayta taklif qilinmadi'
+  );
+
+  // ---------- KIRIM TOMONI ----------
+  const inc = analyzeIncome(inputs, { includePending: false });
+  const parties = inc.parties || [];
+  if (parties.length < 2) {
+    console.log("  [O'TKAZILDI] kirim tomonida kontragent kam");
+    return;
+  }
+  const beforeCr = sum(parties, (r) => r.bankCredit);
+  const beforeFa = sum(parties, (r) => r.facturaSent);
+  const [ip, im] = [...parties].sort(
+    (a, b) => b.bankCredit + b.facturaSent - (a.bankCredit + a.facturaSent)
+  );
+  const inGroups = [{ primary: ip.key, members: [im.key], side: 'in' }];
+  const inMerged = mergeIncomingRows(JSON.parse(JSON.stringify(parties)), inGroups);
+
+  ok(inMerged.length === parties.length - 1, `kirimda ham qator soni 1 taga kamaydi`);
+  ok(
+    Math.abs(sum(inMerged, (r) => r.bankCredit) - beforeCr) < 0.01 &&
+      Math.abs(sum(inMerged, (r) => r.facturaSent) - beforeFa) < 0.01,
+    'kirimda tushgan pul va faktura yig\'indisi o\'zgarmadi'
+  );
+  const inRow = inMerged.find((r) => r.key === ip.key);
+  ok(
+    Math.abs(inRow.difference - (inRow.facturaSent - inRow.bankCredit)) < 0.01,
+    'kirimda «Фарқ» = faktura − tushgan pul'
+  );
+  ok(
+    inRow.aliases.includes(im.name) || im.name === inRow.name,
+    'qo\'shilgan nom taxallusda saqlandi (yo\'qolmadi)'
+  );
+  ok(
+    (inRow.payments || []).length === (ip.payments || []).length + (im.payments || []).length &&
+      (inRow.invoices || []).length === (ip.invoices || []).length + (im.invoices || []).length,
+    'to\'lov va faktura ro\'yxati to\'liq qo\'shildi (akt sverki uchun)'
+  );
+}
+
 for (const name of Object.keys(ETALON)) run(name, [name]);
 run('IMANMAX 7 oylik (oborotka + faktura)', [
   'IMANMAX 7 oylik OBOROTKA.xlsx',
@@ -421,6 +766,9 @@ run('IMANMAX 7 oylik (oborotka + faktura)', [
 ]);
 runIncomeBalances();
 runSwapTest();
+runPeriodTest();
+runOpenInvoiceTest();
+runMergeTest();
 
 // Eksportni qayta o'qish sinovi ExcelJS tufayli asinxron — shuning
 // uchun yakuniy hisob shu yerda chiqariladi.

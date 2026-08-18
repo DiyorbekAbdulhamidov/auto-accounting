@@ -34,10 +34,15 @@ service cloud.firestore {
     // 2026-08-13 gacha bu yerda egalik tekshiruvi UMUMAN yo'q edi: ro'yxatdagi
     // har bir foydalanuvchi BARCHA korxona va hisobotlarni o'qiy olardi.
     // Endi hujjat o'z ish maydonidan tashqariga ko'rinmaydi.
-    function myWorkspace() {
-      return userDoc().get('workspaceId', '');
-    }
-
+    //
+    // MUHIM: ish maydoni HUJJATNING O'ZIDAN olinadi, foydalanuvchi
+    // hujjatidan EMAS. Ya'ni «bu hujjat qaysi ish maydoniga tegishli va
+    // men o'sha maydonning a'zosimanmi» deb so'raladi. Ilgari bu yerda
+    // `myWorkspace()` yordamchisi ham turardi (foydalanuvchi hujjatidan
+    // o'qiydigan), lekin u HECH QAYERDA ishlatilmasdi — deploy uni
+    // «Unused function» deb ogohlantirardi va eng muhimi, o'quvchida
+    // «egalik qaysi tomondan tekshiriladi?» degan chalkashlik
+    // tug'dirardi. Olib tashlandi.
     function isMember(workspaceId) {
       return isAllowed()
         && workspaceId != null
@@ -78,10 +83,59 @@ service cloud.firestore {
       allow delete: if isMember(resource.data.get('workspaceId', ''));
     }
 
+    // `delete` a'zoga OCHIQ (ilgari faqat admin edi). Ikki sabab:
+    //
+    //  1. Korxonani o'chirish ISHLAMAS EDI. `clients/page.tsx` firma
+    //     bilan birga uning hisobotlarini ham `writeBatch` bilan
+    //     o'chiradi — batch esa bitta amal rad etilsa BUTUNLAY yiqiladi.
+    //     Ya'ni admin bo'lmagan foydalanuvchi korxonasini umuman
+    //     o'chira olmasdi.
+    //  2. Har «Сақлаш» YANGI hujjat yaratadi (900 KB gacha) va tiklash
+    //     so'rovi ularning hammasini yuklab oladi. O'chirishsiz
+    //     kolleksiya cheksiz o'sadi.
+    //
+    // `update` YOPIQ qoladi: saqlangan hisobot o'zgarmas hujjat —
+    // uni tahrirlash emas, qayta saqlash kerak.
     match /sverka_reports/{reportId} {
       allow read: if isMember(resource.data.get('workspaceId', ''));
       allow create: if isMember(request.resource.data.get('workspaceId', ''));
-      allow update, delete: if isAdmin();
+      allow update: if isAdmin();
+      allow delete: if isMember(resource.data.get('workspaceId', ''));
+    }
+
+    // KIRIM sverkasi hisobotlari — ATAYLAB alohida kolleksiya.
+    //
+    // Nega `sverka_reports` ga `kind` maydoni qo'shilmadi: eski
+    // hujjatlarda bunday maydon YO'Q, Firestore esa maydoni yo'q
+    // hujjatni `where('kind','==','out')` so'roviga QO'SHMAYDI.
+    // Ya'ni chiqim tomonining butun tarixi jimgina yo'qolgandek
+    // bo'lardi — loyihadagi eng qimmat xato turi.
+    match /income_reports/{reportId} {
+      allow read: if isMember(resource.data.get('workspaceId', ''));
+      allow create: if isMember(request.resource.data.get('workspaceId', ''));
+      allow update: if isAdmin();
+      // Sabab yuqorida, `sverka_reports` da yozilgan.
+      allow delete: if isMember(resource.data.get('workspaceId', ''));
+    }
+
+    // Kontragent bo'yicha boshlang'ich qoldiq (сальдо начальное).
+    // `update` bu yerda OCHIQ (admin emas): qoldiqni buxgalterning
+    // o'zi to'g'rilaydi va bu kundalik ish. Hisobotlardan farqi —
+    // qoldiq bitta joyda turadi va tarixi kerak emas.
+    match /opening_balances/{balanceId} {
+      allow read: if isMember(resource.data.get('workspaceId', ''));
+      allow create: if isMember(request.resource.data.get('workspaceId', ''));
+      allow update: if isMember(resource.data.get('workspaceId', ''))
+                    && request.resource.data.workspaceId == resource.data.workspaceId;
+      allow delete: if isAdmin();
+    }
+
+    // «Ko'proq kerak» bosilgani — TALAB O'LCHOVI.
+    // Yozish ochiq, O'QISH YOPIQ: bu ichki o'lchov, foydalanuvchiga
+    // boshqalarning so'rovini ko'rsatishning hojati yo'q.
+    match /plan_interest/{id} {
+      allow create: if isMember(request.resource.data.get('workspaceId', ''));
+      allow read, update, delete: if false;
     }
 
     // Qolgan hamma narsa yopiq

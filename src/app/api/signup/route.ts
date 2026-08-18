@@ -15,7 +15,7 @@
 
 import { NextResponse } from 'next/server';
 import { getAdminServices, getAdminInitError } from '@/lib/firebaseAdmin';
-import { resolveWorkspaceId, ALLOWED_USERS } from '@/lib/workspace';
+import { resolveWorkspaceId, ALLOWED_USERS, MEMBERS, WORKSPACES } from '@/lib/workspace';
 
 export const runtime = 'nodejs';
 
@@ -75,6 +75,22 @@ export async function POST(req: Request) {
       email,
       now
     );
+
+    // TAKLIF QILINGAN odam endi haqiqatan kirdi — a'zolik maqomi
+    // «invited» dan «active» ga o'tadi. Bu yagona joy: `resolveWorkspaceId`
+    // har so'rovda chaqiriladi, unga yozish qo'shilsa har API chaqiruvi
+    // qo'shimcha yozuv qilardi. Signup esa bir marta ishlaydi.
+    if (workspaceId !== email) {
+      try {
+        await admin.db
+          .collection(WORKSPACES).doc(workspaceId)
+          .collection(MEMBERS).doc(email)
+          .set({ status: 'active', joinedAt: now }, { merge: true });
+      } catch (err) {
+        // Maqom yangilanmasa ham kirish ISHLAYDI — bu faqat ekrandagi belgi
+        console.error("A'zolik maqomi yangilanmadi:", err);
+      }
+    }
 
     return NextResponse.json({ success: true, workspaceId });
   } catch (error) {

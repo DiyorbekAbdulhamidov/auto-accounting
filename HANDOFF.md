@@ -296,16 +296,16 @@ ro'yxati:
 - 4-korxona qo'shishga urinish → cheklov ushlaydimi
 - ikkinchi akkaunt ochib, birinchisining korxonasi ko'rinmasligi
 
-### 2. UI ni qayta qurish — 4 va 5 bosqichlar QOLDI
+### 2. UI ni qayta qurish — 4-bosqich QAYTA O'YLANADI, 5-bosqich QOLDI
 
 - **1) lug'at** ✅ (2026-08-13)
 - **2) dizayn tizimi** ✅ (2026-08-15) — `globals.css` tokenlari,
   `src/components/ui/` da 21 komponent
 - **3) chiqim va kirim bitta sahifada** ✅ (2026-08-16) —
   `/korxonalar/[id]`, `ModuleScope` bilan rang tabga bog'landi
-- **4) natija ekrani** ❌ — hozir birinchi ko'rinadigan narsa hali ham
-  ko'p ustunli jadval. Ko'rinishi kerak: «nechta kontragentda farq
-  bor va qancha», jadval — ikkinchi ekranda
+- **4) natija ekrani** ❌ — yasaldi va RAD ETILDI (14-bo'lim). Yig'ma
+  panel ekranga qatlam qo'shdi, javob qo'shmadi. To'g'ri savol:
+  «qaysi faktura yopilmagan» — `docs/TAHLIL-2026-08-18.md`, 3-bo'lim
 - **5) yuklash oqimi** ❌ — tizim nima topganini OLDIN aytadi (qaysi
   bank, qaysi davr, qaysi korxona) → tasdiqla → natija
 
@@ -384,6 +384,23 @@ firebase deploy --only firestore:rules
 
 Skript idempotent: `workspaceId` bor hujjatga tegmaydi, qayta ishga
 tushirsa bo'ladi. Ma'lumot bo'lmasa hech narsa qilmaydi.
+
+**2026-08-18: skript UCH joyda buzilgan edi va HECH QACHON ishlamagan.**
+Tuzatildi, keyin haqiqiy bazada ishlatildi:
+
+1. `.env.local` ni o'qirdi — loyihada esa `.env` bor. «Muhit
+   o'zgaruvchilari yo'q» deb chiqib ketardi. Endi ikkalasini ham
+   sinaydi.
+2. `admin.credential.cert` / `admin.firestore()` — eski API.
+   O'rnatilgani **firebase-admin v14**, unda bu yo'q
+   («Cannot read properties of undefined (reading 'cert')»). Modulli
+   kirish nuqtalariga o'tkazildi (`lib/app`, `lib/firestore`).
+3. `income_reports` va `opening_balances` ni sanamasdi — ular yangi,
+   lekin «bo'sh bo'lishi kerak» degan taxminni TEKSHIRISH kerak: egasiz
+   hujjat bo'lsa deploy'dan keyin jimgina yo'qoladi.
+
+Ko'rish rejimi endi mavjud `workspaceId` qiymatlarini ham chiqaradi —
+ega kimligini taxmin qilish emas, ma'lumotning o'zidan o'qish uchun.
 
 ---
 
@@ -758,3 +775,449 @@ til almashinuvi (tungi rejim):          0 ta konsol xatosi
 yopiq edi (`Browser pane is not displayed`), shuning uchun barcha
 tekshiruv `getComputedStyle`, `getBoundingClientRect` va DOM
 o'qish orqali qilingan. Rasm bilan ko'rish hali kerak.
+
+---
+
+## 14. Natija paneli — YASALDI VA OLIB TASHLANDI (2026-08-18)
+
+Bu bo'lim bajarilgan ishni emas, **qaytarilgan qarorni** yozib qo'yadi.
+Sabab: bir xil g'oya keyingi sessiyada yana taklif qilinishi mumkin.
+
+### Nima qilindi
+
+UI 4-bosqich rejasi bo'yicha (`MAHSULOT-QARORLARI` §3) ikkala sverka
+uchun bitta `ResultPanel.tsx` yasaldi: tepada «N ta kontragentda farq
+bor» + farq summasi, ostida uch guruh (pul yetishmayapti · hujjat
+yetishmayapti · mos keldi), keyin eng katta 5 ta farq ro'yxati.
+
+Panel brauzerda uch holatda o'lchandi (vaqtinchalik `/dev-preview`
+sahifasi orqali, keyin o'chirildi):
+
+```
+kontrast (yorug' + tungi, 1280 va 375 px):  94 element, 0 xato
+eng past nisbat:                            yorug' 4,96:1 · tungi 5,71:1
+gorizontal siljish · konsol:                yo'q · toza
+raqamlar (7 kontragent, 5 farq):            67 570 180,15 = qo'lda hisob
+```
+
+### Nega olib tashlandi
+
+Ikki bosqichda rad etildi:
+
+1. **Jadval yig'iladigan qilingandi** (`tableOpen`, standart yopiq).
+   Javob: «murakkablashib ketyapti, tahlildan keyin jadval **darhol**
+   ko'rinishi kerak». Yig'ish olib tashlandi.
+2. **Panelning o'zi ham rad etildi:** «natija paneli chalg'ityapti».
+
+Ikkalasi ham o'rinli va bitta sababga ega: **panel yangi ma'lumot
+bermasdi, faqat mavjud raqamni boshqacha ko'rsatardi.** «Nechta
+kontragentda farq bor» allaqachon uchta `StatCard` ostida va jadval
+tepasidagi qatorda yozilgan edi. Ya'ni panel ekranga qatlam qo'shdi,
+javob qo'shmadi.
+
+### Nima saqlanib qoldi (g'oya sifatida)
+
+Panelning o'zi kerak emas, lekin ichidagi bitta qoida **to'g'ri** edi va
+kelajakda kerak bo'ladi:
+
+> Kontragentlarni farq ISHORASI bo'yicha emas, `verdict()` qaytargan
+> TON bo'yicha guruhlash kerak: `bad` = pul yetishmayapti,
+> `warn` = hujjat yetishmayapti.
+
+Sabab 8-bo'limda: chiqimda musbat farq `warn`, kirimda esa `bad`. Ishora
+bo'yicha guruhlansa bitta komponent ikkita sverkada TESKARI natija
+beradi. Bu brauzerda tasdiqlandi: bir xil 7 qator chiqimda 3/2, kirimda
+2/3 bo'lib taqsimlandi.
+
+### Xulosa — takrorlanmasin
+
+- Yig'ma ko'rsatkichni ko'rsatish uchun **mavjud narsani yashirish shart
+  emas**. Yashirish qadam qo'shadi, olmaydi.
+- Bu foydalanuvchi ortiqcha qatlamni tez sezadi. Yangi UI taklif
+  qilishdan oldin savol: **bu qadam qo'shyaptimi yoki olyaptimi?**
+- Buxgalterga kerak bo'lgan narsa yig'indini chiroyli ko'rsatish emas —
+  **qaysi hujjat yetishmayotganini aytish**. Tahlil:
+  `docs/TAHLIL-2026-08-18.md`, 3-bo'lim, 1-o'rin.
+
+Kod git tarixida qoladi (`ResultPanel.tsx`).
+
+---
+
+## 15. Kod nomlari inglizchaga o'tkazildi (2026-08-18)
+
+Talab: kod nomlari standart inglizcha bo'lsin. **UI matnlari,
+`t()` kalitlari va o'zbekcha izohlarga TEGILMADI** — ular
+arxitektura qarori (2-bo'lim).
+
+### O'zgargan fayl va papkalar
+
+| Eski | Yangi |
+|---|---|
+| `src/components/sverka/` | `src/components/reconciliation/` |
+| `ChiqimSverka.tsx` | `OutgoingReconciliation.tsx` |
+| `KirimSverka.tsx` | `IncomingReconciliation.tsx` |
+| `Natija.tsx` (bugun yaratilgan) | `ResultPanel.tsx` |
+| `guide/SverkaAnimation.tsx` | `guide/ReconciliationAnimation.tsx` |
+| `lib/aktSverki.ts` | `lib/reconciliationAct.ts` |
+
+### O'zgargan identifikatorlar
+
+`Yonalish`→`Direction`, `natijaRows`→`resultRows`,
+`korxona*`→`company*`, `boshqa*`→`other*`, `aktParty`→`actParty`,
+`buildAktWorkbook`→`buildReconciliationActWorkbook`,
+`Akt{Payment,Invoice,Party,Options}`→`Act…`,
+`Faktura{Layout,Row,Result}`→`Invoice…`, `isAktSverki`→`isReconciliationAct`,
+`SverkaReport(Doc)`→`ReconciliationReport(Doc)`.
+Lokal UI holat qiymatlari: `"KORXONA"/"BOSHQA"`→`"COMPANY"/"OTHER"`,
+`"NO_FACTURA"`→`"NO_INVOICE"`, `"SVERKA"` tab→`"RECONCILIATION"`.
+
+Yo'l-yo'lakay: `Tabs` ning `actions` propi endi hech qayerda
+ishlatilmaydi (Excel tugmasi sarlavhaga ko'chdi) — o'chirildi.
+
+### ATAYLAB TEGILMAGAN — sababi bilan
+
+Bular **Firestore'da saqlanadi yoki tashqariga chiqadi**, ya'ni
+nomni o'zgartirish migratsiyasiz ma'lumotni «yo'qolgandek»
+qiladi — bu loyihaning eng qimmat xatosi (jimgina xato):
+
+| Nima | Qayerda | Nega tegilmadi |
+|---|---|---|
+| `sverka_reports` kolleksiyasi | Firestore | Nomi o'zgarsa saqlangan hisobotlar topilmaydi |
+| `Category`: `korxona`/`kommunal`/`byudjet`/`bank`/`xizmat` | Firestore hujjatlarida | Buxgalterning QO'LDA belgilagan toifasi yo'qoladi |
+| `CategorySource`: `standart`/`seed`/`user` | Hisobot ichida | Yuqoridagi bilan bir juft |
+| `FormatKind`: `BANK`/`FAKTURA`, format teglari (`AKT_SVERKI`, `SVODKA`, `TANILMADI`, `IPOTEKA_ASBT`…) | Format xotirasi (Firestore) + parser | O'rganilgan shakllar bog'lanishi uziladi |
+| `ЧИҚИМ`/`CHIQIM`/`KIRIM` regexlari | `universalParser.ts` | Parser kalit so'zlari — bank faylining O'ZIDAGI matn |
+| `Chiqim_sverka_*.xlsx`, `Akt_sverki_*.xlsx` fayl nomlari | Excel eksport | Buxgalter ko'radigan artefakt; ustiga `isOwnExportSheet()` o'z hisobotini SARLAVHA matni bo'yicha taniydi |
+| `/korxonalar` eski manzili | `proxy.ts` | Tashqi havola, yo'naltirish uchun kerak |
+
+Shularni ham inglizcha qilish kerak bo'lsa — **avval migratsiya
+skripti** (`scripts/migrate-*.cjs`), keyin kod. Tartib 5a-bo'limdagi
+bilan bir xil sababga ega.
+
+### Tekshiruv holati (2026-08-18)
+
+```
+node scripts/verify-parsers.cjs   ->  58/58 ✔
+npx tsc --noEmit                  ->  toza
+npx eslint src --max-warnings=0   ->  toza
+npx next build                    ->  xatosiz, 39 sahifa (marshrutlar o'zgarmadi)
+```
+
+---
+
+## 16. Kirim saqlash · qoldiq · yopilmagan faktura · akt · portfel (2026-08-18)
+
+Beshta ish ketma-ket bajarildi. Har biri o'lchov bilan yopilgan.
+
+### 16a. Kirim sverkasi endi SAQLANADI (1-ish)
+
+Ilgari sahifa yangilansa hamma narsa yo'qolardi (`companyId` propi ham
+yo'q edi). Endi `income_reports` kolleksiyasi va `IncomingReconciliation`
+da saqlash/tiklash bor.
+
+**ALOHIDA kolleksiya — sabab muhim.** `sverka_reports` ga `kind`
+maydoni qo'shilsa, eski hujjatlarda u YO'Q va Firestore
+`where('kind','==','out')` so'roviga maydoni yo'q hujjatni
+QO'SHMAYDI — chiqim tomonining butun tarixi jimgina yo'qolgandek
+bo'lardi.
+
+Hajm oldindan o'lchanadi (900 KB chegara): Firestore hujjati 1 MB dan
+oshmaydi, uning o'z xatosi esa tushunarsiz. Ekranda «Сақланган
+ҳисобот: <sana>» belgisi turadi — buxgalter eski raqamni yangi deb
+o'qimasligi uchun.
+
+Korxona o'chirilganda IKKALA kolleksiya ham tozalanadi.
+
+### 16b. Kontragent bo'yicha boshlang'ich qoldiq (2-ish)
+
+Yangi: `src/lib/openingBalance.ts`, `OpeningBalanceModal.tsx`,
+`opening_balances` kolleksiyasi. Ikkala sverkada ham bor.
+
+**Eng muhim qaror: qoldiq DAVR FARQIGA QO'SHILMAYDI.** «Фарқ» ustuni
+shu davrda nima bo'lganini ko'rsatadi va shundayligicha qoladi —
+68 ta tekshiruv shunga tayanadi. Qoldiq alohida ustunda turadi va
+yakuniy qoldiqni beradi:
+
+```
+yakuniy qoldiq = boshlang'ich qoldiq + o'tgan davr + davr farqi
+```
+
+Ustunlar FAQAT qoldiq kiritilgan bo'lsa ko'rinadi — bo'sh ustun
+jadvalni kengaytiradi, foyda bermaydi.
+
+Akt sverkiga ham uzatiladi: kiritilgan bo'lsa qiymat, kiritilmagan
+bo'lsa hujjat ostiga «сальдо начальное киритилмаган» izohi.
+
+### 16c. «Qaysi faktura yopilmagan» (3-ish)
+
+Yangi: `OpenInvoices.tsx`. Ikkala sverkada, qator ochilganda ENG
+TEPADA turadi (oyma-oy kesimdan oldin).
+
+Yangi hisob YO'Q — `aging.ts` allaqachon FIFO bilan hisoblardi, faqat
+ekranga chiqmasdi. Chiqim tomonida to'lov va faktura bitta ro'yxatda
+bo'lgani uchun moslashtiruvchi yozildi (`credit > 0` → faktura,
+`debit > 0` → to'lov).
+
+**Harness'ga invariant qo'shildi:**
+
+```
+sum(outstanding) − advance = kredit − debet
+```
+
+Ya'ni «shu fakturalar yopilmagan» ro'yxati jadvaldagi «Фарқ» bilan
+AYNAN bir xil narsani aytadi. Haqiqiy faylda 35 ta kontragentda mos
+keldi.
+
+### 16d. Chiqim tomonida Akt sverki (4-ish)
+
+`ActParty` maydonlari NEYTRAL nomga o'tkazildi: `debitDocs` /
+`creditDocs` / `debitTotal` / `creditTotal`. Sabab: rollar ikki
+sverkada TESKARI (kirimda faktura — debet, chiqimda to'lov — debet).
+Maydon «invoices» deb atalganda chiqim tomonida unga TO'LOV
+uzatilishi kerak bo'lardi — bu ertami-kechami xato.
+
+Akt chiqishi o'zgarmadi — eksport qilib, qatorma-qator tekshirildi.
+
+### 16e. Mijozlar ro'yxatida holat (5-ish)
+
+Yangi ustun: «✓ ҳаммаси мос» yoki «N тасида фарқ», ostida oxirgi
+sverka sanasi. Ma'lumot allaqachon yuklanadigan hisobot ichida
+(`firmsData`), ya'ni qo'shimcha so'rov YO'Q.
+
+«Nechtasida farq bor» ENG SO'NGGI hisobotdan olinadi, yig'indidan
+emas — bitta kontragent ikkita hisobotda ikki marta sanalardi.
+
+### 16f. Reja cheklovi va audit izi (6-ish, qisman)
+
+- **Cheklovga yetganda** endi qizil xato emas, tushuntirish va
+  «Кўпроқ керак» tugmasi. Bosilgani `plan_interest` ga yoziladi —
+  bu TALAB O'LCHOVI, to'lov ulanmasidan oldin kerak.
+- **Audit izi:** toifani kim va qachon o'zgartirgani allaqachon
+  yozilardi (`updatedBy`/`updatedAt`), lekin ekranga chiqmasdi. Endi
+  toifa tanlovining tooltip'ida ko'rinadi.
+
+### Tekshiruv
+
+```
+verify-parsers   68/68 ✔   (yangi: davr kelishuvi 7, yopilmagan faktura 3)
+tsc · eslint     toza
+next build       xatosiz, 39 sahifa
+kontrast         56 element, 0 xato · yorug' 4,96 · tungi 5,71
+akt              eksport qilib qatorma-qator tekshirildi
+```
+
+### QOLGANI (6-ishdan)
+
+| Ish | Holat |
+|---|---|
+| Hisobot tarixi (bazada bor, ekranda yo'q) | ✔ §17a |
+| Kontragentlarni qo'lda birlashtirish | ✔ §17b |
+| Ish maydoniga a'zo taklif qilish | ✔ §17c |
+| Ekran testlari (test yuruvchisi ham yo'q) | ❌ |
+| Parol tiklash | ❌ (ataylab — foydalanuvchi so'ramadi) |
+
+### ⚠️ DEPLOY QILISHDAN OLDIN → ✅ BAJARILDI (§17d ga qara)
+
+`firestore.rules` ga UCHTA yangi kolleksiya qo'shildi:
+`income_reports`, `opening_balances`, `plan_interest`.
+**Qoidalar deploy qilinmasa, saqlash ishlamaydi** (ruxsat rad etiladi):
+
+```bash
+firebase deploy --only firestore:rules
+```
+
+Bu safar migratsiya KERAK EMAS — uchala kolleksiya ham yangi, eski
+ma'lumot yo'q.
+
+---
+
+## 17. Hisobot tarixi · birlashtirish · jamoa (2026-08-18, ikkinchi qism)
+
+Uchta ish. Har biri o'lchov bilan yopilgan.
+
+### 17a. Hisobot tarixi (1-ish)
+
+Ilgari saqlangan hisobotlardan faqat ENG SO'NGGISI ochilardi va
+eskilarini na ko'rish, na o'chirish mumkin edi.
+
+Yangi: `src/lib/reportHistory.ts`, `ReportHistory.tsx`. Ikkala
+sverkada ham, yopiq holda turadi.
+
+**Qo'shimcha so'rov YO'Q.** Tiklash effekti allaqachon HAMMA hujjatni
+yuklab olardi (`getDocs` + klientda saralash) va ichidan bittasini
+tanlardi — qolgani tashlanardi. Endi o'sha snapshot ro'yxatga
+aylanadi. Ya'ni tarix Firestore'dan bitta ham qo'shimcha o'qish
+talab qilmaydi.
+
+**O'chirish esa o'sishning o'zini to'xtatadi:** har «Сақлаш» YANGI
+hujjat yaratadi (900 KB gacha), 20 marta saqlangan korxonada bu har
+sahifa ochilishida o'nlab megabayt demakdir. `HISTORY_SOFT_LIMIT = 20`
+dan oshsa ekranda ogohlantirish chiqadi.
+
+**Yo'l-yo'lakay topilgan ikkita nuqson:**
+
+1. Chiqim tomonida «Сақланган ҳисобот: <sana>» belgisi YO'Q edi —
+   kirim tomonida bor edi. Ya'ni buxgalter saqlangan eski raqamni
+   yangi deb o'qishi mumkin edi. Qo'shildi.
+2. `firestore.rules` da hisobot `delete` faqat adminga ochiq edi,
+   `clients/page.tsx` esa korxonani o'chirganda uning hisobotlarini
+   `writeBatch` bilan o'chiradi. Batch bitta amal rad etilsa
+   BUTUNLAY yiqiladi — **admin bo'lmagan foydalanuvchi korxonasini
+   umuman o'chira olmasdi.** Qoida a'zoga ochildi.
+
+### 17b. Kontragentlarni birlashtirish (2-ish)
+
+Yangi: `src/lib/counterpartyMerge.ts`, `MergeModal.tsx`,
+`/api/counterparty-merge`, `companies/{id}/counterparty_merges`.
+
+Muammo — SOXTA FARQ. Bitta firma bankda «МЧЖ "ИМАНМАКС"», fakturada
+«IMANMAX MCHJ» bo'lsa, tizim ikki kontragent ko'radi: birida faqat
+to'lov, ikkinchisida faqat faktura. Ikkalasi ham katta farq
+ko'rsatadi. Yig'indi to'g'ri bo'lgani uchun buni na «Итого», na
+qoldiq tenglamasi sezadi.
+
+**Parserga TEGILMADI.** Birlashtirish `auditFiles` / `analyzeIncome`
+dan KEYIN, alohida qadam. Sabab: parser 93 ta regress tekshiruvi
+bilan qoplangan. Birlashtirish esa faqat qatorlarni qo'shadi —
+yig'indi o'zgarmaydi, ya'ni `totals` va `categoryTotals` shundayligicha
+to'g'ri qoladi.
+
+**Avtomatik EMAS.** Tizim faqat TAKLIF qiladi (bir xil STIR yoki bir
+xil normal nom), qaror buxgalterniki. Ikki har xil firmani jimgina
+bir qilib qo'yish soxta farqdan ham qimmatroq xato.
+
+**Topilgan jimgina xato (o'z kodimda):** birlashgan qator toifasini
+guruhning BIRINCHI uchragan qatoridan olardi. Ya'ni «kommunal» deb
+belgilangan a'zo butun guruhni asosiy sverkadan chiqarib yuborishi
+mumkin edi — bir bosishda millionlar jadvaldan yo'qolardi. Endi nom,
+STIR va TOIFA har doim ASOSIY qatordan olinadi (`applyIdentity`),
+tartibdan qat'i nazar. Harness'da tekshiriladi.
+
+**Nom o'zagi (`normalizeName`)** — faqat TAKLIF uchun, ekranga
+chiqmaydi. O'zbek kirilli (ў, қ, ғ, ҳ) ham kiradi. Lotin «x» ikki xil
+o'qiladi: «ТЕХНО»/«TEXNO» (h) va «ИМАНМАКС»/«IMANMAX» (кс) — shuning
+uchun h, ks va x uchalasi bitta belgiga keltiriladi.
+
+**Ajratish faylni QAYTA YUKLASHNI talab qiladi** — birlashgan qatorda
+oylik kesim allaqachon qo'shilib ketgan. Bu foydalanuvchiga aytiladi.
+
+Yangi invariantlar (harness):
+
+```
+sum(totalDebit) va sum(totalCredit) O'ZGARMAYDI
+bitta ham o'tkazma yo'qolmaydi (418 ta)
+oylik kesim ham yig'iladi
+toifa/nom/STIR ASOSIY qatordan
+guruh yo'q bo'lsa massiv TEGILMAYDI (aynan o'sha havola)
+```
+
+### 17c. Ish maydoniga a'zo taklif qilish (3-ish)
+
+Yangi: `/api/workspace/members`, `src/components/TeamModal.tsx`,
+mijozlar sahifasida «Жамоа» tugmasi.
+
+«Бюро» rejasi 5 foydalanuvchi va'da qiladi, lekin odam qo'shish yo'li
+umuman yo'q edi — ya'ni o'sha rejani SOTIB BO'LMASDI. Ma'lumot modeli
+(`workspaces/{id}/members/{email}`) 2026-08-13 dan beri tayyor turardi.
+
+**Taklif PAROLSIZ:**
+
+1. Ega email kiritadi.
+2. `allowed_users/{email}` OLDINDAN yaratiladi, unga `workspaceId`
+   yoziladi.
+3. Odam odatdagidek ro'yxatdan o'tadi. Signup route
+   `resolveWorkspaceId` ni chaqiradi, u TAYYOR `workspaceId` ni
+   ko'radi va YANGI ish maydoni OCHMAYDI.
+
+Ya'ni bir martalik havola, muddat, elektron xat — hech biri kerak
+emas. Parol hech qachon ko'rilmaydi va yaratilmaydi.
+
+**Chiqarish:** `members/{email}` o'chiriladi — Firestore qoidasi
+(`isMember`) aynan shu hujjatga tayanadi, ruxsat DARHOL yopiladi.
+Odamning `workspaceId` maydoni ham tozalanadi, aks holda u o'qiy
+olmaydigan ish maydoniga ishora qilib osilib qolardi.
+
+**Qat'iy shartlar:** faqat EGA boshqaradi; egani chiqarib bo'lmaydi;
+boshqa ish maydonidagi odamni jimgina tortib olib bo'lmaydi (uning
+o'z mijozlari ko'rinmay qolardi).
+
+Signup route'ga bitta qo'shimcha: taklif qilingan odam kirganda
+a'zolik maqomi «invited» dan «active» ga o'tadi. Ataylab shu yerda —
+`resolveWorkspaceId` har so'rovda chaqiriladi, unga yozish qo'shilsa
+har API chaqiruvi qo'shimcha yozuv qilardi.
+
+### Tekshiruv (2026-08-18, ikkinchi qism)
+
+```
+verify-parsers   93/93 ✔   (yangi: birlashtirish 22 ta)
+tsc · eslint     toza
+next build       xatosiz, 41 marshrut (39 + 2 yangi API)
+kontrast         44 element · yorug' 0 xato (eng past 4,84)
+                              tungi  0 xato (eng past 5,53)
+```
+
+Kontrast vaqtinchalik `/[locale]/dev-preview` sahifasida o'lchandi va
+sahifa o'chirildi (marshrut soni tasdiqlandi).
+
+**TeamModal alohida o'lchanmadi** — u faqat mavjud va allaqachon
+o'lchangan boshlang'ich elementlardan (Modal, Alert, Badge, Button,
+Input) tuzilgan, o'z sinfi yo'q.
+
+### 17d. Jonli qoidalar holati o'lchandi (2026-08-18)
+
+Console'dagi HAQIQIY qoidalar olinib solishtirildi. Natija: jonli
+qoidalar **2026-08-13 dan OLDINGI** versiya — ish maydoni egaligi
+umuman yo'q. `isMember()`, `myWorkspace()`, `workspaces`,
+`income_reports`, `opening_balances`, `plan_interest` — hech biri
+jonli bazada yo'q.
+
+Sababi ham topildi: `firebase-tools` tokeni **2023-yil avgustda**
+muddati o'tgan (`expires at: 1692128489669`, refresh → 400). Ya'ni
+CLI'dan deploy uzoq vaqtdan beri umuman bo'lmagan.
+
+Shu sabab hozirgi holatda:
+- har bir `allowed_users` foydalanuvchisi BARCHA korxona va chiqim
+  hisobotini o'qiy oladi (egalik tekshirilmaydi);
+- kirim sverkasini saqlash, boshlang'ich qoldiq, «Ko'proq kerak» —
+  ruxsat rad etiladi («Missing or insufficient permissions»).
+
+`.firebaserc` ham yo'q edi (CLI qaysi loyiha ekanini bilmasdi) —
+yaratildi: `auto-accounting-diyorbek-s`.
+
+**Migratsiya BAJARILDI** (2026-08-18, `--apply webleaders.uz@gmail.com`):
+1 korxona + 2 chiqim hisoboti egasiz edi, uchalasiga `workspaceId`
+qo'yildi. Qayta tekshiruv: egasiz hujjat **0**. Ikkala ish maydoni
+hujjati va a'zolik yozuvi ham mavjud, ya'ni `isMember()` deploy'dan
+keyin ishlaydi.
+
+Tekshirilgan xavflar (ikkalasi ham TOZA):
+- repo qoidasi `companies` `create` ni klientga yopadi — kod korxonani
+  faqat `/api/companies` orqali yaratadi (reja cheklovi uchun shunday);
+- klient `workspaces` ni to'g'ridan-to'g'ri o'qimaydi.
+
+### ✅ DEPLOY BAJARILDI (2026-08-18)
+
+Tartib to'liq bajarildi:
+
+1. `.firebaserc` yaratildi (`auto-accounting-diyorbek-s`) — yo'q edi.
+2. `firebase login --reauth` — token 2023-yildan buzuq edi.
+3. `node scripts/migrate-workspaces.cjs --apply webleaders.uz@gmail.com`
+   → 3 ta egasiz hujjatga `workspaceId` qo'yildi, qayta tekshiruvda
+   egasiz **0**.
+4. `firebase deploy --only firestore:rules` → `released rules`.
+5. Birinchi deploy `Unused function: myWorkspace` deb ogohlantirdi —
+   o'lik yordamchi olib tashlandi va qayta deploy qilindi, ogohlantirish
+   YO'Q. Sabab izohda: egalik HUJJATNING O'ZIDAN tekshiriladi,
+   foydalanuvchi hujjatidan emas.
+
+Ya'ni jonli qoidalar endi repo fayliga TENG. Ish maydoni egaligi,
+`income_reports`, `opening_balances`, `plan_interest`, `workspaces` va
+hisobot `delete` — hammasi kuchda.
+
+**Qolgan bloker faqat bitta:** jonli sinov. Kod endi ishlashi KERAK,
+lekin bitta ham amal haqiqiy sessiyada o'tkazilmagan.
+
+`counterparty_merges` uchun qoida KERAK EMAS — u `companies/{id}`
+ostidagi subkolleksiya va faqat Admin SDK (API route) orqali
+o'qiladi/yoziladi. Klient uchun umumiy `match /{document=**}` yopiq
+qoidasi amal qiladi (toifalar bilan bir xil naqsh).

@@ -28,10 +28,16 @@ const PROJ = path.resolve(__dirname, '..');
 process.env.NODE_PATH = path.join(PROJ, 'node_modules');
 require('module').Module._initPaths();
 
-// .env.local ni o'qish (Next.js buni o'zi qiladi, skript esa yo'q)
-const ENV_FILE = path.join(PROJ, '.env.local');
-if (fs.existsSync(ENV_FILE)) {
-  for (const line of fs.readFileSync(ENV_FILE, 'utf8').split(/\r?\n/)) {
+// Muhit faylini o'qish (Next.js buni o'zi qiladi, skript esa yo'q).
+//
+// IKKI nom sinaladi. Ilgari faqat `.env.local` o'qilardi, loyihada esa
+// `.env` bor edi — skript «Muhit o'zgaruvchilari yo'q» deb yiqilardi va
+// migratsiyani UMUMAN ishga tushirib bo'lmasdi. Birinchi topilgan
+// qiymat qoladi (`.env.local` mahalliy ustunlikka ega).
+for (const name of ['.env.local', '.env']) {
+  const file = path.join(PROJ, name);
+  if (!fs.existsSync(file)) continue;
+  for (const line of fs.readFileSync(file, 'utf8').split(/\r?\n/)) {
     const m = /^\s*([A-Z0-9_]+)\s*=\s*(.*)$/.exec(line);
     if (!m) continue;
     if (process.env[m[1]] === undefined) {
@@ -43,7 +49,16 @@ if (fs.existsSync(ENV_FILE)) {
 const APPLY = process.argv.includes('--apply');
 const OWNER = process.argv.find((a) => a.includes('@'));
 
-const admin = require(path.join(PROJ, 'node_modules/firebase-admin'));
+// firebase-admin v14 da eski `admin.credential.cert` API YO'Q — faqat
+// modulli kirish nuqtalari bor. Skript eski API'ga yozilgani uchun
+// o'rnatilgan versiya bilan HECH QACHON ishlamagan
+// («Cannot read properties of undefined (reading 'cert')»).
+const { initializeApp, cert, getApps } = require(
+  path.join(PROJ, 'node_modules/firebase-admin/lib/app')
+);
+const { getFirestore, FieldValue } = require(
+  path.join(PROJ, 'node_modules/firebase-admin/lib/firestore')
+);
 
 function init() {
   const projectId = process.env.FIREBASE_PROJECT_ID;
@@ -59,26 +74,55 @@ function init() {
     process.exit(1);
   }
   privateKey = privateKey.trim().replace(/^["']|["']$/g, '').replace(/\\n/g, '\n');
-  admin.initializeApp({ credential: admin.credential.cert({ projectId, clientEmail, privateKey }) });
-  return admin.firestore();
+  const app = getApps().length
+    ? getApps()[0]
+    : initializeApp({ credential: cert({ projectId, clientEmail, privateKey }) });
+  return getFirestore(app);
 }
 
 async function main() {
   const db = init();
 
-  const [companies, reports, users] = await Promise.all([
+  const [companies, reports, users, income, balances] = await Promise.all([
     db.collection('companies').get(),
     db.collection('sverka_reports').get(),
     db.collection('allowed_users').get(),
+    // Bular 2026-08-18 da qo'shilgan. Qoidalar deploy qilinmagani uchun
+    // klient ularga yoza olmagan, ya'ni bo'sh bo'lishi KERAK. «Kerak»
+    // yetarli emas — SANALADI: egasiz hujjat bo'lsa, deploy'dan keyin u
+    // jimgina yo'qoladi.
+    db.collection('income_reports').get(),
+    db.collection('opening_balances').get(),
   ]);
 
-  const orphanCompanies = companies.docs.filter((d) => !d.data().workspaceId);
-  const orphanReports = reports.docs.filter((d) => !d.data().workspaceId);
+  const orphan = (snap) => snap.docs.filter((d) => !d.data().workspaceId);
+  const orphanCompanies = orphan(companies);
+  const orphanReports = [...orphan(reports), ...orphan(income), ...orphan(balances)];
+
+  /** Mavjud `workspaceId` qiymatlari — EGA kim ekanini TAXMIN emas,
+   *  ma'lumotning o'zi aytadi. Ikki foydalanuvchi bo'lganda bu yagona
+   *  ishonchli dalil. */
+  const tally = (snap) => {
+    const m = new Map();
+    for (const d of snap.docs) {
+      const w = d.data().workspaceId || "(yo'q)";
+      m.set(w, (m.get(w) || 0) + 1);
+    }
+    return [...m].map(([k, v]) => `${k}: ${v}`).join('  ·  ') || '—';
+  };
 
   console.log('============================================================');
-  console.log(`Korxona:   ${companies.size} ta, egasiz: ${orphanCompanies.length}`);
-  console.log(`Hisobot:   ${reports.size} ta, egasiz: ${orphanReports.length}`);
-  console.log(`Foydalanuvchi: ${users.size} ta`);
+  console.log(`Korxona:             ${companies.size} ta, egasiz: ${orphanCompanies.length}`);
+  console.log(`   ${tally(companies)}`);
+  console.log(`Chiqim hisoboti:     ${reports.size} ta, egasiz: ${orphan(reports).length}`);
+  console.log(`   ${tally(reports)}`);
+  console.log(`Kirim hisoboti:      ${income.size} ta, egasiz: ${orphan(income).length}`);
+  console.log(`Boshlang'ich qoldiq: ${balances.size} ta, egasiz: ${orphan(balances).length}`);
+  console.log(`Foydalanuvchi:       ${users.size} ta`);
+  for (const d of users.docs) {
+    const u = d.data();
+    console.log(`   ${d.id}  role=${u.role || 'user'}  status=${u.status || 'active'}  workspaceId=${u.workspaceId || "(yo'q)"}`);
+  }
   console.log('============================================================');
 
   if (orphanCompanies.length === 0 && orphanReports.length === 0) {
@@ -111,7 +155,7 @@ async function main() {
     return;
   }
 
-  const now = admin.firestore.FieldValue.serverTimestamp();
+  const now = FieldValue.serverTimestamp();
   const workspaceId = owner;
 
   await db.collection('workspaces').doc(workspaceId).set(

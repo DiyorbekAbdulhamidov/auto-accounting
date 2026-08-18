@@ -18,10 +18,34 @@ import { useAuth } from "@/context/AuthContext";
 import { authFetch } from "@/lib/authFetch";
 import ExcelJS from "exceljs";
 import { saveAs } from "file-saver";
-import { ChevronDown, Download, Save } from "lucide-react";
+import { CalendarClock, ChevronDown, Download, FileText, Merge, Save } from "lucide-react";
 import SortHeader from "@/components/SortHeader";
 import { useT } from "@/context/LanguageContext";
 import { CATEGORY_LABELS, type Category } from "@/lib/counterpartyCategory";
+import {
+  EMPTY_BALANCES,
+  loadOpeningBalances,
+  saveOpeningBalances,
+  type OpeningBalances,
+} from "@/lib/openingBalance";
+import OpeningBalanceModal from "@/components/reconciliation/OpeningBalanceModal";
+import OpenInvoices from "@/components/reconciliation/OpenInvoices";
+import { buildAging, type AgingOpenInvoice } from "@/lib/aging";
+import { buildReconciliationActWorkbook } from "@/lib/reconciliationAct";
+import {
+  newestFirst,
+  stampToDate,
+  summarizeOutgoing,
+  formatStamp,
+  type ReportSummary,
+} from "@/lib/reportHistory";
+import ReportHistory from "@/components/reconciliation/ReportHistory";
+import {
+  mergeOutgoingRows,
+  type MergeGroup,
+  type MergeSuggestion,
+} from "@/lib/counterpartyMerge";
+import MergeModal, { type MergeRow } from "@/components/reconciliation/MergeModal";
 import {
   Alert,
   Badge,
@@ -37,6 +61,7 @@ import {
   Select,
   Spinner,
   StatCard,
+  Modal,
   Table,
   TableFrame,
   Tbody,
@@ -46,6 +71,7 @@ import {
   Thead,
   Tr,
   cx,
+  notify,
   toneText,
   type Tone,
 } from "@/components/ui";
@@ -56,9 +82,13 @@ interface MonthlyBucket {
 }
 interface TransactionRecord {
   date: string;
+  /** 'BANK' | 'FAKTURA' | 'GENERIC_DOC' — serverdan keladi */
   type: string;
   debit: number;
   credit: number;
+  /** Hujjat raqami. Serverda YOZILADI, klientda e'lon qilinmagan
+   *  edi — yopilmagan fakturalar ro'yxati uchun kerak bo'ldi. */
+  doc?: string;
 }
 interface AggregatedTx {
   key?: string;
@@ -79,6 +109,9 @@ interface AggregatedTx {
   /** Ном бўйича ТАХМИН. Қаторни ЯШИРМАЙДИ, фақат белгиси чиқади. */
   categoryHint?: Category;
   categoryHintLabel?: string;
+  /** Қўлда бирлаштирилган бўлса — қайси калитлардан йиғилгани.
+   *  `src/lib/counterpartyMerge.ts` */
+  mergedFrom?: string[];
 }
 
 /** Эски сақланган ҳисоботларда тоифа йўқ — улар «korxona» ҳисобланади */
@@ -109,6 +142,15 @@ interface SheetReport {
   note?: string;
 }
 
+/** Файлдан ТОПИЛГАН давр. Иккала томон учун алоҳида: кўчирма ва
+ *  фактура рўйхати ҳар хил даврни қамраши мумкин ва бу — энг қиммат
+ *  жимгина хато (1 ойлик кўчирма + 7 ойлик фактура = сохта фарқ). */
+interface PeriodRange {
+  from: string | null;
+  to: string | null;
+  undated: number;
+}
+
 /** Қолдиқ тенгламаси: бошланғич қолдиқ + кредит − дебет = охирги қолдиқ.
  *  «Итого»дан мустақил назорат — дебет билан кредит алмашиб кетса
  *  «Итого» буни сезмайди (йиғинди барибир тўғри), бу эса сезади. */
@@ -127,12 +169,17 @@ interface BalanceCheck {
 function rowKey(tx: AggregatedTx): string {
   return tx.key || (tx.inn && tx.inn !== "-" ? tx.inn : `NAME:${tx.name}`);
 }
-interface SverkaReportDoc {
+interface ReconciliationReportDoc {
   companyId: string;
-  savedAt?: { toMillis: () => number };
+  savedAt?: { toMillis: () => number; toDate: () => Date };
+  /** Қайси давр кесими сақлангани (`handleSaveToFirebase` ёзади) */
+  period?: { year: number | null; month: number | null; cumulative: boolean; label: string } | null;
   firmsData: AggregatedTx[];
   totals?: { debit: number; credit: number; diff: number };
 }
+
+/** Firestore hujjati + o'z identifikatori (tarix ro'yxati uchun) */
+type SavedOutgoingDoc = ReconciliationReportDoc & { id: string };
 
 const MONTH_NAMES = ["Январь", "Февраль", "Март", "Апрель", "Май", "Июнь", "Июль", "Август", "Сентябрь", "Октябрь", "Ноябрь", "Декабрь"];
 
@@ -142,6 +189,12 @@ function periodLabel(period: string, t: (s: string) => string): string {
   const raw = MONTH_NAMES[(m || 1) - 1];
   return raw ? `${t(raw)} ${y}` : period;
 }
+/** «2026-01 … 2026-07» ёки битта ой бўлса «2026-07» */
+function periodRangeLabel(r: { from: string | null; to: string | null }): string {
+  if (!r.from) return "—";
+  return r.from === r.to ? r.from : `${r.from} … ${r.to}`;
+}
+
 function sortedPeriods(monthlyData: Record<string, MonthlyBucket>): string[] {
   return Object.keys(monthlyData || {}).sort();
 }
@@ -227,7 +280,7 @@ const FORMAT_LABELS: Record<string, string> = {
 type SortKey = "name" | "inn" | "debit" | "credit" | "diff";
 type SortDir = "asc" | "desc";
 
-export default function ChiqimSverka({
+export default function OutgoingReconciliation({
   companyId,
   companyName,
 }: {
@@ -245,13 +298,30 @@ export default function ChiqimSverka({
   const [files, setFiles] = useState<File[]>([]);
   const [loading, setLoading] = useState(false);
   const [isFetchingData, setIsFetchingData] = useState(true);
+  // Saqlangan hisobotlar TARIXI. Ro'yxat tiklash so'rovi allaqachon
+  // yuklab olgan snapshot'dan tuziladi — qo'shimcha o'qish YO'Q.
+  const [savedDocs, setSavedDocs] = useState<SavedOutgoingDoc[]>([]);
+  const [activeReportId, setActiveReportId] = useState<string | null>(null);
+  // Қўлда бирлаштирилган контрагентлар (`counterpartyMerge.ts`)
+  const [merges, setMerges] = useState<MergeGroup[]>([]);
+  const [mergeSuggestions, setMergeSuggestions] = useState<MergeSuggestion[]>([]);
+  const [mergeOpen, setMergeOpen] = useState(false);
+  /** Ekrandagi natija saqlangan hisobotdan tiklanganmi. Kirim
+   *  tomonida bu belgi bor edi, chiqimda YO'Q edi — buxgalter eski
+   *  raqamni yangi deb o'qishi mumkin edi. */
+  const [restoredAt, setRestoredAt] = useState<string | null>(null);
 
   const [parsedData, setParsedData] = useState<AggregatedTx[]>([]);
   const [detectedFormats, setDetectedFormats] = useState<string[]>([]);
   const [warnings, setWarnings] = useState<string[]>([]);
   const [sheetReports, setSheetReports] = useState<SheetReport[]>([]);
   const [balanceChecks, setBalanceChecks] = useState<BalanceCheck[]>([]);
+  const [periods, setPeriods] = useState<{ bank: PeriodRange; faktura: PeriodRange } | null>(null);
   const [knownFormats, setKnownFormats] = useState<KnownFormat[]>([]);
+  /** AUDIT IZI: toifani kim va qachon o'zgartirgani. Byuroda bir
+   *  necha odam ishlaydi — «kim buni kommunal deb belgilagan?»
+   *  degan savolga javob bo'lishi kerak. */
+  const [categoryAuthors, setCategoryAuthors] = useState<Record<string, { by: string; at: string }>>({});
   const [showReport, setShowReport] = useState(false);
 
   // 📅 Давр кесими
@@ -270,8 +340,17 @@ export default function ChiqimSverka({
   // 🏭 Тоифа фильтри. Стандарт — фақат корхоналар: коммунал, бюджет ва
   // банк комиссияси асосий сверкани чалғитади. Улар ЙЎҚОЛМАЙДИ —
   // тепадаги «ЖАМИ» карточкаси ҳар доим тўлиқ суммани кўрсатади.
-  const [categoryFilter, setCategoryFilter] = useState<"KORXONA" | "BOSHQA" | "ALL">("KORXONA");
+  const [categoryFilter, setCategoryFilter] = useState<"COMPANY" | "OTHER" | "ALL">("COMPANY");
   const [savingCategory, setSavingCategory] = useState<string | null>(null);
+
+  // 📅 Boshlang'ich qoldiq — fayl boshlanishidan OLDINGI davr saldosi.
+  // Fayldan olib bo'lmaydi (bankda kontragent kesimi yo'q), shuning
+  // uchun buxgalter kiritadi va u Firestore'da saqlanadi.
+  const [opening, setOpening] = useState<OpeningBalances>(EMPTY_BALANCES);
+  const [balanceOpen, setBalanceOpen] = useState(false);
+  // 📄 АКТ СВЕРКИ — битта етказиб берувчи учун
+  const [actRow, setActRow] = useState<AggregatedTx | null>(null);
+  const [savingBalances, setSavingBalances] = useState(false);
 
   // 🔽 Jadval sortlash holati
   const [sortKey, setSortKey] = useState<SortKey>("name");
@@ -297,8 +376,12 @@ export default function ChiqimSverka({
         const querySnapshot = await getDocs(q);
 
         if (!querySnapshot.empty) {
-          const docs = querySnapshot.docs.map((d) => ({ id: d.id, ...d.data() } as SverkaReportDoc & { id: string }));
-          docs.sort((a, b) => (b.savedAt?.toMillis() || 0) - (a.savedAt?.toMillis() || 0));
+          // Snapshot BUTUNLAY saqlanadi: tarix ro'yxati aynan shundan
+          // tuziladi, ya'ni ikkinchi so'rov qilinmaydi.
+          const docs = newestFirst(
+            querySnapshot.docs.map((d) => ({ id: d.id, ...d.data() }) as SavedOutgoingDoc)
+          );
+          setSavedDocs(docs);
           const latestReport = docs[0];
 
           if (latestReport.firmsData && latestReport.firmsData.length > 0) {
@@ -308,6 +391,8 @@ export default function ChiqimSverka({
             }));
             setParsedData(correctedData);
             setSelectedInns(correctedData.filter((d) => catOf(d) === "korxona").map((d) => rowKey(d)));
+            setActiveReportId(latestReport.id);
+            setRestoredAt(formatStamp(stampToDate(latestReport.savedAt)));
           }
         }
       } catch (error) {
@@ -319,15 +404,114 @@ export default function ChiqimSverka({
     fetchSavedData();
   }, [companyId, workspaceId]);
 
+  // Saqlangan qoldiqlarni tiklash. Xato bo'lsa ish TO'XTAMAYDI —
+  // sverka qoldiqsiz ham to'g'ri hisoblanadi, faqat yakuniy qoldiq
+  // ustuni bo'sh qoladi.
+  useEffect(() => {
+    let alive = true;
+    async function load() {
+      if (!companyId || !workspaceId) return;
+      try {
+        const b = await loadOpeningBalances(workspaceId, companyId, "out");
+        if (alive) setOpening(b);
+      } catch (err) {
+        console.error("Boshlang'ich qoldiqni o'qishda xatolik:", err);
+      }
+    }
+    load();
+    return () => {
+      alive = false;
+    };
+  }, [companyId, workspaceId]);
+
+  const handleSaveBalances = async (asOf: string, balances: Record<string, number>) => {
+    if (!workspaceId) {
+      notify.error(t("Иш майдони аниқланмади. Тизимдан чиқиб, қайта киринг."));
+      return;
+    }
+    setSavingBalances(true);
+    try {
+      const id = await saveOpeningBalances(
+        workspaceId,
+        companyId,
+        "out",
+        asOf,
+        balances,
+        opening.id
+      );
+      setOpening({ id, asOf, balances });
+      setBalanceOpen(false);
+      notify.ok(t("Бошланғич қолдиқ сақланди"));
+    } catch (err) {
+      console.error("Boshlang'ich qoldiqni saqlashda xatolik:", err);
+      notify.error(
+        t("Сақлашда хатолик юз берди."),
+        err instanceof Error ? err.message : String(err)
+      );
+    } finally {
+      setSavingBalances(false);
+    }
+  };
+
+  // ============================================================
+  // АКТ СВЕРКИ (чиқим томони)
+  // ------------------------------------------------------------
+  // Роллар кирим томонига ТЕСКАРИ. Етказиб берувчи ҳисоби (6010) —
+  // ПАССИВ: биз тўлаган пул ДЕБЕТ, келган фактура КРЕДИТ. Сальдо =
+  // дебет − кредит = тўлов − фактура, яъни жадвалдаги «Фарқ» билан
+  // АЙНАН бир хил (HANDOFF 8-бўлим).
+  //
+  // Шунинг учун акт майдонлари нейтрал: `debitDocs` / `creditDocs`.
+  // «invoices» деб аталганда бу ерга ТЎЛОВ узатилиши керак бўларди.
+  // ============================================================
+  const handleActDownload = async () => {
+    if (!actRow) return;
+    const key = rowKey(actRow);
+    const txs = actRow.transactions || [];
+    const wb = buildReconciliationActWorkbook(
+      {
+        name: actRow.name,
+        inn: actRow.inn,
+        debitTotal: actRow.totalDebit,
+        creditTotal: actRow.totalCredit,
+        debitDocs: txs
+          .filter((r) => (r.debit || 0) > 0)
+          .map((r) => ({ date: r.date || null, number: r.doc || "", amount: r.debit })),
+        creditDocs: txs
+          .filter((r) => (r.credit || 0) > 0)
+          .map((r) => ({ date: r.date || null, number: r.doc || "", amount: r.credit })),
+      },
+      {
+        ownName: companyName,
+        openingBalance:
+          opening.balances[key] === undefined ? undefined : opening.balances[key],
+        periodLabel: periodTitle,
+      }
+    );
+    const buffer = await wb.xlsx.writeBuffer();
+    const safe = actRow.name.replace(/[^A-Za-zА-Яа-я0-9]+/g, "_").slice(0, 40);
+    saveAs(
+      new Blob([buffer], {
+        type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      }),
+      `Akt_sverki_${safe}_${new Date().toISOString().slice(0, 10)}.xlsx`
+    );
+    setActRow(null);
+  };
+
   const handleFileUpload = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (files.length === 0) return alert(t("Илтимос, камида битта Excel ёки CSV файлни танланг!"));
+    if (files.length === 0) {
+      notify.warn(t("Илтимос, камида битта Excel ёки CSV файлни танланг!"));
+      return;
+    }
 
     setLoading(true);
     setDetectedFormats([]);
     setWarnings([]);
     setSheetReports([]);
     setBalanceChecks([]);
+    setPeriods(null);
     setKnownFormats([]);
     const formData = new FormData();
 
@@ -353,7 +537,11 @@ export default function ChiqimSverka({
         setWarnings(data.warnings || []);
         setSheetReports(data.sheets || []);
         setBalanceChecks(data.balanceChecks || []);
+        setPeriods(data.periods || null);
+        setCategoryAuthors(data.categoryAuthors || {});
         setKnownFormats(data.formats || []);
+        setMerges(data.merges || []);
+        setMergeSuggestions(data.mergeSuggestions || []);
         // Огоҳлантириш бўлса — ҳисобот панели дарҳол очиқ турсин
         setShowReport((data.warnings || []).length > 0);
 
@@ -376,11 +564,11 @@ export default function ChiqimSverka({
         setSheetReports(data.sheets || []);
         setBalanceChecks(data.balanceChecks || []);
         setShowReport(true);
-        alert(t("Хатолик:") + " " + (data.error || t("Номаълум хатолик юз берди")));
+        notify.error(t("Файл ўқилмади"), data.error || t("Номаълум хатолик юз берди"));
       }
     } catch (error) {
       console.error("Юклашда хато:", error);
-      alert(t("Сервер билан уланишда хатолик!"));
+      notify.error(t("Сервер билан уланишда хатолик!"));
     } finally {
       setLoading(false);
     }
@@ -454,8 +642,8 @@ export default function ChiqimSverka({
       if (yearFilter !== "ALL" && item.totalDebit === 0 && item.totalCredit === 0) return false;
 
       // Тоифа: фақат КЎРИНИШНИ ўзгартиради, ҳисобни эмас
-      if (categoryFilter === "KORXONA" && catOf(item) !== "korxona") return false;
-      if (categoryFilter === "BOSHQA" && catOf(item) === "korxona") return false;
+      if (categoryFilter === "COMPANY" && catOf(item) !== "korxona") return false;
+      if (categoryFilter === "OTHER" && catOf(item) === "korxona") return false;
 
       if (filterType === "DIFF") return Math.abs(item.difference) > 0.01;
       if (filterType === "EQUAL") return Math.abs(item.difference) <= 0.01;
@@ -568,7 +756,10 @@ export default function ChiqimSverka({
           ? Array.from(new Set([...prev, key]))
           : prev.filter((k) => k !== key)
       );
-      alert(t("Тоифани сақлаб бўлмади:") + " " + (error instanceof Error ? error.message : String(error)));
+      notify.error(
+        t("Тоифани сақлаб бўлмади:"),
+        error instanceof Error ? error.message : String(error)
+      );
     } finally {
       setSavingCategory(null);
     }
@@ -592,9 +783,9 @@ export default function ChiqimSverka({
     const t = {
       debit: 0, credit: 0, diff: 0, count: 0, withDiff: 0,
       // Корхоналар кесими — асосий сверка шу
-      korxonaDebit: 0, korxonaCredit: 0, korxonaCount: 0,
+      companyDebit: 0, companyCredit: 0, companyCount: 0,
       // Коммунал + бюджет + банк + хизмат
-      boshqaDebit: 0, boshqaCredit: 0, boshqaCount: 0,
+      otherDebit: 0, otherCredit: 0, otherCount: 0,
       // Ном бўйича «коммуналга ўхшайди» деб ТАХМИН қилинганлар. Улар
       // жадвалда ҚОЛАДИ — фақат текшириб кўриш учун саналади.
       hintCount: 0,
@@ -606,14 +797,14 @@ export default function ChiqimSverka({
       t.count++;
       if (Math.abs(tx.difference) > 0.01) t.withDiff++;
       if (catOf(tx) === "korxona") {
-        t.korxonaDebit += tx.totalDebit;
-        t.korxonaCredit += tx.totalCredit;
-        t.korxonaCount++;
+        t.companyDebit += tx.totalDebit;
+        t.companyCredit += tx.totalCredit;
+        t.companyCount++;
         if (tx.categoryHint) t.hintCount++;
       } else {
-        t.boshqaDebit += tx.totalDebit;
-        t.boshqaCredit += tx.totalCredit;
-        t.boshqaCount++;
+        t.otherDebit += tx.totalDebit;
+        t.otherCredit += tx.totalCredit;
+        t.otherCount++;
       }
     }
     t.diff = t.debit - t.credit;
@@ -621,9 +812,64 @@ export default function ChiqimSverka({
   }, [periodData, yearFilter]);
 
   // Давр танланганда «ўтган даврдан сальдо» устуни қўшилади
+  /** АСОСИЙ СВЕРКА фарқи — фақат корхоналар. Жадвал ости билан
+   *  бир хил бўлиши учун алоҳида чиқарилди. */
+  const companyDiff = periodTotals.companyDebit - periodTotals.companyCredit;
+
+  /** Nechta kontragentda saqlangan qoldiq bor */
+  const openingCount = useMemo(
+    () => Object.keys(opening.balances).length,
+    [opening.balances]
+  );
+
+  /** Boshlang'ich qoldiq JAMI — «Фарқи» kartasi bilan BIR XIL qamrov
+   *  (faqat korxonalar), aks holda ekranda yana ikkita mos kelmaydigan
+   *  raqam paydo bo'lardi. */
+  const openingTotal = useMemo(
+    () =>
+      periodData
+        .filter((tx) => catOf(tx) === "korxona")
+        .reduce((sum, tx) => sum + (opening.balances[rowKey(tx)] || 0), 0),
+    [periodData, opening.balances]
+  );
+
+  // ============================================================
+  // YOPILMAGAN FAKTURALAR (chiqim tomoni)
+  // ------------------------------------------------------------
+  // `aging.ts` kirim sverkasi uchun yozilgan, lekin hisobi bir xil:
+  // to'lovlar fakturalarni eng eskisidan boshlab yopadi. Farqi
+  // faqat MA'NOda — bu yerda BIZ to'laymiz, ya'ni yopilmagan
+  // faktura bizning qarzimiz.
+  //
+  // Chiqim tomonida to'lov va faktura BITTA ro'yxatda (debet/kredit
+  // bo'lib), shuning uchun ular ajratib beriladi:
+  //   kredit > 0  -> kelgan faktura
+  //   debet  > 0  -> to'langan pul
+  // ============================================================
+  const openInvoicesByKey = useMemo(() => {
+    const input = periodData.map((tx) => ({
+      key: rowKey(tx),
+      inn: tx.inn,
+      name: tx.name,
+      invoices: (tx.transactions || [])
+        .filter((r) => (r.credit || 0) > 0)
+        .map((r) => ({ date: r.date || null, number: r.doc || "", amount: r.credit })),
+      payments: (tx.transactions || [])
+        .filter((r) => (r.debit || 0) > 0)
+        .map((r) => ({ date: r.date || null, amount: r.debit })),
+    }));
+    const report = buildAging(input, null);
+    const map = new Map<string, AgingOpenInvoice[]>();
+    for (const party of report.parties) map.set(party.key, party.openInvoices);
+    return map;
+  }, [periodData]);
+
   const showSaldo = yearFilter !== "ALL";
+  /** Boshlang'ich qoldiq ustuni FAQAT kiritilgan bo'lsa ko'rinadi —
+   *  bo'sh ustun jadvalni kengaytiradi, foyda bermaydi. */
+  const showOpening = openingCount > 0;
   // + «Тоифа» устуни
-  const colCount = showSaldo ? 10 : 9;
+  const colCount = 9 + (showSaldo ? 1 : 0) + (showOpening ? 2 : 0);
   const periodTitle =
     yearFilter === "ALL"
       ? t("Барча давр")
@@ -631,8 +877,98 @@ export default function ChiqimSverka({
         ? `${yearFilter}`
         : `${t(MONTH_NAMES[(monthFilter as number) - 1])} ${yearFilter}${cumulative ? ` ${t("(йил бошидан)")}` : ""}`;
 
+  // ============================================================
+  // HISOBOT TARIXI
+  // ------------------------------------------------------------
+  // Eski hisobotni ochish YANGI SO'ROV qilmaydi — hujjat allaqachon
+  // `savedDocs` da. O'chirish esa kolleksiyaning cheksiz o'sishini
+  // to'xtatadi (har «Сақлаш» yangi hujjat yaratadi).
+  // ============================================================
+  const history: ReportSummary[] = useMemo(
+    () => savedDocs.map((d) => summarizeOutgoing(d.id, d)),
+    [savedDocs]
+  );
+
+  const handleOpenSaved = (id: string) => {
+    const d = savedDocs.find((x) => x.id === id);
+    if (!d?.firmsData?.length) {
+      notify.warn(t("Бу ҳисоботда контрагент йўқ."));
+      return;
+    }
+    // «Фарқ» QAYTA hisoblanadi: eski hujjatlarda ishora teskari
+    // bo'lishi mumkin (2026-08-16 dagi tuzatishgacha saqlanganlar).
+    const corrected = d.firmsData.map((item) => ({
+      ...item,
+      difference: item.totalDebit - item.totalCredit,
+    }));
+    setParsedData(corrected);
+    setSelectedInns(corrected.filter((x) => catOf(x) === "korxona").map((x) => rowKey(x)));
+    setActiveReportId(d.id);
+    setRestoredAt(formatStamp(stampToDate(d.savedAt)));
+  };
+
+  const handleDeletedReport = (id: string) => {
+    setSavedDocs((prev) => prev.filter((x) => x.id !== id));
+    // Ekranda turgani o'chirilsa — raqamlar qoladi, lekin ular endi
+    // saqlanmagan. Buni AYTISH shart.
+    if (activeReportId === id) {
+      setActiveReportId(null);
+      setRestoredAt(null);
+    }
+  };
+
+  // ============================================================
+  // BIRLASHTIRISH
+  // ------------------------------------------------------------
+  // Saqlangandan keyin jadval DARHOL yangilanadi: birlashtirish
+  // mantig'i klientda ham server bilan AYNAN bir xil funksiya
+  // (`mergeOutgoingRows`). Faylni qayta yuklash shart emas.
+  //
+  // Ajratish esa qayta yuklashni talab qiladi — birlashgan qatorda
+  // oylik kesim allaqachon qo'shilib ketgan, uni ishonchli ajratib
+  // bo'lmaydi. Buni foydalanuvchiga AYTAMIZ, jimgina qoldirmaymiz.
+  // ============================================================
+  const mergeRows: MergeRow[] = useMemo(
+    () =>
+      parsedData.map((d) => ({
+        key: rowKey(d),
+        inn: d.inn,
+        name: d.name,
+        turnover: d.totalDebit + d.totalCredit,
+        mergedFrom: d.mergedFrom,
+      })),
+    [parsedData]
+  );
+
+  const handleMerged = (group: MergeGroup) => {
+    setMerges((prev) => [...prev.filter((g) => g.primary !== group.primary), group]);
+    // `key` ATAYLAB qayta qo'yiladi: klient turida u ixtiyoriy
+    // (eski saqlangan hisobotlarda yo'q), birlashtirish esa aynan
+    // kalitga tayanadi. `rowKey` serverdagi bilan bir xil qoida.
+    setParsedData((prev) => mergeOutgoingRows(prev.map((d) => ({ ...d, key: rowKey(d) })), [group]));
+    // Qo'shilgan kalitlar endi yo'q — belgilashdan olib tashlanadi,
+    // aks holda «Жами танланганлар» yo'q qatorni sanayverardi.
+    setSelectedInns((prev) => {
+      const gone = new Set(group.members);
+      const kept = prev.filter((k) => !gone.has(k));
+      return kept.includes(group.primary) || prev.some((k) => gone.has(k))
+        ? [...new Set([...kept, group.primary])]
+        : kept;
+    });
+    setMergeSuggestions((prev) =>
+      prev.filter((sug) => !sug.keys.some((k) => group.members.includes(k) || k === group.primary))
+    );
+  };
+
+  const handleUnmerged = (primary: string) => {
+    setMerges((prev) => prev.filter((g) => g.primary !== primary));
+  };
+
   const handleSaveToFirebase = async () => {
-    if (selectedFullData.length === 0) return alert(t("Сақлаш учун камида битта фирмани белгиланг!"));
+    if (selectedFullData.length === 0) {
+      notify.warn(t("Сақлаш учун камида битта фирмани белгиланг!"));
+      return;
+    }
     setIsSaving(true);
     try {
       const totals = selectedFullData.reduce(
@@ -646,29 +982,49 @@ export default function ChiqimSverka({
       );
 
       if (!workspaceId) {
-        alert(t("Иш майдони аниқланмади. Тизимдан чиқиб, қайта киринг."));
+        notify.error(t("Иш майдони аниқланмади. Тизимдан чиқиб, қайта киринг."));
         return;
       }
 
-      const docRef = await addDoc(collection(db, "sverka_reports"), {
+      const period = {
+        year: yearFilter === "ALL" ? null : yearFilter,
+        month: monthFilter === "ALL" ? null : monthFilter,
+        cumulative,
+        label: periodTitle,
+      };
+      const ref = await addDoc(collection(db, "sverka_reports"), {
         companyId: companyId,
         // Egalik: hisobot boshqa ish maydoniga ko'rinmasligi uchun
         workspaceId,
         savedAt: serverTimestamp(),
         // Қайси давр кесими сақлангани — кейин очилганда аниқ бўлиши учун
-        period: {
-          year: yearFilter === "ALL" ? null : yearFilter,
-          month: monthFilter === "ALL" ? null : monthFilter,
-          cumulative,
-          label: periodTitle,
-        },
+        period,
         totals,
         firmsData: selectedFullData,
       });
-      alert(`${t("Муваффақиятли сақланди!")} (ID: ${docRef.id})`);
+      // `serverTimestamp()` klientda hali BO'SH — tarix qatori sanasiz
+      // chiqmasligi uchun mahalliy vaqt qo'yiladi.
+      const now = new Date();
+      const localStamp = { toMillis: () => now.getTime(), toDate: () => now };
+      setSavedDocs((prev) =>
+        newestFirst([
+          {
+            id: ref.id,
+            companyId,
+            savedAt: localStamp,
+            period,
+            totals,
+            firmsData: selectedFullData,
+          },
+          ...prev,
+        ])
+      );
+      setActiveReportId(ref.id);
+      setRestoredAt(null);
+      notify.ok(t("Муваффақиятли сақланди!"));
     } catch (error) {
       console.error("Firebase хатолиги:", error);
-      alert(t("Сақлашда хатолик юз берди."));
+      notify.error(t("Сақлашда хатолик юз берди."));
     } finally {
       setIsSaving(false);
     }
@@ -676,7 +1032,10 @@ export default function ChiqimSverka({
 
   // 📈 MUKAMMAL EXCEL EXPORT (EXCELJS)
   const handleExportExcel = async () => {
-    if (displayData.length === 0) return alert(t("Рўйхат бўш. Камида битта фирмани белгиланг!"));
+    if (displayData.length === 0) {
+      notify.warn(t("Рўйхат бўш. Камида битта фирмани белгиланг!"));
+      return;
+    }
 
     const today = new Date().toLocaleDateString('ru-RU');
     const workbook = new ExcelJS.Workbook();
@@ -838,6 +1197,19 @@ export default function ChiqimSverka({
                   {FORMAT_LABELS[f] ? t(FORMAT_LABELS[f]) : f}
                 </Badge>
               ))}
+              {/* ТОПИЛГАН ДАВР — бухгалтер файлни очмасдан «тўғри
+                  файлми» деб кўради. Иккита алоҳида белги: кўчирма ва
+                  фактура ҳар хил даврни қамраши мумкин. */}
+              {periods?.bank.from && (
+                <Badge tone="muted">
+                  {t("Кўчирма")}: {periodRangeLabel(periods.bank)}
+                </Badge>
+              )}
+              {periods?.faktura.from && (
+                <Badge tone="muted">
+                  {t("Фактура")}: {periodRangeLabel(periods.faktura)}
+                </Badge>
+              )}
               {knownFormats.filter((f) => f.isNew).map((f) => (
                 <Badge key={f.id} tone="info" className="cursor-help" >
                   <span title={f.label}>🧠 {t("Янги шакл ўрганилди")}</span>
@@ -978,6 +1350,28 @@ export default function ChiqimSverka({
               )}
             </div>
           )}
+
+          {/* Экрандаги натижа ФАЙЛдан эмас, САҚЛАНГАН ҳисоботдан
+              келган бўлса — буни айтиш шарт, акс ҳолда бухгалтер
+              эски рақамни янги деб ўқийди. */}
+          {restoredAt && (
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge tone="info">
+                {t("Сақланган ҳисобот")}: {restoredAt}
+              </Badge>
+            </div>
+          )}
+
+          {/* Сақланган ҳисоботлар. ЁПИҚ туради — жадвални бекитмайди
+              ва янги мажбурий қадам қўшмайди. */}
+          <ReportHistory
+            kind="out"
+            items={history}
+            activeId={activeReportId}
+            onOpen={handleOpenSaved}
+            onDeleted={handleDeletedReport}
+            format={formatNum}
+          />
         </form>
       </Card>
 
@@ -989,42 +1383,69 @@ export default function ChiqimSverka({
               чиқарилмайди. Остидаги кичик қатор эса корхоналар кесими. */}
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
             <StatCard
-              label={t("Жами тўланган пул")}
+              label={`${t("Жами тўланган пул")} · ${t("ҳаммаси")}`}
               count={periodTotals.debit}
               format={formatNum}
               tone="cash"
               hint={
                 <>
-                  {t("корхоналар")}: <Num tone="default">{formatNum(periodTotals.korxonaDebit)}</Num>
-                  {periodTotals.boshqaCount > 0 && (
-                    <> · {t("коммунал/бюджет")}: <span className="tabular">{formatNum(periodTotals.boshqaDebit)}</span></>
+                  {t("корхоналар")}: <Num tone="default">{formatNum(periodTotals.companyDebit)}</Num>
+                  {periodTotals.otherCount > 0 && (
+                    <> · {t("коммунал/бюджет")}: <span className="tabular">{formatNum(periodTotals.otherDebit)}</span></>
                   )}
                 </>
               }
             />
             <StatCard
-              label={t("Жами келган фактура")}
+              label={`${t("Жами келган фактура")} · ${t("ҳаммаси")}`}
               count={periodTotals.credit}
               format={formatNum}
               tone="invoice"
               hint={
                 <>
-                  {t("корхоналар")}: <Num tone="default">{formatNum(periodTotals.korxonaCredit)}</Num>
-                  {periodTotals.boshqaCount > 0 && (
-                    <> · {t("коммунал/бюджет")}: <span className="tabular">{formatNum(periodTotals.boshqaCredit)}</span></>
+                  {t("корхоналар")}: <Num tone="default">{formatNum(periodTotals.companyCredit)}</Num>
+                  {periodTotals.otherCount > 0 && (
+                    <> · {t("коммунал/бюджет")}: <span className="tabular">{formatNum(periodTotals.otherCredit)}</span></>
                   )}
                 </>
               }
             />
+            {/* ФАРҚ КАРТАСИ — ЖАДВАЛ БИЛАН БИР ХИЛ РАҚАМ.
+                Юқоридаги икки карта тўлиқ (улар файлнинг «Итого»сига
+                тенг бўлиши шарт), бу эса АСОСИЙ СВЕРКА рақами:
+                коммунал/бюджет асосий сверкага кирмайди ва жадвалда
+                ҳам кўринмайди. Илгари бу карта тўлиқ рақамни
+                кўрсатарди — экранда иккита ҳар хил «Фарқ» турарди. */}
             <StatCard
-              label={`${t("Фарқи")} (${periodTitle})`}
-              count={periodTotals.diff}
+              label={`${t("Фарқи")} · ${t("корхоналар")} (${periodTitle})`}
+              count={companyDiff}
               format={formatNum}
-              tone={periodTotals.diff === 0 ? "ok" : verdict(periodTotals.diff).tone}
+              tone={Math.abs(companyDiff) <= 0.01 ? "ok" : verdict(companyDiff).tone}
               hint={
                 <>
-                  {t("корхоналар")}:{" "}
-                  <Num tone="default">{formatNum(periodTotals.korxonaDebit - periodTotals.korxonaCredit)}</Num>
+                  {periodTotals.otherCount > 0 ? (
+                    <>
+                      {t("коммунал/бюджет")}:{" "}
+                      <span className="tabular">{formatNum(periodTotals.otherDebit - periodTotals.otherCredit)}</span>
+                      {" · "}
+                      {t("ҳаммаси")}: <span className="tabular">{formatNum(periodTotals.diff)}</span>
+                    </>
+                  ) : (
+                    <>{t("бошқа тоифадаги контрагент йўқ")}</>
+                  )}
+                  {/* Бошланғич қолдиқ киритилган бўлса — ЯКУНИЙ
+                      қолдиқ ҳам кўрсатилади. Бухгалтерга керак
+                      бўладиган рақам аслида шу. */}
+                  {openingCount > 0 && (
+                    <>
+                      <br />
+                      {t("Бошланғич қолдиқ")}:{" "}
+                      <span className="tabular">{formatNum(openingTotal)}</span>
+                      {" · "}
+                      {t("Якуний қолдиқ")}:{" "}
+                      <Num tone="default">{formatNum(openingTotal + companyDiff)}</Num>
+                    </>
+                  )}
                 </>
               }
             />
@@ -1109,17 +1530,40 @@ export default function ChiqimSverka({
                 <Select
                   aria-label={t("Тоифа")}
                   value={categoryFilter}
-                  onChange={(e) => setCategoryFilter(e.target.value as "KORXONA" | "BOSHQA" | "ALL")}
+                  onChange={(e) => setCategoryFilter(e.target.value as "COMPANY" | "OTHER" | "ALL")}
                   title={t("Коммунал, бюджет ва банк комиссияси асосий сверкани чалғитади. Улар йўқолмайди — тепадаги «ЖАМИ» ҳар доим тўлиқ.")}
                   className="w-auto"
                 >
-                  <option value="KORXONA">{t("Фақат корхоналар")} ({periodTotals.korxonaCount})</option>
-                  <option value="BOSHQA">{t("Коммунал/бюджет")} ({periodTotals.boshqaCount})</option>
+                  <option value="COMPANY">{t("Фақат корхоналар")} ({periodTotals.companyCount})</option>
+                  <option value="OTHER">{t("Коммунал/бюджет")} ({periodTotals.otherCount})</option>
                   <option value="ALL">{t("Ҳаммаси")} ({periodTotals.count})</option>
                 </Select>
               </div>
 
               <div className="flex shrink-0 gap-2">
+                <Button
+                  variant="secondary"
+                  onClick={() => setBalanceOpen(true)}
+                  disabled={parsedData.length === 0}
+                  icon={<CalendarClock className="h-4 w-4" />}
+                  title={t("Файл бошланишидан ОЛДИНГИ давр қолдиғи")}
+                >
+                  {t("Бошланғич қолдиқ")}
+                  {openingCount > 0 && ` (${openingCount})`}
+                </Button>
+
+                <Button
+                  variant="secondary"
+                  onClick={() => setMergeOpen(true)}
+                  disabled={parsedData.length === 0}
+                  icon={<Merge className="h-4 w-4" />}
+                  title={t("Битта фирма икки хил ёзилган бўлса — қаторларни қўшинг")}
+                  className={cx(mergeSuggestions.length > 0 && "border-warn text-warn")}
+                >
+                  {t("Бирлаштириш")}
+                  {mergeSuggestions.length > 0 && ` (${mergeSuggestions.length})`}
+                </Button>
+
                 <Button
                   variant="secondary"
                   onClick={handleExportExcel}
@@ -1169,6 +1613,9 @@ export default function ChiqimSverka({
                         <SortHeader label={t("СТИР")} k="inn" align="center" activeKey={sortKey} dir={sortDir} onToggle={toggleSort} />
                       </Th>
                       <Th align="center" width="w-32" sticky>{t("Тоифа")}</Th>
+                      {showOpening && (
+                        <Th align="right" width="w-40" sticky>{t("Бошланғич қолдиқ")}</Th>
+                      )}
                       {showSaldo && (
                         <Th align="right" width="w-36" sticky>{t("Ўтган даврдан")}</Th>
                       )}
@@ -1181,6 +1628,9 @@ export default function ChiqimSverka({
                       <Th align="right" width="w-40" sticky>
                         <SortHeader label={t("Фарқи")} k="diff" align="right" activeKey={sortKey} dir={sortDir} onToggle={toggleSort} />
                       </Th>
+                      {showOpening && (
+                        <Th align="right" width="w-40" sticky>{t("Якуний қолдиқ")}</Th>
+                      )}
                       <Th width="w-48" sticky>{t("Изоҳ")}</Th>
                       <Th align="center" width="w-24" sticky>{t("Ойлар")}</Th>
                     </tr>
@@ -1212,6 +1662,17 @@ export default function ChiqimSverka({
                               </Td>
                               <Td main className="min-w-[250px] font-medium whitespace-normal">
                                 {tx.name}
+                                {/* Қатор бир нечта ёзувдан йиғилган бўлса — буни
+                                    АЙТИШ шарт: акс ҳолда бухгалтер файлдаги
+                                    номни излаб тополмайди. */}
+                                {tx.mergedFrom && tx.mergedFrom.length > 1 && (
+                                  <>
+                                    {" "}
+                                    <Badge tone="info" className="align-middle">
+                                      {t("бирлаштирилган")} ({tx.mergedFrom.length})
+                                    </Badge>
+                                  </>
+                                )}
                               </Td>
                               <Td align="center">
                                 <Code>{tx.inn}</Code>
@@ -1223,13 +1684,23 @@ export default function ChiqimSverka({
                                   value={catOf(tx)}
                                   disabled={savingCategory === key}
                                   onChange={(e) => handleCategoryChange(tx, e.target.value as Category)}
-                                  title={
-                                    tx.categoryLabel
+                                  title={(() => {
+                                    // AUDIT IZI: kim va qachon o'zgartirgani.
+                                    // Byuroda bir necha odam ishlaydi va
+                                    // «kim buni kommunal deb belgilagan?»
+                                    // degan savolga javob bo'lishi kerak.
+                                    const who = categoryAuthors[key] || categoryAuthors[tx.inn];
+                                    const audit = who
+                                      ? `
+${t("Ўзгартирган")}: ${who.by}${who.at ? ` · ${who.at.slice(0, 10)}` : ""}`
+                                      : "";
+                                    const base = tx.categoryLabel
                                       ? `${t(tx.categoryLabel)}${tx.categorySource === "user" ? ` ${t("(сиз белгилагансиз)")}` : ""}`
                                       : tx.categoryHintLabel
                                         ? `${t(tx.categoryHintLabel)} — ${t("текширинг")}`
-                                        : t("Контрагент тоифаси")
-                                  }
+                                        : t("Контрагент тоифаси");
+                                    return base + audit;
+                                  })()}
                                   className={cx(
                                     "w-full max-w-[110px] cursor-pointer rounded-sm border px-1.5 py-1 text-caption font-medium outline-none disabled:opacity-50",
                                     catOf(tx) === "korxona"
@@ -1249,6 +1720,14 @@ export default function ChiqimSverka({
                                   ))}
                                 </select>
                               </Td>
+                              {showOpening && (
+                                <NumTd
+                                  tone={(opening.balances[key] || 0) === 0 ? "muted" : "default"}
+                                  className="text-caption"
+                                >
+                                  {formatNum(opening.balances[key] || 0)}
+                                </NumTd>
+                              )}
                               {showSaldo && (
                                 <NumTd tone={(tx.openingSaldo || 0) === 0 ? "muted" : "default"} className="text-caption">
                                   {formatNum(tx.openingSaldo || 0)}
@@ -1257,25 +1736,58 @@ export default function ChiqimSverka({
                               <NumTd tone="cash">{formatNum(tx.totalDebit)}</NumTd>
                               <NumTd tone="invoice">{formatNum(tx.totalCredit)}</NumTd>
                               <NumTd tone={v.tone} strong>{formatNum(tx.difference)}</NumTd>
+                              {showOpening && (() => {
+                                // YAKUNIY QOLDIQ = boshlang'ich + fayl ichidagi
+                                // o'tgan davr + shu davr farqi. Uchalasi ham
+                                // bir xil ishorada (HANDOFF 8-bo'lim).
+                                const closing =
+                                  (opening.balances[key] || 0) + (tx.openingSaldo || 0) + tx.difference;
+                                return (
+                                  <NumTd tone={verdict(closing).tone} strong>
+                                    {formatNum(closing)}
+                                  </NumTd>
+                                );
+                              })()}
                               <Td className={cx("text-caption font-medium", toneText[v.tone])}>
                                 {t(v.text)}
                               </Td>
                               <Td align="center">
-                                <Button
-                                  size="sm"
-                                  variant={isExpanded ? "primary" : "secondary"}
-                                  onClick={() => toggleExpand(key)}
-                                >
-                                  {isExpanded ? t("Ёпиш") : t("Очиш")}
-                                  <ChevronDown className={cx("h-3.5 w-3.5 transition-transform", isExpanded && "rotate-180")} />
-                                </Button>
+                                <div className="flex items-center justify-center gap-1.5">
+                                  <Button
+                                    size="sm"
+                                    variant={isExpanded ? "primary" : "secondary"}
+                                    onClick={() => toggleExpand(key)}
+                                  >
+                                    {isExpanded ? t("Ёпиш") : t("Очиш")}
+                                    <ChevronDown className={cx("h-3.5 w-3.5 transition-transform", isExpanded && "rotate-180")} />
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="secondary"
+                                    onClick={() => setActRow(tx)}
+                                    title={t("Акт сверки")}
+                                    aria-label={`${t("Акт сверки")}: ${tx.name}`}
+                                  >
+                                    <FileText className="h-3.5 w-3.5" />
+                                  </Button>
+                                </div>
                               </Td>
                             </Tr>
 
                             {isExpanded && (
                               <tr>
                                 <td colSpan={colCount} className="p-0">
-                                  <div className="border-y border-line bg-surface-2 p-4">
+                                  <div className="space-y-4 border-y border-line bg-surface-2 p-4">
+                                    {/* ЁПИЛМАГАН ФАКТУРАЛАР — биринчи
+                                        ўринда: бухгалтерга керак бўладиган
+                                        нарса аслида шу, ойма-ой кесим эмас. */}
+                                    <OpenInvoices
+                                      invoices={openInvoicesByKey.get(key) ?? []}
+                                      format={formatNum}
+                                      title={t("Тўланмаган фактуралар")}
+                                      emptyText={t("Ёпилмаган фактура йўқ")}
+                                    />
+
                                     <h3 className="mb-3 text-caption font-semibold text-ink-2">
                                       📅 {tx.name} — {t("Ойма-ой тафсилотлар")}
                                     </h3>
@@ -1352,11 +1864,29 @@ export default function ChiqimSverka({
                         {showSaldo && (
                           <NumTd tone="muted" className="text-caption">{formatNum(grandTotals.saldo)}</NumTd>
                         )}
+                        {showOpening && (
+                          <NumTd className="text-caption">
+                            {formatNum(
+                              displayData.reduce((a, x) => a + (opening.balances[rowKey(x)] || 0), 0)
+                            )}
+                          </NumTd>
+                        )}
                         <NumTd tone="cash">{formatNum(grandTotals.debit)}</NumTd>
                         <NumTd tone="invoice">{formatNum(grandTotals.credit)}</NumTd>
                         <NumTd tone={grandTotals.diff === 0 ? "default" : verdict(grandTotals.diff).tone}>
                           {formatNum(grandTotals.diff)}
                         </NumTd>
+                        {showOpening && (
+                          <NumTd>
+                            {formatNum(
+                              displayData.reduce(
+                                (a, x) =>
+                                  a + (opening.balances[rowKey(x)] || 0) + (x.openingSaldo || 0) + x.difference,
+                                0
+                              )
+                            )}
+                          </NumTd>
+                        )}
                         <Td className={cx("text-caption", toneText[verdict(grandTotals.diff).tone])}>
                           {t(verdict(grandTotals.diff).text)}
                         </Td>
@@ -1368,6 +1898,96 @@ export default function ChiqimSverka({
               </TableFrame>
             </div>
           </Card>
+
+          {/* 📄 АКТ СВЕРКИ ОЙНАСИ.
+              Ичидаги Дебет / Кредит / Сальдо блокига ТЕГИЛМАЙДИ — у
+              расмий икки томонлама ҳужжат шакли. */}
+          <Modal
+            open={actRow !== null}
+            onClose={() => setActRow(null)}
+            title={t("Акт сверки")}
+            hint={actRow ? `${actRow.name} · СТИР ${actRow.inn}` : undefined}
+            icon={<FileText className="h-5 w-5" />}
+            width="max-w-lg"
+            footer={
+              <>
+                <Button variant="secondary" onClick={() => setActRow(null)}>
+                  {t("Бекор қилиш")}
+                </Button>
+                <Button variant="primary" onClick={handleActDownload} icon={<Download className="h-4 w-4" />}>
+                  {t("Excel юклаб олиш")}
+                </Button>
+              </>
+            }
+          >
+            {actRow && (
+              <div className="space-y-4">
+                <div className="grid grid-cols-3 gap-2 text-center">
+                  <div className="rounded-md border border-line bg-surface-2 p-3">
+                    <p className="text-caption text-cash">{t("Дебет (тўлов)")}</p>
+                    <p className="mt-1 text-body font-semibold tabular">{formatNum(actRow.totalDebit)}</p>
+                  </div>
+                  <div className="rounded-md border border-line bg-surface-2 p-3">
+                    <p className="text-caption text-invoice">{t("Кредит (фактура)")}</p>
+                    <p className="mt-1 text-body font-semibold tabular">{formatNum(actRow.totalCredit)}</p>
+                  </div>
+                  <div className="rounded-md border border-line bg-surface-2 p-3">
+                    <p className="text-caption text-ink-3">{t("Сальдо")}</p>
+                    <p
+                      className={cx(
+                        "mt-1 text-body font-semibold tabular",
+                        toneText[verdict(actRow.difference).tone]
+                      )}
+                    >
+                      {formatNum(Math.abs(actRow.difference))}
+                    </p>
+                  </div>
+                </div>
+
+                <p className="text-caption text-ink-2">
+                  {Math.abs(actRow.difference) < 0.01
+                    ? t("Қарздорлик йўқ.")
+                    : actRow.difference > 0
+                      ? `${t("Улар қарздор — етказиб берувчи")} ${formatNum(actRow.difference)} ${t("сўмлик фактура ёзмаган.")}`
+                      : `${t("Биз қарздормиз —")} ${formatNum(-actRow.difference)} ${t("сўм тўланмаган.")}`}
+                </p>
+
+                {opening.balances[rowKey(actRow)] === undefined && (
+                  <Alert tone="warn">
+                    {t("Бу контрагентга бошланғич қолдиқ киритилмаган — акт фақат юкланган давр ҳаракатини кўрсатади.")}
+                  </Alert>
+                )}
+              </div>
+            )}
+          </Modal>
+
+          {/* БОШЛАНҒИЧ ҚОЛДИҚ ОЙНАСИ */}
+          <OpeningBalanceModal
+            open={balanceOpen}
+            onClose={() => setBalanceOpen(false)}
+            rows={periodData
+              .filter((tx) => catOf(tx) === "korxona")
+              .map((tx) => ({ key: rowKey(tx), name: tx.name, inn: tx.inn }))}
+            balances={opening.balances}
+            asOf={opening.asOf}
+            format={formatNum}
+            saving={savingBalances}
+            onSave={handleSaveBalances}
+          />
+
+          {/* КОНТРАГЕНТЛАРНИ БИРЛАШТИРИШ */}
+          <MergeModal
+            open={mergeOpen}
+            onClose={() => setMergeOpen(false)}
+            companyId={companyId}
+            side="out"
+            rows={mergeRows}
+            groups={merges}
+            suggestions={mergeSuggestions}
+            format={formatNum}
+            onMerged={handleMerged}
+            onUnmerged={handleUnmerged}
+          />
         </>
       )}
     </div>

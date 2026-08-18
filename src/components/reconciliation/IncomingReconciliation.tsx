@@ -10,19 +10,48 @@
 // ============================================================
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
+import { collection, addDoc, serverTimestamp, query, where, getDocs } from "firebase/firestore";
+import { db } from "@/lib/firebase";
+import { useAuth } from "@/context/AuthContext";
+import { INCOME_REPORTS } from "@/lib/workspace";
+import {
+  newestFirst,
+  stampToDate,
+  summarizeIncoming,
+  formatStamp,
+  type ReportSummary,
+} from "@/lib/reportHistory";
+import ReportHistory from "@/components/reconciliation/ReportHistory";
+import {
+  mergeIncomingRows,
+  type MergeGroup,
+  type MergeSuggestion,
+} from "@/lib/counterpartyMerge";
+import MergeModal, { type MergeRow } from "@/components/reconciliation/MergeModal";
+import {
+  EMPTY_BALANCES,
+  loadOpeningBalances,
+  saveOpeningBalances,
+  type OpeningBalances,
+} from "@/lib/openingBalance";
+import OpeningBalanceModal from "@/components/reconciliation/OpeningBalanceModal";
+import OpenInvoices from "@/components/reconciliation/OpenInvoices";
 import { buildIncomeWorkbook } from "@/lib/incomeExcel";
 import { authFetch } from "@/lib/authFetch";
-import { buildAktWorkbook } from "@/lib/aktSverki";
+import { buildReconciliationActWorkbook } from "@/lib/reconciliationAct";
 import { saveAs } from "file-saver";
 import {
   Banknote,
+  CalendarClock,
   CalendarDays,
   CalendarRange,
   ChevronDown,
   Download,
   FileText,
+  Save,
   Hourglass,
+  Merge,
   Receipt,
   Table2,
 } from "lucide-react";
@@ -54,6 +83,7 @@ import {
   Thead,
   Tr,
   cx,
+  notify,
   tableCls,
   toneText,
   type TabItem,
@@ -86,6 +116,9 @@ interface PartyRow {
   monthly: Record<string, MonthBucket>;
   payments: PaymentRec[];
   invoices: InvoiceRec[];
+  /** Қўлда бирлаштирилган бўлса — қайси калитлардан йиғилгани.
+   *  `src/lib/counterpartyMerge.ts` */
+  mergedFrom?: string[];
 }
 interface IncomeResponse {
   success: boolean;
@@ -106,6 +139,18 @@ interface IncomeResponse {
     warnings: string[];
   };
 }
+
+/** Firestore'da saqlanadigan kirim hisoboti */
+interface SavedIncomeReport {
+  companyId: string;
+  workspaceId: string;
+  includePending?: boolean;
+  report: IncomeResponse;
+  savedAt?: { toMillis: () => number; toDate: () => Date };
+}
+
+/** Firestore hujjati + o'z identifikatori (tarix ro'yxati uchun) */
+type SavedIncomeDoc = SavedIncomeReport & { id: string };
 
 const MONTH_NAMES = [
   "Январь", "Февраль", "Март", "Апрель", "Май", "Июнь",
@@ -149,8 +194,8 @@ function verdict(diff: number): { text: string; tone: Tone } {
 
 type SortKey = "name" | "inn" | "credit" | "factura" | "diff";
 type SortDir = "asc" | "desc";
-type FilterKind = "ALL" | "DIFF" | "NO_FACTURA" | "UNPAID" | "EQUAL";
-type TabKey = "SVERKA" | "YEARS" | "MONTHLY" | "PAYMENTS" | "INVOICES" | "AGING";
+type FilterKind = "ALL" | "DIFF" | "NO_INVOICE" | "UNPAID" | "EQUAL";
+type TabKey = "RECONCILIATION" | "YEARS" | "MONTHLY" | "PAYMENTS" | "INVOICES" | "AGING";
 
 // Қарздорлик ёши гуруҳлари
 const BUCKET_LABELS: Record<BucketKey, string> = {
@@ -198,12 +243,40 @@ function yearOf(p: PartyRow, year: string) {
   return { credit, factura, diff: factura - credit };
 }
 
-export default function KirimSverka({ companyName }: { companyName: string }) {
+export default function IncomingReconciliation({
+  companyId,
+  companyName,
+}: {
+  /** Natijani QAYSI korxonaga yozish kerakligi. Ilgari bu prop YO'Q
+   *  edi — shuning uchun kirim sverkasi hech narsa saqlay olmasdi. */
+  companyId: string;
+  companyName: string;
+}) {
   const t = useT();
+  // Har o'qish/yozish ish maydoniga bog'lanadi (src/lib/workspace.ts)
+  const { user } = useAuth();
+  const workspaceId: string | undefined = user?.workspaceId;
+
   const [files, setFiles] = useState<File[]>([]);
   const [loading, setLoading] = useState(false);
   const [report, setReport] = useState<IncomeResponse | null>(null);
   const [error, setError] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
+  /** Ekrandagi natija saqlangan hisobotdan tiklanganmi */
+  const [restoredAt, setRestoredAt] = useState<string | null>(null);
+  // Saqlangan hisobotlar TARIXI. Ro'yxat tiklash so'rovi allaqachon
+  // yuklab olgan snapshot'dan tuziladi — qo'shimcha o'qish YO'Q.
+  const [savedDocs, setSavedDocs] = useState<SavedIncomeDoc[]>([]);
+  const [activeReportId, setActiveReportId] = useState<string | null>(null);
+  // Қўлда бирлаштирилган контрагентлар (`counterpartyMerge.ts`)
+  const [merges, setMerges] = useState<MergeGroup[]>([]);
+  const [mergeSuggestions, setMergeSuggestions] = useState<MergeSuggestion[]>([]);
+  const [mergeOpen, setMergeOpen] = useState(false);
+
+  // 📅 Boshlang'ich qoldiq — `src/lib/openingBalance.ts` ga qarang
+  const [opening, setOpening] = useState<OpeningBalances>(EMPTY_BALANCES);
+  const [balanceOpen, setBalanceOpen] = useState(false);
+  const [savingBalances, setSavingBalances] = useState(false);
   // «Ожидает подписи партнёра» — имзоланмаган фактура одатда
   // ҳисобланмайди. Чиқим сверкасида бу тугма бор эди, кирим тарафда
   // сервер уни аллақачон қабул қиларди, лекин экранда ЙЎҚ эди.
@@ -215,10 +288,231 @@ export default function KirimSverka({ companyName }: { companyName: string }) {
   const [sortDir, setSortDir] = useState<SortDir>("desc");
   const [expanded, setExpanded] = useState<string[]>([]);
   const [selectedKeys, setSelectedKeys] = useState<string[]>([]);
-  const [tab, setTab] = useState<TabKey>("SVERKA");
+  const [tab, setTab] = useState<TabKey>("RECONCILIATION");
+
 
   // 📄 АКТ СВЕРКИ — битта фирма учун (файлда фақат жадвал бўлади)
-  const [aktParty, setAktParty] = useState<PartyRow | null>(null);
+  const [actParty, setActParty] = useState<PartyRow | null>(null);
+
+  // ============================================================
+  // SAQLANGAN HISOBOTNI TIKLASH
+  // ------------------------------------------------------------
+  // Chiqim tomonidagi bilan bir xil naqsh: ish maydoni filtri SHART
+  // (Firestore qoidasi so'rovni hujjatlarni o'qimasdan tekshiradi,
+  // filtrsiz so'rov butunlay rad etiladi), saralash esa klientda —
+  // shunda `savedAt` uchun qo'shimcha indeks kerak bo'lmaydi.
+  // ============================================================
+  useEffect(() => {
+    let alive = true;
+    async function restore() {
+      if (!companyId || !workspaceId) return;
+      try {
+        const snap = await getDocs(
+          query(
+            collection(db, INCOME_REPORTS),
+            where("workspaceId", "==", workspaceId),
+            where("companyId", "==", companyId)
+          )
+        );
+        if (!alive || snap.empty) return;
+        // Snapshot BUTUNLAY saqlanadi: tarix ro'yxati aynan shundan
+        // tuziladi, ya'ni ikkinchi so'rov qilinmaydi.
+        const docs = newestFirst(
+          snap.docs.map((d) => ({ id: d.id, ...(d.data() as SavedIncomeReport) }))
+        );
+        setSavedDocs(docs);
+        const latest = docs[0];
+        if (!latest?.report?.parties?.length) return;
+        setReport(latest.report);
+        setSelectedKeys(latest.report.parties.map((x) => x.key));
+        setIncludePending(latest.includePending === true);
+        setActiveReportId(latest.id);
+        setRestoredAt(formatStamp(stampToDate(latest.savedAt)));
+      } catch (err) {
+        // Tiklanmasa ish TO'XTAMAYDI — foydalanuvchi faylni qayta
+        // yuklay oladi. Lekin xato jim ketmasin.
+        console.error("Kirim hisobotini tiklashda xatolik:", err);
+      }
+    }
+    restore();
+    return () => {
+      alive = false;
+    };
+  }, [companyId, workspaceId]);
+
+  // Saqlangan qoldiqlar. Xato bo'lsa ish TO'XTAMAYDI — sverka
+  // qoldiqsiz ham to'g'ri hisoblanadi.
+  useEffect(() => {
+    let alive = true;
+    async function load() {
+      if (!companyId || !workspaceId) return;
+      try {
+        const b = await loadOpeningBalances(workspaceId, companyId, "in");
+        if (alive) setOpening(b);
+      } catch (err) {
+        console.error("Boshlang'ich qoldiqni o'qishda xatolik:", err);
+      }
+    }
+    load();
+    return () => {
+      alive = false;
+    };
+  }, [companyId, workspaceId]);
+
+  // ============================================================
+  // HISOBOT TARIXI
+  // ------------------------------------------------------------
+  // Eski hisobotni ochish YANGI SO'ROV qilmaydi — hujjat allaqachon
+  // `savedDocs` da. O'chirish esa kolleksiyaning cheksiz o'sishini
+  // to'xtatadi (har «Сақлаш» yangi hujjat yaratadi).
+  // ============================================================
+  const history: ReportSummary[] = useMemo(
+    () => savedDocs.map((d) => summarizeIncoming(d.id, d)),
+    [savedDocs]
+  );
+
+  const handleOpenSaved = (id: string) => {
+    const d = savedDocs.find((x) => x.id === id);
+    if (!d?.report?.parties?.length) {
+      notify.warn(t("Бу ҳисоботда контрагент йўқ."));
+      return;
+    }
+    setReport(d.report);
+    setSelectedKeys(d.report.parties.map((x) => x.key));
+    setIncludePending(d.includePending === true);
+    setActiveReportId(d.id);
+    setRestoredAt(formatStamp(stampToDate(d.savedAt)));
+  };
+
+  const handleDeletedReport = (id: string) => {
+    setSavedDocs((prev) => prev.filter((x) => x.id !== id));
+    // Ekranda turgani o'chirilsa — raqamlar qoladi, lekin ular endi
+    // saqlanmagan. Buni AYTISH shart, aks holda buxgalter «saqlangan»
+    // deb o'ylab yuradi.
+    if (activeReportId === id) {
+      setActiveReportId(null);
+      setRestoredAt(null);
+    }
+  };
+
+  // ============================================================
+  // BIRLASHTIRISH
+  // ------------------------------------------------------------
+  // Chiqim tomonidagi bilan bir xil naqsh: saqlangandan keyin jadval
+  // DARHOL yangilanadi (klientda ham server bilan aynan bir xil
+  // funksiya ishlaydi), ajratish esa faylni qayta yuklashni talab
+  // qiladi va bu foydalanuvchiga AYTILADI.
+  // ============================================================
+  const mergeRows: MergeRow[] = useMemo(
+    () =>
+      (report?.parties || []).map((p) => ({
+        key: p.key,
+        inn: p.inn,
+        name: p.name,
+        turnover: p.bankCredit + p.facturaSent,
+        mergedFrom: p.mergedFrom,
+      })),
+    [report]
+  );
+
+  const handleMerged = (group: MergeGroup) => {
+    setMerges((prev) => [...prev.filter((g) => g.primary !== group.primary), group]);
+    setReport((prev) =>
+      prev ? { ...prev, parties: mergeIncomingRows(prev.parties, [group]) } : prev
+    );
+    setSelectedKeys((prev) => {
+      const gone = new Set(group.members);
+      const kept = prev.filter((k) => !gone.has(k));
+      return prev.some((k) => gone.has(k)) ? [...new Set([...kept, group.primary])] : kept;
+    });
+    setMergeSuggestions((prev) =>
+      prev.filter((sug) => !sug.keys.some((k) => group.members.includes(k) || k === group.primary))
+    );
+  };
+
+  const handleUnmerged = (primary: string) => {
+    setMerges((prev) => prev.filter((g) => g.primary !== primary));
+  };
+
+  const handleSaveBalances = async (asOf: string, balances: Record<string, number>) => {
+    if (!workspaceId) {
+      notify.error(t("Иш майдони аниқланмади. Тизимдан чиқиб, қайта киринг."));
+      return;
+    }
+    setSavingBalances(true);
+    try {
+      const id = await saveOpeningBalances(workspaceId, companyId, "in", asOf, balances, opening.id);
+      setOpening({ id, asOf, balances });
+      setBalanceOpen(false);
+      notify.ok(t("Бошланғич қолдиқ сақланди"));
+    } catch (err) {
+      console.error("Boshlang'ich qoldiqni saqlashda xatolik:", err);
+      notify.error(
+        t("Сақлашда хатолик юз берди."),
+        err instanceof Error ? err.message : String(err)
+      );
+    } finally {
+      setSavingBalances(false);
+    }
+  };
+
+  // ============================================================
+  // SAQLASH
+  // ------------------------------------------------------------
+  // Firestore hujjati 1 MB dan oshmaydi. `parties` ichida har
+  // kontragentning to'lov va faktura RO'YXATI bor — akt sverki
+  // aynan shundan tuziladi, ya'ni uni tashlab bo'lmaydi. Shuning
+  // uchun hajm OLDINDAN o'lchanadi va oshsa aniq xabar beriladi
+  // (Firestore'ning o'z xatosi tushunarsiz bo'lardi).
+  // ============================================================
+  const handleSave = async () => {
+    if (!report) return;
+    if (!workspaceId) {
+      notify.error(t("Иш майдони аниқланмади. Тизимдан чиқиб, қайта киринг."));
+      return;
+    }
+
+    const payload = {
+      companyId,
+      workspaceId,
+      includePending,
+      report,
+    };
+    const bytes = new TextEncoder().encode(JSON.stringify(payload)).length;
+    const LIMIT = 900_000; // 1 MB dan zaxira bilan pastda
+    if (bytes > LIMIT) {
+      notify.error(
+        t("Ҳисобот жуда катта — сақлаб бўлмади"),
+        `${Math.round(bytes / 1024)} КБ · ${t("чегара")} ${Math.round(LIMIT / 1024)} КБ. ${t("Даврни қисқартириб қайта юкланг.")}`
+      );
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      const ref = await addDoc(collection(db, INCOME_REPORTS), {
+        ...payload,
+        savedAt: serverTimestamp(),
+      });
+      // `serverTimestamp()` klientda hali BO'SH — tarix qatori sanasiz
+      // chiqmasligi uchun mahalliy vaqt qo'yiladi. Sahifa qayta
+      // ochilganda server sanasi keladi (farq bir necha soniya).
+      const now = new Date();
+      const localStamp = { toMillis: () => now.getTime(), toDate: () => now };
+      setSavedDocs((prev) => newestFirst([{ id: ref.id, ...payload, savedAt: localStamp }, ...prev]));
+      setActiveReportId(ref.id);
+      notify.ok(t("Муваффақиятли сақланди!"));
+      setRestoredAt(null);
+    } catch (err) {
+      console.error("Kirim hisobotini saqlashda xatolik:", err);
+      notify.error(
+        t("Сақлашда хатолик юз берди."),
+        err instanceof Error ? err.message : String(err)
+      );
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
   const handleUpload = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -232,6 +526,9 @@ export default function KirimSverka({ companyName }: { companyName: string }) {
     const formData = new FormData();
     files.forEach((f) => formData.append("files", f));
     formData.append("includePending", includePending ? "true" : "false");
+    // Бирлаштириш гуруҳлари КОРХОНА даражасида сақланади — сервер
+    // қайси корхона эканини билиши керак.
+    formData.append("companyId", companyId);
 
     try {
       const res = await authFetch("/api/income-audit", { method: "POST", body: formData });
@@ -239,8 +536,12 @@ export default function KirimSverka({ companyName }: { companyName: string }) {
       if (data.success) {
         const parsed = data as IncomeResponse;
         setReport(parsed);
+        setRestoredAt(null);
+        setActiveReportId(null);
         setExpanded([]);
         setSelectedKeys(parsed.parties.map((p) => p.key));
+        setMerges(data.merges || []);
+        setMergeSuggestions(data.mergeSuggestions || []);
       } else {
         setReport(null);
         setError(data.error || t("Номаълум хатолик юз берди."));
@@ -265,7 +566,7 @@ export default function KirimSverka({ companyName }: { companyName: string }) {
       switch (filterKind) {
         case "DIFF":
           return Math.abs(p.difference) > 0.01;
-        case "NO_FACTURA":
+        case "NO_INVOICE":
           return p.bankCredit > 0 && p.facturaSent <= 0.01;
         case "UNPAID":
           return p.facturaSent > 0 && p.bankCredit <= 0.01;
@@ -361,6 +662,13 @@ export default function KirimSverka({ companyName }: { companyName: string }) {
     setExpanded((prev) => (prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]));
 
   // ---- ТАБЛАР УЧУН МАЪЛУМОТ (Excel варақлари билан бир хил) ----
+  /** Kontragent kaliti -> aging natijasi. `aging.parties` ro'yxat
+   *  bo'lgani uchun har qatorda qidirmaslik uchun xarita. */
+  const agingByKey = useMemo(
+    () => new Map(aging.parties.map((x) => [x.key, x])),
+    [aging]
+  );
+
   const yearKeys = useMemo(() => (report ? report.meta.byYear.map((y) => y.year) : []), [report]);
 
   const monthlyRows = useMemo(
@@ -409,24 +717,54 @@ export default function KirimSverka({ companyName }: { companyName: string }) {
     return list;
   }, [displayRows]);
 
-  const openAkt = (p: PartyRow) => setAktParty(p);
+  const openAct = (p: PartyRow) => setActParty(p);
 
-  const handleAktDownload = async () => {
-    if (!aktParty || !report) return;
+  const handleActDownload = async () => {
+    if (!actParty || !report) return;
     // Ўз номи: файлдан аниқланса ўша, аниқланмаса — саҳифадаги корхона.
     // Илгари захира қиймат «Бизнинг корхона» деган умумий матн эди.
-    const wb = buildAktWorkbook(aktParty, { ownName: report.meta.ownName || companyName });
+    // Бошланғич қолдиқ КИРИТИЛГАН бўлса — актга ўша қиймат кетади.
+    // Киритилмаган бўлса `undefined` қолади ва ҳужжат остига
+    // «сальдо начальное киритилмаган» изоҳи чиқади. Иккинчи ҳолда
+    // акт «нол эди» деб ЁЛҒОН айтмайди.
+    const saved = opening.balances[actParty.key];
+    // КИРИМ (харидор, 4010 актив): биз ёзган фактура — ДЕБЕТ,
+    // келган пул — КРЕДИТ. Сальдо = фактура − пул, яъни мусбат
+    // бўлса мижоз қарздор (HANDOFF 8-бўлим).
+    const wb = buildReconciliationActWorkbook({
+      name: actParty.name,
+      inn: actParty.inn,
+      debitTotal: actParty.facturaSent,
+      creditTotal: actParty.bankCredit,
+      debitDocs: actParty.invoices.map((i) => ({
+        date: i.date,
+        number: i.number,
+        amount: i.amount,
+      })),
+      creditDocs: actParty.payments.map((p) => ({
+        date: p.date,
+        number: p.doc || "",
+        amount: p.amount,
+      })),
+    }, {
+      ownName: report.meta.ownName || companyName,
+      openingBalance: saved === undefined ? undefined : saved,
+      periodLabel:
+        report.meta.periodFrom && report.meta.periodTo
+          ? `${fmtDate(report.meta.periodFrom)} — ${fmtDate(report.meta.periodTo)}`
+          : undefined,
+    });
     const buffer = await wb.xlsx.writeBuffer();
-    const safe = aktParty.name.replace(/[^A-Za-zА-Яа-я0-9]+/g, "_").slice(0, 40);
+    const safe = actParty.name.replace(/[^A-Za-zА-Яа-я0-9]+/g, "_").slice(0, 40);
     saveAs(
       new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }),
       `Akt_sverki_${safe}.xlsx`
     );
-    setAktParty(null);
+    setActParty(null);
   };
 
   const TABS: TabItem<TabKey>[] = [
-    { key: "SVERKA", label: t("Сверка"), icon: Table2, count: displayRows.length },
+    { key: "RECONCILIATION", label: t("Сверка"), icon: Table2, count: displayRows.length },
     { key: "YEARS", label: t("Йиллар"), icon: CalendarRange, count: yearKeys.length },
     { key: "MONTHLY", label: t("Ойма-ой"), icon: CalendarDays, count: monthlyRows.length },
     { key: "PAYMENTS", label: t("Тўловлар"), icon: Banknote, count: paymentRows.length },
@@ -510,6 +848,14 @@ export default function KirimSverka({ companyName }: { companyName: string }) {
                   {t("Давр")}: {fmtDate(report.meta.periodFrom)} — {fmtDate(report.meta.periodTo)}
                 </Badge>
               )}
+              {/* Экрандаги натижа ФАЙЛдан эмас, САҚЛАНГАН ҳисоботдан
+                  келган бўлса — буни айтиш шарт, акс ҳолда бухгалтер
+                  эски рақамни янги деб ўқийди. */}
+              {restoredAt && (
+                <Badge tone="info">
+                  {t("Сақланган ҳисобот")}: {restoredAt}
+                </Badge>
+              )}
             </div>
           )}
 
@@ -522,6 +868,17 @@ export default function KirimSverka({ companyName }: { companyName: string }) {
               ))}
             </div>
           )}
+
+          {/* Сақланган ҳисоботлар. ЁПИҚ туради — жадвални бекитмайди
+              ва янги мажбурий қадам қўшмайди. */}
+          <ReportHistory
+            kind="in"
+            items={history}
+            activeId={activeReportId}
+            onOpen={handleOpenSaved}
+            onDeleted={handleDeletedReport}
+            format={fmt}
+          />
         </form>
       </Card>
 
@@ -577,15 +934,51 @@ export default function KirimSverka({ companyName }: { companyName: string }) {
               value={tab}
               onChange={setTab}
               actions={
-                <Button
-                  variant="primary"
-                  size="sm"
-                  onClick={handleExport}
-                  disabled={displayRows.length === 0}
-                  icon={<Download className="h-3.5 w-3.5" />}
-                >
-                  {t("Excel юклаш (5 варақ)")}
-                </Button>
+                <>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => setBalanceOpen(true)}
+                    disabled={!report}
+                    icon={<CalendarClock className="h-3.5 w-3.5" />}
+                    title={t("Файл бошланишидан ОЛДИНГИ давр қолдиғи")}
+                  >
+                    {t("Бошланғич қолдиқ")}
+                    {Object.keys(opening.balances).length > 0 &&
+                      ` (${Object.keys(opening.balances).length})`}
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => setMergeOpen(true)}
+                    disabled={!report}
+                    icon={<Merge className="h-3.5 w-3.5" />}
+                    title={t("Битта фирма икки хил ёзилган бўлса — қаторларни қўшинг")}
+                    className={cx(mergeSuggestions.length > 0 && "border-warn text-warn")}
+                  >
+                    {t("Бирлаштириш")}
+                    {mergeSuggestions.length > 0 && ` (${mergeSuggestions.length})`}
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={handleExport}
+                    disabled={displayRows.length === 0}
+                    icon={<Download className="h-3.5 w-3.5" />}
+                  >
+                    {t("Excel юклаш (5 варақ)")}
+                  </Button>
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    onClick={handleSave}
+                    disabled={!report || isSaving}
+                    loading={isSaving}
+                    icon={<Save className="h-3.5 w-3.5" />}
+                  >
+                    {isSaving ? t("Сақланмоқда...") : t("Сақлаш")}
+                  </Button>
+                </>
               }
             />
 
@@ -605,7 +998,7 @@ export default function KirimSverka({ companyName }: { companyName: string }) {
               >
                 <option value="ALL">{t("Барчаси")} ({report.parties.length})</option>
                 <option value="DIFF">{t("Фарқи борлар")}</option>
-                <option value="NO_FACTURA">{t("Пул келган, фактура йўқ")}</option>
+                <option value="NO_INVOICE">{t("Пул келган, фактура йўқ")}</option>
                 <option value="UNPAID">{t("Фактура бор, пул келмаган")}</option>
                 <option value="EQUAL">{t("Тенг бўлганлар")}</option>
               </Select>
@@ -624,7 +1017,7 @@ export default function KirimSverka({ companyName }: { companyName: string }) {
             </div>
 
             <div className="p-4">
-              {tab === "SVERKA" && (
+              {tab === "RECONCILIATION" && (
                 <TableFrame>
                   <Table>
                     <Thead sticky>
@@ -681,7 +1074,20 @@ export default function KirimSverka({ companyName }: { companyName: string }) {
                                   />
                                 </Td>
                                 <Td main className="min-w-[260px]">
-                                  <div className="font-medium">{p.name}</div>
+                                  <div className="font-medium">
+                                    {p.name}
+                                    {/* Қатор бир нечта ёзувдан йиғилган бўлса — буни
+                                        АЙТИШ шарт: акс ҳолда бухгалтер файлдаги
+                                        номни излаб тополмайди. */}
+                                    {p.mergedFrom && p.mergedFrom.length > 1 && (
+                                      <>
+                                        {" "}
+                                        <Badge tone="info" className="align-middle">
+                                          {t("бирлаштирилган")} ({p.mergedFrom.length})
+                                        </Badge>
+                                      </>
+                                    )}
+                                  </div>
                                   {p.aliases.length > 1 && (
                                     <div className="max-w-[420px] truncate text-caption text-ink-3">
                                       {p.aliases.filter((a) => a !== p.name).join(" · ")}
@@ -702,7 +1108,7 @@ export default function KirimSverka({ companyName }: { companyName: string }) {
                                     <Button
                                       size="sm"
                                       variant="secondary"
-                                      onClick={() => openAkt(p)}
+                                      onClick={() => openAct(p)}
                                       title={t("Шу фирма учун Акт сверки юклаб олиш")}
                                       icon={<FileText className="h-3.5 w-3.5" />}
                                     >
@@ -726,6 +1132,16 @@ export default function KirimSverka({ companyName }: { companyName: string }) {
                                 <tr>
                                   <td colSpan={8} className="p-0">
                                     <div className="space-y-4 border-y border-line bg-surface-2 p-4">
+                                      {/* ЁПИЛМАГАН ФАКТУРАЛАР — биринчи
+                                          ўринда: бухгалтерга керак
+                                          бўладиган нарса аслида шу. */}
+                                      <OpenInvoices
+                                        invoices={agingByKey.get(p.key)?.openInvoices ?? []}
+                                        format={fmt}
+                                        title={t("Тўланмаган фактуралар")}
+                                        emptyText={t("Ёпилмаган фактура йўқ")}
+                                      />
+
                                       {/* Ойма-ой */}
                                       <div>
                                         <h3 className="mb-2 text-caption font-semibold text-ink-2">
@@ -1126,60 +1542,86 @@ export default function KirimSverka({ companyName }: { companyName: string }) {
         </>
       )}
 
+      {/* КОНТРАГЕНТЛАРНИ БИРЛАШТИРИШ */}
+      <MergeModal
+        open={mergeOpen}
+        onClose={() => setMergeOpen(false)}
+        companyId={companyId}
+        side="in"
+        rows={mergeRows}
+        groups={merges}
+        suggestions={mergeSuggestions}
+        format={fmt}
+        onMerged={handleMerged}
+        onUnmerged={handleUnmerged}
+      />
+
+      {/* 📅 БОШЛАНҒИЧ ҚОЛДИҚ ОЙНАСИ */}
+      <OpeningBalanceModal
+        open={balanceOpen}
+        onClose={() => setBalanceOpen(false)}
+        rows={(report?.parties ?? []).map((p) => ({ key: p.key, name: p.name, inn: p.inn }))}
+        balances={opening.balances}
+        asOf={opening.asOf}
+        format={fmt}
+        saving={savingBalances}
+        onSave={handleSaveBalances}
+      />
+
       {/* 📄 АКТ СВЕРКИ ОЙНАСИ
           Ичидаги Дебет / Кредит / Сальдо блокига ТЕГИЛМАЙДИ — у расмий
           икки томонлама ҳужжат шакли, эталон PDF билан қаторма-қатор
           мос келиши шарт. Экрандаги «Фарқ» энди шу блок билан БИР ХИЛ
           ишорада: иккиси ҳам фактура − пул. */}
       <Modal
-        open={aktParty !== null && report !== null}
-        onClose={() => setAktParty(null)}
+        open={actParty !== null && report !== null}
+        onClose={() => setActParty(null)}
         title={t("Акт сверки")}
-        hint={aktParty ? `${aktParty.name} · СТИР ${aktParty.inn}` : undefined}
+        hint={actParty ? `${actParty.name} · СТИР ${actParty.inn}` : undefined}
         icon={<FileText className="h-5 w-5" />}
         width="max-w-lg"
         footer={
           <>
-            <Button variant="secondary" onClick={() => setAktParty(null)}>
+            <Button variant="secondary" onClick={() => setActParty(null)}>
               {t("Бекор қилиш")}
             </Button>
-            <Button variant="primary" onClick={handleAktDownload} icon={<Download className="h-4 w-4" />}>
+            <Button variant="primary" onClick={handleActDownload} icon={<Download className="h-4 w-4" />}>
               {t("Excel юклаб олиш")}
             </Button>
           </>
         }
       >
-        {aktParty && (
+        {actParty && (
           <div className="space-y-4">
             {/* Ҳисоб-китоб хулосаси */}
             <div className="grid grid-cols-3 gap-2 text-center">
               <div className="rounded-md border border-line bg-surface-2 p-3">
                 <p className="text-caption text-invoice">{t("Дебет (фактура)")}</p>
-                <p className="mt-1 text-body font-semibold tabular">{fmt(aktParty.facturaSent)}</p>
+                <p className="mt-1 text-body font-semibold tabular">{fmt(actParty.facturaSent)}</p>
               </div>
               <div className="rounded-md border border-line bg-surface-2 p-3">
                 <p className="text-caption text-cash">{t("Кредит (тўлов)")}</p>
-                <p className="mt-1 text-body font-semibold tabular">{fmt(aktParty.bankCredit)}</p>
+                <p className="mt-1 text-body font-semibold tabular">{fmt(actParty.bankCredit)}</p>
               </div>
               <div className="rounded-md border border-line bg-surface-2 p-3">
                 <p className="text-caption text-ink-3">{t("Сальдо")}</p>
                 <p
                   className={cx(
                     "mt-1 text-body font-semibold tabular",
-                    toneText[verdict(aktParty.difference).tone]
+                    toneText[verdict(actParty.difference).tone]
                   )}
                 >
-                  {fmt(Math.abs(aktParty.difference))}
+                  {fmt(Math.abs(actParty.difference))}
                 </p>
               </div>
             </div>
 
             <p className="text-caption text-ink-2">
-              {Math.abs(aktParty.difference) < 0.01
+              {Math.abs(actParty.difference) < 0.01
                 ? t("Қарздорлик йўқ.")
-                : aktParty.difference > 0
-                  ? `${t("Улар қарздор — мижоз")} ${fmt(aktParty.difference)} ${t("сўм тўламаган.")}`
-                  : `${t("Биз қарздормиз —")} ${fmt(-aktParty.difference)} ${t("сўм ортиқча тушган.")}`}
+                : actParty.difference > 0
+                  ? `${t("Улар қарздор — мижоз")} ${fmt(actParty.difference)} ${t("сўм тўламаган.")}`
+                  : `${t("Биз қарздормиз —")} ${fmt(-actParty.difference)} ${t("сўм ортиқча тушган.")}`}
             </p>
 
             <p className="text-caption text-ink-3">
