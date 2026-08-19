@@ -1289,6 +1289,30 @@ tegmaydi (105 → 115 tekshiruv o'tdi).
 
 Qoidalar fayliga band QO'SHILMADI: klient bu kolleksiyaga tegmaydi.
 
+> ⚠️ **2026-08-19 — TUZATISH. Yuqoridagi «testli» degani NOTO'G'RI edi:**
+> jurnal CHIQIM tomonida yozilgan kunidan beri **bironta yozuv
+> saqlamagan**. Ikkita xato bir-birini yashirib turgan, ikkalasi ham
+> `logParseFailure` ning `catch` ida yutilgan, ya'ni ekranda hech narsa
+> ko'rinmagan:
+>
+> 1. `statementAudit.ts` da `sd.rows.slice(0,5).map(...)` — Excel qatori
+>    SIYRAK (sparse) massiv bo'lsa `map` teshiklarni O'TKAZIB YUBORADI,
+>    natijada `undefined` qoladi va Firestore istisno tashlaydi.
+>    → `Array.from` ga o'tkazildi (teshikni ham element deb ko'radi).
+> 2. Undan keyin chiqqani: **Firestore massiv ichida massivni umuman
+>    saqlamaydi** (`Property array contains an invalid nested entity`),
+>    `sampleRows` esa `string[][]` edi. → saqlash chegarasida
+>    `{ cells: string[] }` ga o'raladi (`parseFailureLog.ts`).
+>    Parser tabiiy `string[][]` berishda davom etadi.
+>
+> KIRIM tomoni ishlab turgan edi — unda `sampleRows` yo'q, shuning uchun
+> `reason: 'BOSH'` yozuvlari saqlangan. Xatoni aynan shu yashirgan.
+>
+> Regressiya: `verify-parsers` da `firestoreUnsafePath()` — yozuvning
+> O'ZINI tekshiradi (`undefined` va ichma-ich massiv), ustiga haqiqiy
+> XLSX'dan uchidan uchiga sinov. Tuzatish orqaga qaytarilganda sinov
+> YIQILISHI o'lchab tasdiqlangan. 124 → 128 tekshiruv.
+
 ### 18c. SMS (telefon) bilan kirish
 
 **Parol tiklash BEKOR QILINDI** — SMS'da parol yo'q, demak «parolni
@@ -1367,6 +1391,7 @@ Kod tayyor, lekin bulardan biri qilinmasa SMS ketmaydi:
 
 ```
 verify-parsers   124/124 ✔   (yangi: bepul davr 12, jurnal 10, telefon 9)
+                 [2026-08-19 dan keyin: 128/128 — jurnal shakli sinovi]
 tsc · eslint     toza
 next build       xatosiz, 41 marshrut
 kirish sahifasi  brauzerda o'lchandi (u OCHIQ sahifa):

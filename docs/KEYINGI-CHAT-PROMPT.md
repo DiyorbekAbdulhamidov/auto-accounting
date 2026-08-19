@@ -21,7 +21,7 @@ Men o'zbekcha (lotin) yozaman. UI matnlari va `t()` kalitlari — kirill o'zbekc
 
 2. Tekshiruvlarni yurgiz va solishtir:
    ```
-   node scripts/verify-parsers.cjs   ->  124/124 o'tishi SHART
+   node scripts/verify-parsers.cjs   ->  128/128 o'tishi SHART
    npx tsc --noEmit                  ->  toza
    npx eslint src --max-warnings=0   ->  toza
    npx next build                    ->  xatosiz, 41 marshrut
@@ -45,7 +45,7 @@ cheksiz (faqat ro'yxatdan o'tish shart) → keyin bepul reja qaytadi.
 | Firestore qoidalari deploy qilindi | ✅ jonli |
 | Ish maydoni migratsiyasi (egasiz hujjat → 0) | ✅ |
 | Bepul davr `PROMO_UNTIL = 2026-11-01T00:00+05:00` | ✅ testli |
-| Yiqilgan fayl jurnali (`parse_failures`) | ✅ testli |
+| Yiqilgan fayl jurnali (`parse_failures`) | ✅ 2026-08-19 da TUZATILDI — oldin hech qachon yozmagan (HANDOFF §18b) |
 | Hisobot tarixi (ochish/o'chirish) | ✅ |
 | Kontragentlarni birlashtirish | ✅ testli |
 | Ish maydoniga a'zo taklif qilish | ✅ |
@@ -132,7 +132,7 @@ va qoidalar REST orqali tekshirilgan, lekin ekranda o'tilmagan:
 - `src/lib/` dagi kirill matnlarga TEGILMAYDI — ular parser kalit
   so'zlari (`ИТОГО`, `Остаток на начало периода`, `ПАССИВ`).
 - **Parser (`auditFiles`/`analyzeIncome`) ga TEGILMAYDI.** Yangi
-  mantiq undan KEYIN, alohida qadam bo'lib qo'shiladi — shunda 124 ta
+  mantiq undan KEYIN, alohida qadam bo'lib qo'shiladi — shunda 128 ta
   regress kuchda qoladi.
 - «Акт сверки» bloki — rasmiy hujjat shakli, etalon PDF bilan
   qatorma-qator mos kelishi shart.
