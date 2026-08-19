@@ -15,6 +15,8 @@ import { Inter } from "next/font/google";
 import { notFound } from "next/navigation";
 import { AuthProvider } from "@/context/AuthContext";
 import { LanguageProvider } from "@/context/LanguageContext";
+import { Analytics } from "@vercel/analytics/next"
+
 import {
   LOCALES,
   LOCALE_HREFLANG,
@@ -108,6 +110,7 @@ export default async function RootLayout({
           {/* Til endi localStorage'dan EMAS, manzildan keladi — shuning
               uchun server va klient bir xil HTML chiqaradi. */}
           <LanguageProvider lang={lang} locale={locale}>
+            <Analytics />
             {children}
             {/* Xabarlar (`alert()` o'rniga) — ildizda BIR MARTA */}
             <Toaster />
