@@ -9,7 +9,7 @@
 //
 // TAKLIF QANDAY ISHLAYDI — parolsiz:
 //
-//   1. Ega email kiritadi.
+//   1. Ega email YOKI telefon raqamini kiritadi.
 //   2. Shu yerda `allowed_users/{email}` OLDINDAN yaratiladi va
 //      unga `workspaceId` yoziladi.
 //   3. Taklif qilingan odam odatdagidek ro'yxatdan o'tadi. Signup
@@ -26,14 +26,17 @@
 //   o'qiy olmaydigan ish maydoniga ishora qilib osilib qolardi.
 import { NextResponse } from 'next/server';
 import { requireUser } from '@/lib/apiAuth';
-import { ALLOWED_USERS, MEMBERS, WORKSPACES } from '@/lib/workspace';
+import { ALLOWED_USERS, MEMBERS, WORKSPACES, inviteKeyOf } from '@/lib/workspace';
 import { limitsOf, planOf } from '@/lib/plans';
 import type { Firestore } from 'firebase-admin/firestore';
 
 export const runtime = 'nodejs';
 
 interface MemberView {
-  email: string;
+  /** HISOB KALITI: email YOKI telefon raqami (E.164) — `authKey()` bilan
+   *  bir xil qoida. Ilgari bu maydon `email` deb atalardi va telefon
+   *  bilan taklif qilishning iloji yo'q edi. */
+  key: string;
   role: string;
   /** `invited` — havola berilgan, lekin hali ro'yxatdan o'tmagan.
    *  `active` — kirgan. Signup route uni «active» ga o'giradi. */
@@ -61,14 +64,14 @@ async function listMembers(
   for (const doc of snap.docs) {
     const d = doc.data() || {};
     rows.push({
-      email: doc.id,
+      key: doc.id,
       role: String(d.role || 'member'),
       status: String(d.status || 'active'),
     });
   }
   // Ega birinchi, qolganlari alifbo bo'yicha
   rows.sort((a, b) =>
-    a.role === b.role ? a.email.localeCompare(b.email) : a.role === 'owner' ? -1 : 1
+    a.role === b.role ? a.key.localeCompare(b.key) : a.role === 'owner' ? -1 : 1
   );
   return rows;
 }
@@ -116,11 +119,14 @@ export async function POST(req: Request) {
   try {
     const body = await req.json().catch(() => ({}));
     const action = body.action === 'remove' ? 'remove' : 'invite';
-    const email = String(body.email || '').trim().toLowerCase();
-
-    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      return NextResponse.json({ error: 'Электрон почта нотўғри.' }, { status: 400 });
+    const parsed = inviteKeyOf(body.key);
+    if (!parsed) {
+      return NextResponse.json(
+        { error: 'Электрон почта ёки телефон рақами нотўғри.' },
+        { status: 400 }
+      );
     }
+    const { key, email, phone } = parsed;
 
     const { db } = auth.admin;
     const workspaceId = auth.user.workspaceId;
@@ -137,11 +143,11 @@ export async function POST(req: Request) {
 
     const memberRef = db
       .collection(WORKSPACES).doc(workspaceId)
-      .collection(MEMBERS).doc(email);
-    const userRef = db.collection(ALLOWED_USERS).doc(email);
+      .collection(MEMBERS).doc(key);
+    const userRef = db.collection(ALLOWED_USERS).doc(key);
 
     if (action === 'remove') {
-      if (email === ws.ownerEmail) {
+      if (key === ws.ownerEmail) {
         return NextResponse.json(
           { error: 'Иш майдони эгасини чиқариб бўлмайди.' },
           { status: 400 }
@@ -156,7 +162,7 @@ export async function POST(req: Request) {
       if (userSnap.exists && userSnap.data()?.workspaceId === workspaceId) {
         await userRef.set({ workspaceId: FieldValue.delete() }, { merge: true });
       }
-      return NextResponse.json({ success: true, removed: email });
+      return NextResponse.json({ success: true, removed: key });
     }
 
     // ---- TAKLIF ----
@@ -164,7 +170,7 @@ export async function POST(req: Request) {
     const limits = limitsOf(plan);
     const members = await listMembers(db, workspaceId);
 
-    if (members.some((m) => m.email === email)) {
+    if (members.some((m) => m.key === key)) {
       return NextResponse.json({ error: 'Бу одам аллақачон аъзо.' }, { status: 409 });
     }
     if (members.length >= limits.members) {
@@ -216,7 +222,10 @@ export async function POST(req: Request) {
     // ko'radi va yangi ish maydoni ochmaydi.
     await userRef.set(
       {
-        email,
+        // Firestore `undefined` ga ISTISNO tashlaydi — mavjudigina yoziladi.
+        // Signup route ham aynan shunday qiladi.
+        ...(email ? { email } : {}),
+        ...(phone ? { phone } : {}),
         role: 'user',
         status: 'active',
         workspaceId,
@@ -228,7 +237,7 @@ export async function POST(req: Request) {
 
     return NextResponse.json({
       success: true,
-      email,
+      key,
       alreadyRegistered: userSnap.exists,
       remaining: Number.isFinite(limits.members) ? limits.members - members.length - 1 : null,
     });

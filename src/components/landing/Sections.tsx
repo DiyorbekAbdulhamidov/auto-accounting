@@ -627,6 +627,21 @@ export function Footer() {
               {t("Кириш")}
             </NextLink>
           </nav>
+
+          {/* HUQUQIY USTUN. Ataylab alohida: to'lov tizimi moderatsiyasi
+              oferta, qaytarish tartibi va rekvizitlarni saytning HAR
+              sahifasidan topa olishi kerak — footer yagona shunday joy. */}
+          <nav className="flex flex-col gap-2 text-body">
+            <NextLink href={path("offer", locale)} className="text-ink-2 hover:text-ink">
+              {t("Оммавий оферта")}
+            </NextLink>
+            <NextLink href={path("refund", locale)} className="text-ink-2 hover:text-ink">
+              {t("Тўловни қайтариш")}
+            </NextLink>
+            <NextLink href={path("contact", locale)} className="text-ink-2 hover:text-ink">
+              {t("Алоқа ва реквизитлар")}
+            </NextLink>
+          </nav>
         </div>
 
         <div className="mt-8 flex flex-wrap items-center justify-between gap-3 border-t border-line pt-5 text-caption text-ink-3">

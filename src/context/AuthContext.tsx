@@ -5,6 +5,7 @@ import { auth, db } from "@/lib/firebase";
 import {
   onAuthStateChanged,
   signOut,
+  sendPasswordResetEmail,
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
   RecaptchaVerifier,
@@ -41,6 +42,8 @@ export interface AuthValue {
   login: (email: string, pass: string) => Promise<void>;
   /** Xato matnini qaytaradi; muvaffaqiyatda `null` */
   signup: (email: string, pass: string) => Promise<string | null>;
+  /** Parolni tiklash xati. `null` — yuborildi, aks holda xato matni. */
+  resetPassword: (email: string) => Promise<string | null>;
   /** SMS yuborish. `phone` E.164 shaklida (`+998901234567`). */
   sendSmsCode: (phone: string) => Promise<string | null>;
   /**
@@ -54,6 +57,30 @@ export interface AuthValue {
 }
 
 const AuthContext = createContext<AuthValue | null>(null);
+
+/**
+ * SMS so'rovi shuncha soniyada javob bermasa — TO'XTATILADI.
+ *
+ * NEGA KERAK: `signInWithPhoneNumber` ko'rinmas reCAPTCHA bilan
+ * ishlaydi. Tekshiruv o'tolmasa (domen ruxsat etilmagan, tarmoq
+ * to'sgan, kengaytma bloklagan) Firebase va'dasi na bajariladi, na
+ * rad etiladi — u JIM osilib qoladi. Natijada ekranda «Юборилмоқда...»
+ * mangu turadi va odam nima bo'lganini bilmaydi. 2026-08-19 da aynan
+ * shu holat jonli saytda kuzatilgan.
+ *
+ * Blaze yoqilib SMS ishlay boshlaganda so'rov 1–3 soniyada tugaydi,
+ * ya'ni bu chegara HECH QACHON ishlamaydi — kodni keyin o'zgartirish
+ * kerak emas.
+ */
+const SMS_TIMEOUT_MS = 20_000;
+
+/** `null` — vaqt tugadi. Aks holda asl natija. */
+function withTimeout<T>(work: Promise<T>, ms: number): Promise<T | null> {
+  return Promise.race([
+    work,
+    new Promise<null>((resolve) => setTimeout(() => resolve(null), ms)),
+  ]);
+}
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<AppUser | null>(null);
@@ -181,10 +208,43 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setLoading(false);
       const err = error as { code?: string; message?: string };
       const code = String(err?.code || "");
-      if (code.includes("email-already-in-use")) return "Бу электрон почта аллақачон рўйхатдан ўтган. Кириш бўлимидан фойдаланинг.";
+      if (code.includes("email-already-in-use"))
+        return "Бу электрон почта аллақачон рўйхатдан ўтган. «Кириш» бўлимига ўтинг — паролни эсламасангиз, «Паролни унутдингизми?» тугмасини босинг.";
       if (code.includes("weak-password")) return "Парол жуда содда — камида 6 та белги бўлсин.";
       if (code.includes("invalid-email")) return "Электрон почта нотўғри ёзилган.";
       return err?.message || "Рўйхатдан ўтишда хатолик.";
+    }
+  };
+
+
+  /* ============================================================
+     PAROLNI TIKLASH
+     ------------------------------------------------------------
+     Nega SHART: taklif qilingan odamning email'ida ALLAQACHON
+     Firebase hisobi bo'lishi mumkin (masalan avval o'zi sinab
+     ko'rgan). U holda `createUserWithEmailAndPassword`
+     «email-already-in-use» beradi, kirish esa parol so'raydi —
+     va tiklash yo'li bo'lmagani uchun odam BUTUNLAY qamalib
+     qolardi. 2026-08-19 da aynan shu holat yuz berdi.
+
+     XABAR ATAYLAB BIR XIL: email topilgan-topilmaganini aytmaymiz,
+     aks holda sahifa kimning hisobi borligini tekshirish vositasiga
+     aylanadi. Firebase ham «email enumeration protection» yoqilganda
+     shunday qiladi — ya'ni bu yerda uni yashirmasak ham baribir
+     bilib bo'lmasdi.
+     ============================================================ */
+  const resetPassword = async (email: string): Promise<string | null> => {
+    try {
+      await sendPasswordResetEmail(auth, email);
+      return null;
+    } catch (error) {
+      const code = String((error as { code?: string })?.code || "");
+      // «Hisob topilmadi» ham MUVAFFAQIYAT deb ko'rsatiladi — yuqoridagi
+      // sababga ko'ra. Faqat haqiqiy xatolar chiqadi.
+      if (code.includes("user-not-found")) return null;
+      if (code.includes("invalid-email")) return "Электрон почта нотўғри ёзилган.";
+      if (code.includes("too-many-requests")) return "Жуда кўп уриниш. Бир оздан сўнг қайта уриниб кўринг.";
+      return "Хат юборилмади. Кейинроқ қайта уриниб кўринг.";
     }
   };
 
@@ -257,7 +317,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const sendSmsCode = async (phone: string): Promise<string | null> => {
     try {
-      confirmationRef.current = await signInWithPhoneNumber(auth, phone, getVerifier());
+      const confirmation = await withTimeout(
+        signInWithPhoneNumber(auth, phone, getVerifier()),
+        SMS_TIMEOUT_MS
+      );
+      if (!confirmation) {
+        // Osilib qolgan tekshiruv qayta ishlatilmaydi (pastdagi bilan
+        // bir xil sabab) — aks holda keyingi urinish ham osilardi.
+        try {
+          verifierRef.current?.clear();
+        } catch {
+          /* konteyner allaqachon yo'q bo'lishi mumkin */
+        }
+        verifierRef.current = null;
+        return "SMS юборилмади: текширув жавоб бермади. Саҳифани янгилаб қайта уриниб кўринг ёки email ва парол билан киринг.";
+      }
+      confirmationRef.current = confirmation;
       return null;
     } catch (error) {
       const err = error as { code?: string; message?: string };
@@ -315,7 +390,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, signup, sendSmsCode, confirmSmsCode, logout }}>
+    <AuthContext.Provider value={{ user, loading, login, signup, resetPassword, sendSmsCode, confirmSmsCode, logout }}>
       {children}
     </AuthContext.Provider>
   );

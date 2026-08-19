@@ -59,7 +59,7 @@ const plans = jiti(path.join(PROJ, 'src/lib/plans.ts'));
 const { limitsOf, companyLimitReached } = plans;
 const { buildFailureRecord } = jiti(path.join(PROJ, 'src/lib/parseFailureLog.ts'));
 const { toE164, formatPhone } = jiti(path.join(PROJ, 'src/lib/phone.ts'));
-const { accountKeyOf } = jiti(path.join(PROJ, 'src/lib/workspace.ts'));
+const { accountKeyOf, inviteKeyOf } = jiti(path.join(PROJ, 'src/lib/workspace.ts'));
 const {
   mergeOutgoingRows,
   mergeIncomingRows,
@@ -778,6 +778,52 @@ function runMergeTest() {
  * Shuning uchun `limitsOf` ga sana berilsa ham javob O'ZGARMASLIGI
  * kerak.
  * ============================================================ */
+/* ============================================================
+ * TAKLIF KALITI
+ * ------------------------------------------------------------
+ * Taklif oynasiga yozilgan matndan chiqadigan kalit, kirgan
+ * odamning tokendan chiqadigan kaliti bilan AYNAN bir xil
+ * bo'lishi shart.
+ *
+ * Nega: `resolveWorkspaceId` `allowed_users/{kalit}` ni qidiradi.
+ * Taklif boshqa kalitga yozilsa, hujjat TOPILMAYDI va odamga
+ * yangi ish maydoni ochiladi — xato ham chiqmaydi, ega esa
+ * «ro'yxatdan o'tmagan» yozuvini mangu ko'rib turadi.
+ * ============================================================ */
+function runInviteKeyTest() {
+  console.log(`\n============================================================`);
+  console.log('TAKLIF KALITI: qo\'lda yozilgan matn = tokendagi kalit');
+
+  // Email
+  ok(inviteKeyOf('Hamkasb@Firma.UZ').key === 'hamkasb@firma.uz', 'email kichik harfga tushdi');
+  ok(inviteKeyOf('  a@b.uz  ').key === 'a@b.uz', 'bo\'shliqlar olib tashlandi');
+  ok(inviteKeyOf('a@b.uz').phone === undefined, 'emailda telefon maydoni yozilmaydi');
+
+  // Telefon — barcha yozuv shakllari bitta kalitga
+  const forms = ['901234567', '90 123 45 67', '998901234567', '+998 90 123-45-67'];
+  const keys = new Set(forms.map((f) => inviteKeyOf(f).key));
+  ok(keys.size === 1 && keys.has('+998901234567'), '4 xil yozuv bitta kalitga keldi: +998901234567');
+  ok(inviteKeyOf('90 123 45 67').email === undefined, 'telefonda email maydoni yozilmaydi');
+
+  // ENG MUHIMI: taklif kaliti = tokendan chiqadigan kalit
+  ok(
+    inviteKeyOf('90 123 45 67').key === accountKeyOf(null, '+998901234567'),
+    'SMS bilan kirgan odamning kaliti taklif kaliti bilan bir xil'
+  );
+  ok(
+    inviteKeyOf('Hamkasb@Firma.UZ').key === accountKeyOf('hamkasb@firma.uz', null),
+    'email bilan kirgan odamning kaliti taklif kaliti bilan bir xil'
+  );
+
+  // Rad etiladiganlar
+  ok(inviteKeyOf('') === null, 'bo\'sh matn rad etildi');
+  ok(inviteKeyOf('   ') === null, 'faqat bo\'shliq rad etildi');
+  ok(inviteKeyOf('hamkasb') === null, 'na email, na raqam — rad etildi');
+  ok(inviteKeyOf('a@b') === null, 'nuqtasiz email rad etildi');
+  ok(inviteKeyOf('12345') === null, 'qisqa raqam rad etildi');
+  ok(inviteKeyOf('+7 900 123 45 67') === null, 'boshqa davlat kodi rad etildi');
+}
+
 function runPlanLimitTest() {
   console.log(`\n============================================================`);
   console.log('BEPUL REJA: cheklov va vaqtga bog\'liq emasligi');
@@ -1029,6 +1075,7 @@ runPeriodTest();
 runOpenInvoiceTest();
 runMergeTest();
 runPlanLimitTest();
+runInviteKeyTest();
 runFailureLogTest();
 runPhoneTest();
 

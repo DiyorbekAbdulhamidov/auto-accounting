@@ -24,6 +24,7 @@
 
 export const WORKSPACES = 'workspaces';
 export const MEMBERS = 'members';
+import { toE164 } from './phone';
 export const ALLOWED_USERS = 'allowed_users';
 
 /** Chiqim sverkasi hisobotlari (tarixiy nom — o'zgartirilmaydi:
@@ -55,6 +56,30 @@ export function accountKeyOf(
   phone?: string | null
 ): string | null {
   return email || phone || null;
+}
+
+/**
+ * Taklif oynasiga yozilgan matndan HISOB KALITINI tuzadi.
+ *
+ * Yuqoridagi qoidaning JUFTI: u tokendan kalit oladi, bu esa QO'LDA
+ * yozilgan matndan. Ikkalasi bir xil natija berishi shart — aks holda
+ * taklif bir kalitga yoziladi, odam esa boshqasi bilan kiradi va unga
+ * YANGI ish maydoni ochilib ketadi (xato ham chiqmaydi).
+ *
+ * `@` bo'yicha ajratiladi: telefon raqamida u hech qachon bo'lmaydi.
+ * Telefon `toE164` dan o'tadi — Firebase ham aynan shu shaklni yozadi.
+ */
+export function inviteKeyOf(
+  raw: unknown
+): { key: string; email?: string; phone?: string } | null {
+  const value = String(raw ?? '').trim();
+  if (!value) return null;
+  if (value.includes('@')) {
+    const email = value.toLowerCase();
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ? { key: email, email } : null;
+  }
+  const phone = toE164(value);
+  return phone ? { key: phone, phone } : null;
 }
 
 export type WorkspaceRole = 'owner' | 'member';

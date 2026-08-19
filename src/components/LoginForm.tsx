@@ -67,7 +67,7 @@ type Step = "phone" | "code" | "email";
 export default function LoginForm() {
   const t = useT();
   const locale = useLocale();
-  const { login, signup, sendSmsCode, confirmSmsCode } = useAuth();
+  const { login, signup, resetPassword, sendSmsCode, confirmSmsCode } = useAuth();
 
   // Boshlang'ich qadam — EMAIL (yuqoridagi izohga qara)
   const [step, setStep] = useState<Step>("email");
@@ -84,6 +84,8 @@ export default function LoginForm() {
   const [email, setEmail] = useState(DEMO_EMAIL);
   const [password, setPassword] = useState(DEMO_PASSWORD);
   const [emailMode, setEmailMode] = useState<"login" | "signup">("login");
+  /** Parolni tiklash xati yuborilgani — xato emas, shuning uchun alohida */
+  const [resetSent, setResetSent] = useState(false);
 
   const handleSendSms = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -128,6 +130,25 @@ export default function LoginForm() {
       await login(email, password);
     }
     setIsSubmitting(false);
+  };
+
+
+  /**
+   * Parolni tiklash. Email maydoni TO'LDIRILGAN bo'lishi shart —
+   * alohida oyna ochilmaydi: qadam qo'shmaslik qoidasi.
+   */
+  const handleReset = async () => {
+    setError(null);
+    setResetSent(false);
+    if (!email.trim()) {
+      setError(t("Аввал email манзилни ёзинг."));
+      return;
+    }
+    setIsSubmitting(true);
+    const message = await resetPassword(email.trim());
+    setIsSubmitting(false);
+    if (message) setError(message);
+    else setResetSent(true);
   };
 
   const title =
@@ -203,7 +224,7 @@ export default function LoginForm() {
               />
             </Field>
 
-            {error && <Alert tone="bad">{error}</Alert>}
+            {error && <Alert tone="bad">{t(error)}</Alert>}
 
             <Button type="submit" variant="primary" block loading={isSubmitting}>
               {isSubmitting ? t("Юборилмоқда...") : t("SMS код олиш")}
@@ -227,7 +248,7 @@ export default function LoginForm() {
               />
             </Field>
 
-            {error && <Alert tone="bad">{error}</Alert>}
+            {error && <Alert tone="bad">{t(error)}</Alert>}
 
             <Button type="submit" variant="primary" block loading={isSubmitting}>
               {isSubmitting ? t("Текширилмоқда...") : t("Кириш")}
@@ -281,7 +302,12 @@ export default function LoginForm() {
               />
             </Field>
 
-            {error && <Alert tone="bad">{error}</Alert>}
+            {error && <Alert tone="bad">{t(error)}</Alert>}
+            {resetSent && (
+              <Alert tone="ok">
+                {t("Тиклаш ҳаволаси юборилди. Почтангизни (ва «Спам» папкасини) текширинг.")}
+              </Alert>
+            )}
 
             <Button type="submit" variant="primary" block loading={isSubmitting}>
               {isSubmitting
@@ -291,6 +317,17 @@ export default function LoginForm() {
                   : t("Тизимга кириш")}
             </Button>
 
+            {emailMode === "login" && (
+              <button
+                type="button"
+                onClick={handleReset}
+                disabled={isSubmitting}
+                className="block w-full text-center text-caption text-ink-3 hover:text-ink-2 hover:underline disabled:opacity-50"
+              >
+                {t("Паролни унутдингизми?")}
+              </button>
+            )}
+
             <p className="text-center text-caption text-ink-3">
               {emailMode === "signup" ? t("Аллақачон ҳисобингиз борми?") : t("Ҳисобингиз йўқми?")}{" "}
               <button
@@ -298,6 +335,7 @@ export default function LoginForm() {
                 onClick={() => {
                   setEmailMode(emailMode === "signup" ? "login" : "signup");
                   setError(null);
+                  setResetSent(false);
                 }}
                 className="font-medium text-accent-ink hover:underline"
               >

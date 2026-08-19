@@ -4,8 +4,14 @@
 // «Бюро» rejasi 5 foydalanuvchi va'da qiladi, lekin odam qo'shish
 // yo'li umuman yo'q edi — ya'ni o'sha rejani sotib bo'lmasdi.
 //
-// Taklif PAROLSIZ: ega faqat emailni kiritadi, taklif qilingan odam
-// esa odatdagidek ro'yxatdan o'tadi va O'ZI ish maydoniga tushadi.
+// Taklif PAROLSIZ: ega email YOKI telefon raqamini kiritadi, taklif
+// qilingan odam esa odatdagidek ro'yxatdan o'tadi (email bilan ham,
+// SMS bilan ham) va O'ZI ish maydoniga tushadi.
+//
+// NEGA TELEFON HAM: hisob kaliti email bo'lmasa telefon bo'ladi. Ya'ni
+// SMS bilan kiradigan odamni EMAIL bilan taklif qilib bo'lmaydi — uning
+// kaliti `+998...`, taklif esa email ustiga yozilgan bo'lardi va u
+// kirganda o'ziga ALOHIDA ish maydoni ochilib ketardi. Jimgina.
 // Sabab `src/app/api/workspace/members/route.ts` da yozilgan.
 //
 // Parol bu yerda HECH QACHON ko'rilmaydi va yaratilmaydi.
@@ -13,9 +19,10 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Mail, UserPlus, X } from "lucide-react";
+import { Mail, Phone, UserPlus, X } from "lucide-react";
 import { useT } from "@/context/LanguageContext";
 import { authFetch } from "@/lib/authFetch";
+import { formatPhone } from "@/lib/phone";
 import {
   Alert,
   Badge,
@@ -27,10 +34,15 @@ import {
 } from "@/components/ui";
 
 interface Member {
-  email: string;
+  /** Email yoki telefon (E.164) — server bilan bir xil nom */
+  key: string;
   role: string;
   status: string;
 }
+
+/** Telefon kaliti `+` bilan boshlanadi — ekranda bo'shliqli ko'rsatiladi */
+const isPhoneKey = (key: string) => key.startsWith("+");
+const showKey = (key: string) => (isPhoneKey(key) ? formatPhone(key) : key);
 
 interface MembersResponse {
   success?: boolean;
@@ -121,21 +133,23 @@ export default function TeamModal({
 
   const handleInvite = async (e: React.FormEvent) => {
     e.preventDefault();
-    const value = email.trim().toLowerCase();
+    // Kichik harfga O'TKAZILMAYDI: telefon raqamida ma'nosi yo'q, email
+    // esa serverda baribir kichiklashtiriladi (kalit qoidasi bitta joyda).
+    const value = email.trim();
     if (!value) return;
-    const res = await send({ action: "invite", email: value });
+    const res = await send({ action: "invite", key: value });
     if (!res?.success) return;
     setEmail("");
     notify.ok(
       t("Таклиф қилинди"),
-      t("Шу email билан рўйхатдан ўтганда — иш майдонингизга тушади.")
+      t("Шу email ёки телефон билан рўйхатдан ўтганда — иш майдонингизга тушади.")
     );
     await load();
   };
 
   const handleRemove = async (member: Member) => {
-    if (!confirm(`${member.email} — ${t("иш майдонидан чиқарилсинми?")}`)) return;
-    const res = await send({ action: "remove", email: member.email });
+    if (!confirm(`${showKey(member.key)} — ${t("иш майдонидан чиқарилсинми?")}`)) return;
+    const res = await send({ action: "remove", key: member.key });
     if (!res?.success) return;
     notify.ok(t("Чиқарилди"), t("Бу одам энди сизнинг маълумотингизни кўрмайди."));
     await load();
@@ -183,13 +197,19 @@ export default function TeamModal({
         </div>
       ) : (
         <div className="space-y-4">
-          {error && <Alert tone="bad">{error}</Alert>}
+          {error && <Alert tone="bad">{t(error)}</Alert>}
 
           <ul className="divide-y divide-line rounded-lg border border-line">
             {members.map((m) => (
-              <li key={m.email} className="flex items-center gap-2 px-3 py-2.5">
-                <Mail className="h-4 w-4 shrink-0 text-ink-3" />
-                <span className="min-w-0 flex-1 truncate text-body text-ink">{m.email}</span>
+              <li key={m.key} className="flex items-center gap-2 px-3 py-2.5">
+                {isPhoneKey(m.key) ? (
+                  <Phone className="h-4 w-4 shrink-0 text-ink-3" />
+                ) : (
+                  <Mail className="h-4 w-4 shrink-0 text-ink-3" />
+                )}
+                <span className="min-w-0 flex-1 truncate text-body text-ink">
+                  {showKey(m.key)}
+                </span>
                 {m.role === "owner" ? (
                   <Badge tone="ok">{t("эга")}</Badge>
                 ) : m.status === "invited" ? (
@@ -237,10 +257,12 @@ export default function TeamModal({
             <form onSubmit={handleInvite} className="space-y-2">
               <div className="flex gap-2">
                 <Input
-                  type="email"
+                  // `type="email"` EMAS: brauzer telefon raqamini rad etardi
+                  // va shakl umuman yuborilmasdi. Tekshiruv serverda.
+                  type="text"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="hamkasb@example.com"
+                  placeholder={t("hamkasb@example.com ёки 90 123 45 67")}
                   autoComplete="off"
                   required
                 />
@@ -255,7 +277,7 @@ export default function TeamModal({
                 </Button>
               </div>
               <p className="text-caption text-ink-3">
-                {t("Парол керак эмас: шу email билан рўйхатдан ўтса — ўзи иш майдонингизга тушади.")}
+                {t("Парол керак эмас: шу email ёки телефон билан рўйхатдан ўтса — ўзи иш майдонингизга тушади. SMS билан кирадиган ҳамкасбни ТЕЛЕФОН рақами билан таклиф қилинг.")}
               </p>
             </form>
           )}

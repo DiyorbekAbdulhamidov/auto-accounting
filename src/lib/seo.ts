@@ -87,6 +87,27 @@ const UZ: Record<PathKey, SeoCopy> = {
     description: "Hisobingizga kiring yoki bepul ro'yxatdan o'ting — 3 ta korxona, sverka cheksiz.",
     keywords: [],
   },
+  offer: {
+    title: "Ommaviy oferta",
+    description:
+      "Moslik veb-xizmatidan foydalanish shartnomasi: xizmat predmeti, narx va to'lov tartibi, " +
+      "tomonlarning majburiyatlari, ma'lumot maxfiyligi va javobgarlik chegarasi.",
+    keywords: ["ommaviy oferta", "foydalanish shartlari", "shartnoma"],
+  },
+  refund: {
+    title: "To'lovni qaytarish",
+    description:
+      "Pul qaytariladigan holatlar, ariza berish tartibi va muddatlar. Obunani bekor qilish — " +
+      "yuklangan korxonalar va hisobotlar yo'qolmaydi.",
+    keywords: ["to'lovni qaytarish", "pulni qaytarish", "obunani bekor qilish"],
+  },
+  contact: {
+    title: "Aloqa va rekvizitlar",
+    description:
+      "Moslik xizmati rekvizitlari: ijrochi, ro'yxatdan o'tish ma'lumotnomasi, faoliyat manzili, " +
+      "telefon va elektron pochta.",
+    keywords: ["aloqa", "rekvizitlar", "qo'llab-quvvatlash"],
+  },
   clients: { title: "Mijozlar", description: "", keywords: [] },
   adminUsers: { title: "Foydalanuvchilar", description: "", keywords: [] },
 };
@@ -135,6 +156,27 @@ const UZ_CYRL: Record<PathKey, SeoCopy> = {
     title: "Кириш",
     description: "Ҳисобингизга киринг ёки бепул рўйхатдан ўтинг — 3 та корхона, сверка чексиз.",
     keywords: [],
+  },
+  offer: {
+    title: "Оммавий оферта",
+    description:
+      "Moslik веб-хизматидан фойдаланиш шартномаси: хизмат предмети, нарх ва тўлов тартиби, " +
+      "тарафларнинг мажбуриятлари, маълумот махфийлиги ва жавобгарлик чегараси.",
+    keywords: ["оммавий оферта", "фойдаланиш шартлари", "шартнома"],
+  },
+  refund: {
+    title: "Тўловни қайтариш",
+    description:
+      "Пул қайтариладиган ҳолатлар, ариза бериш тартиби ва муддатлар. Обунани бекор қилиш — " +
+      "юкланган корхоналар ва ҳисоботлар йўқолмайди.",
+    keywords: ["тўловни қайтариш", "пулни қайтариш", "обунани бекор қилиш"],
+  },
+  contact: {
+    title: "Алоқа ва реквизитлар",
+    description:
+      "Moslik хизмати реквизитлари: ижрочи, рўйхатдан ўтиш маълумотномаси, фаолият манзили, " +
+      "телефон ва электрон почта.",
+    keywords: ["алоқа", "реквизитлар", "қўллаб-қувватлаш"],
   },
   clients: { title: "Мижозлар", description: "", keywords: [] },
   adminUsers: { title: "Фойдаланувчилар", description: "", keywords: [] },
@@ -202,6 +244,27 @@ const RU: Record<PathKey, SeoCopy> = {
     description: "Войдите в аккаунт или зарегистрируйтесь бесплатно — 3 организации, сверок без ограничений.",
     keywords: [],
   },
+  offer: {
+    title: "Публичная оферта",
+    description:
+      "Договор на использование сервиса Moslik: предмет услуги, цена и порядок оплаты, " +
+      "обязанности сторон, конфиденциальность данных и пределы ответственности.",
+    keywords: ["публичная оферта", "условия использования", "договор"],
+  },
+  refund: {
+    title: "Возврат средств",
+    description:
+      "Случаи возврата платежа, порядок подачи заявления и сроки. Отмена подписки — " +
+      "загруженные организации и отчёты не пропадают.",
+    keywords: ["возврат средств", "возврат платежа", "отмена подписки"],
+  },
+  contact: {
+    title: "Контакты и реквизиты",
+    description:
+      "Реквизиты сервиса Moslik: исполнитель, справка о регистрации, адрес деятельности, " +
+      "телефон и электронная почта.",
+    keywords: ["контакты", "реквизиты", "поддержка"],
+  },
   clients: { title: "Клиенты", description: "", keywords: [] },
   adminUsers: { title: "Пользователи", description: "", keywords: [] },
 };
@@ -247,6 +310,27 @@ const EN: Record<PathKey, SeoCopy> = {
     title: "Sign in",
     description: "Sign in or create a free account — 3 companies, unlimited reconciliations.",
     keywords: [],
+  },
+  offer: {
+    title: "Public offer",
+    description:
+      "Terms for using the Moslik service: subject of the service, price and payment, " +
+      "obligations of the parties, data confidentiality and limits of liability.",
+    keywords: ["public offer", "terms of use", "agreement"],
+  },
+  refund: {
+    title: "Refunds",
+    description:
+      "When a payment is refunded, how to request it, and the timelines. Cancelling a " +
+      "subscription — uploaded companies and reports are not lost.",
+    keywords: ["refund", "money back", "cancel subscription"],
+  },
+  contact: {
+    title: "Contacts and details",
+    description:
+      "Moslik service details: provider, registration certificate, place of activity, " +
+      "phone and email.",
+    keywords: ["contacts", "company details", "support"],
   },
   clients: { title: "Clients", description: "", keywords: [] },
   adminUsers: { title: "Users", description: "", keywords: [] },

@@ -23,6 +23,12 @@ export const PATHS = {
   pricing: '/pricing',
   features: '/features',
   login: '/login',
+  // Huquqiy sahifalar. To'lov tizimi (Click) moderatsiyasi saytda
+  // AYNAN shularni qidiradi: ommaviy oferta, to'lovni qaytarish
+  // tartibi va rekvizitlar bilan aloqa. Ular bo'lmasa ariza qaytadi.
+  offer: '/offer',
+  refund: '/refund',
+  contact: '/contact',
   clients: '/clients',
   adminUsers: '/admin/users',
 } as const;
@@ -30,7 +36,16 @@ export const PATHS = {
 export type PathKey = keyof typeof PATHS;
 
 /** Qidiruv tizimiga ochiq (indekslanadigan) sahifalar */
-export const PUBLIC_PATHS: PathKey[] = ['home', 'guide', 'pricing', 'features', 'login'];
+export const PUBLIC_PATHS: PathKey[] = [
+  'home',
+  'guide',
+  'pricing',
+  'features',
+  'login',
+  'offer',
+  'refund',
+  'contact',
+];
 
 /** `/uz/pricing` kabi to'liq manzil */
 export function path(key: PathKey, locale: Locale = DEFAULT_LOCALE): string {
