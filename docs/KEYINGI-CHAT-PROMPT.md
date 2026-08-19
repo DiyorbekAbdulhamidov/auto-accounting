@@ -15,14 +15,14 @@ Men o'zbekcha (lotin) yozaman. UI matnlari va `t()` kalitlari — kirill o'zbekc
 ═══════════════════════════════════════════════════════════
 
 1. Shu uchta faylni TO'LIQ o'qi:
-   - `HANDOFF.md` — texnik holat. **§15, §16, §17 eng yangisi.**
+   - `HANDOFF.md` — texnik holat. **§17, §18 eng yangisi.**
    - `MAHSULOT-QARORLARI.md` — nom, atamalar, UI rejasi, bozor, narx
    - `docs/TAHLIL-2026-08-18.md` — dunyo tajribasi bilan solishtirish,
      kamchiliklar ro'yxati (dalil bilan), tayyorlik bahosi
 
 2. Tekshiruvlarni ishga tushir va natijani solishtir:
    ```
-   node scripts/verify-parsers.cjs   ->  93/93 o'tishi SHART
+   node scripts/verify-parsers.cjs   ->  124/124 o'tishi SHART
    npx tsc --noEmit                  ->  toza
    npx eslint src --max-warnings=0   ->  toza
    npx next build                    ->  xatosiz, 41 marshrut
@@ -118,13 +118,27 @@ qo'shyaptimi yoki olyaptimi?*
 4. KEYINGI ISHLAR — MUHIMLIK TARTIBIDA
 ═══════════════════════════════════════════════════════════
 
-1. **Jonli Firestore sinovi** (2-bo'lim). Qoidalar deploy qilindi,
-   qolgani shu — BLOKER, undan oldin yangi funksiya yozilmaydi.
-2. **10 ta haqiqiy buxgalterga berish.** O'lchov: nechtasi IKKINCHI
+1. **Firebase Console: telefon autentifikatsiyasini yoqish** —
+   HANDOFF §18c oxiridagi 5 ta band. Kod tayyor, Console'siz SMS
+   ketmaydi. Sinovni «Test phone numbers» bilan qiling, haqiqiy
+   raqamga kod yubormang.
+2. **Firebase Blaze rejasi** — Spark'da haqiqiy SMS UMUMAN
+   yuborilmaydi (`auth/billing-not-enabled`). Sinov raqamlari
+   ishlayveradi, ya'ni ishlab chiqish uchun kerak emas; haqiqiy
+   foydalanuvchi uchun SHART. Yoqilganda byudjet ogohlantirishi
+   qo'yilsin.
+3. **Domen + Vercel'ga deploy.** Ilova hech qayerga deploy qilinmagan
+   (`vercel.json` yo'q) — 1 sentabr uchun eng katta xavf, chunki bu
+   qadamlarning ko'pi kod EMAS.
+4. **Jonli Firestore sinovi** (2-bo'lim) — BLOKER.
+4. **Narx sahifasi matni:** bepul davrda cheklov CHEKSIZ, lekin
+   sahifada hali «3 та корхона» turadi (`limitsOf` faqat cheklovni
+   qo'llaydi, marketing `PLANS` ni o'qiydi).
+5. **10 ta haqiqiy buxgalterga berish.** O'lchov: nechtasi IKKINCHI
    oyda ham qaytadi. Mezon: MAHSULOT-QARORLARI §8.3.
-3. Ekran testlari — loyihada test yuruvchisining O'ZI ham yo'q
+6. Ekran testlari — loyihada test yuruvchisining O'ZI ham yo'q
    (parser harness bor, React komponentlari qoplanmagan)
-4. Parol tiklash — ataylab qoldirilgan, kerak bo'lsa ayt
+7. ~~Parol tiklash~~ — BEKOR: SMS bilan kirishda parol yo'q
 5. `api.faktura.uz` bilan bog'lanish (MAHSULOT-QARORLARI §8.3)
 6. Notanish formatni 3 namuna qator bilan tasdiqlatish
 7. Birlashtirishni AJRATISH hozir faylni qayta yuklashni talab qiladi

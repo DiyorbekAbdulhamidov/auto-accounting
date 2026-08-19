@@ -14,6 +14,7 @@ import {
   suggestMerges,
   type MergeGroup,
 } from '@/lib/counterpartyMerge';
+import { buildFailureRecord, logParseFailure } from '@/lib/parseFailureLog';
 import type { Firestore } from 'firebase-admin/firestore';
 
 export const runtime = 'nodejs';
@@ -237,6 +238,24 @@ export async function POST(req: Request) {
     // `categoryTotals` shundayligicha to'g'ri qoladi.
     const mergedData = mergeOutgoingRows(result.data, mergeGroups);
     const mergeSuggestions = suggestMerges(result.data, mergeGroups, 'out');
+
+    // YIQILGAN FAYL JURNALI. Muvaffaqiyatli yuklashda hech narsa
+    // yozilmaydi — `buildFailureRecord` null qaytaradi.
+    await logParseFailure(
+      auth.admin.db,
+      buildFailureRecord({
+        workspaceId: auth.user.workspaceId,
+        companyId,
+        side: 'out',
+        at: new Date().toISOString(),
+        fileCount: files.length,
+        parsedCount: result.data.length,
+        sheets: result.sheets,
+        unverifiedFiles: result.unverifiedFiles,
+        detectedFormats: result.detectedFormats,
+        warnings: result.warnings,
+      })
+    );
 
     if (result.data.length === 0) {
       return NextResponse.json({

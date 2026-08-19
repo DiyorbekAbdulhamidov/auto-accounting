@@ -7,10 +7,14 @@ import {
   signOut,
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
+  RecaptchaVerifier,
+  signInWithPhoneNumber,
+  type ConfirmationResult,
 } from "firebase/auth";
 import { doc, getDoc } from "firebase/firestore";
 import { usePathname, useRouter } from "next/navigation";
 import { isPath, localeFromPathname, path } from "@/lib/routes";
+import { accountKeyOf } from "@/lib/workspace";
 
 /**
  * Ilova ko'radigan foydalanuvchi: Firebase hisobi + `allowed_users`
@@ -37,6 +41,15 @@ export interface AuthValue {
   login: (email: string, pass: string) => Promise<void>;
   /** Xato matnini qaytaradi; muvaffaqiyatda `null` */
   signup: (email: string, pass: string) => Promise<string | null>;
+  /** SMS yuborish. `phone` E.164 shaklida (`+998901234567`). */
+  sendSmsCode: (phone: string) => Promise<string | null>;
+  /**
+   * SMS kodini tasdiqlash. Telefonda RO'YXATDAN O'TISH alohida amal
+   * EMAS: Firebase raqamni birinchi ko'rganda hisobni o'zi ochadi,
+   * shuning uchun bu funksiya har doim `/api/signup` ni ham chaqiradi
+   * (u idempotent).
+   */
+  confirmSmsCode: (code: string) => Promise<string | null>;
   logout: () => Promise<void>;
 }
 
@@ -71,8 +84,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       try {
         if (signingUpRef.current) return;
-        if (firebaseUser?.email) {
-          const userRef = doc(db, "allowed_users", firebaseUser.email);
+        // HISOB KALITI: email YOKI telefon raqami. Ilgari bu yerda faqat
+        // `firebaseUser?.email` tekshirilardi — SMS bilan kirgan odam
+        // `else` shoxiga tushib, kirmagan hisoblanardi.
+        const key = accountKeyOf(firebaseUser?.email, firebaseUser?.phoneNumber);
+        if (firebaseUser && key) {
+          const userRef = doc(db, "allowed_users", key);
           const userSnap = await getDoc(userRef);
 
           if (userSnap.exists()) {
@@ -152,7 +169,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // Ish maydoni endi tayyor — foydalanuvchi holatini O'ZIMIZ qo'yamiz.
       // `onAuthStateChanged` bu hisob uchun allaqachon ishlab bo'lgan va
       // qaytadan chaqirilmaydi.
-      const userSnap = await getDoc(doc(db, "allowed_users", cred.user.email!));
+      const key = accountKeyOf(cred.user.email, cred.user.phoneNumber)!;
+      const userSnap = await getDoc(doc(db, "allowed_users", key));
       signingUpRef.current = false;
       setUser({ ...cred.user, ...(userSnap.exists() ? userSnap.data() : {}) });
       setLoading(false);
@@ -170,13 +188,134 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  /* ============================================================
+     SMS BILAN KIRISH
+     ------------------------------------------------------------
+     Uch qaror:
+
+      1. RO'YXATDAN O'TISH ALOHIDA AMAL EMAS. Firebase telefon raqamini
+         birinchi ko'rganda hisobni O'ZI ochadi. Shuning uchun kod
+         tasdiqlangandan keyin HAR DOIM `/api/signup` chaqiriladi — u
+         idempotent: ish maydoni yo'q bo'lsa yaratadi, bor bo'lsa tegmaydi.
+
+      2. XATO BO'LSA HISOB O'CHIRILMAYDI. Email bilan ro'yxatdan o'tishda
+         `/api/signup` yiqilsa hisob o'chiriladi (u aynan shu lahzada
+         yaralgan). Telefonda esa hisob QAYTA KELGAN foydalanuvchiga
+         tegishli bo'lishi mumkin — o'chirish uning butun ma'lumotini
+         yo'q qilardi. Shu sabab faqat tizimdan chiqiladi.
+
+      3. reCAPTCHA konteyneri SHU YERDA yaratiladi. Firebase telefon
+         autentifikatsiyasi veb'da ilova tekshiruvini talab qiladi.
+         Konteynerni sahifaga qo'ydirsak, boshqa joydan chaqirilganda
+         element topilmay xato berardi.
+     ============================================================ */
+  const confirmationRef = useRef<ConfirmationResult | null>(null);
+  const verifierRef = useRef<RecaptchaVerifier | null>(null);
+
+  const getVerifier = (): RecaptchaVerifier => {
+    if (verifierRef.current) return verifierRef.current;
+    const ID = "recaptcha-holder";
+    let holder = document.getElementById(ID);
+    if (!holder) {
+      holder = document.createElement("div");
+      holder.id = ID;
+      document.body.appendChild(holder);
+    }
+    verifierRef.current = new RecaptchaVerifier(auth, ID, { size: "invisible" });
+    return verifierRef.current;
+  };
+
+  /** Firebase xato kodini o'zbekcha izohga o'giradi. */
+  const phoneError = (code: string, fallback: string): string => {
+    if (code.includes("invalid-phone-number")) return "Телефон рақами нотўғри. +998 билан ёзинг.";
+    if (code.includes("too-many-requests")) return "Жуда кўп уриниш бўлди. Бироз кутиб қайта уриниб кўринг.";
+    if (code.includes("quota-exceeded")) return "SMS чекловига етилди. Бироздан кейин уриниб кўринг.";
+    // Spark (бепул) режада ҲАҚИҚИЙ SMS умуман юборилмайди. Синов
+    // рақамлари ишлайверади — улар SMS юбормайди. Ҳақиқий фойдаланувчи
+    // учун Blaze режаси ШАРТ.
+    if (code.includes("billing-not-enabled")) {
+      return "SMS юбориш учун Firebase'да Blaze режаси ёқилиши керак (ҳозир бепул Spark режаси). Email ва парол билан киришингиз мумкин.";
+    }
+    if (code.includes("invalid-verification-code")) return "Код хато. Қайта киритиб кўринг.";
+    if (code.includes("code-expired")) return "Коднинг муддати тугади. Янги код сўранг.";
+    if (code.includes("captcha-check-failed")) return "Текширув ўтмади. Саҳифани янгилаб қайта уриниб кўринг.";
+    // `operation-not-allowed` IKKI xil sababdan keladi va Firebase
+    // ikkalasiga ham AYNAN shu kodni beradi. 2026-08-18 da xabar faqat
+    // birinchisini aytardi va noto'g'ri joyga yo'llardi — haqiqiy sabab
+    // ikkinchisi edi («SMS unable to be sent until this region enabled
+    // by the app developer»). Shuning uchun ikkalasi ham aytiladi.
+    if (code.includes("operation-not-allowed")) {
+      return (
+        "Firebase'да телефон билан кириш ёқилмаган ЁКИ SMS бу давлатга " +
+        "рухсат этилмаган. Иккаласини текширинг: Authentication -> " +
+        "Sign-in method -> Phone, ва Authentication -> Settings -> " +
+        "SMS region policy (Ўзбекистон рухсат этилганлар рўйхатида бўлсин)."
+      );
+    }
+    return fallback;
+  };
+
+  const sendSmsCode = async (phone: string): Promise<string | null> => {
+    try {
+      confirmationRef.current = await signInWithPhoneNumber(auth, phone, getVerifier());
+      return null;
+    } catch (error) {
+      const err = error as { code?: string; message?: string };
+      // Yiqilgan verifier QAYTA ISHLATILMAYDI — keyingi urinish ham
+      // yiqilardi. Tozalaymiz, shunda yangi tekshiruv yaratiladi.
+      try {
+        verifierRef.current?.clear();
+      } catch {
+        /* konteyner allaqachon yo'q bo'lishi mumkin */
+      }
+      verifierRef.current = null;
+      return phoneError(String(err?.code || ""), err?.message || "SMS юборилмади.");
+    }
+  };
+
+  const confirmSmsCode = async (code: string): Promise<string | null> => {
+    if (!confirmationRef.current) return "Аввал SMS код сўранг.";
+    setLoading(true);
+    signingUpRef.current = true;
+    try {
+      const cred = await confirmationRef.current.confirm(code);
+      const token = await cred.user.getIdToken();
+      const res = await fetch("/api/signup", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        // Hisob O'CHIRILMAYDI — sababi yuqorida (2-qaror).
+        await signOut(auth).catch(() => {});
+        signingUpRef.current = false;
+        setLoading(false);
+        return data.error || "Кириш тайёрланмади. Қайта уриниб кўринг.";
+      }
+
+      const key = accountKeyOf(cred.user.email, cred.user.phoneNumber)!;
+      const userSnap = await getDoc(doc(db, "allowed_users", key));
+      signingUpRef.current = false;
+      setUser({ ...cred.user, ...(userSnap.exists() ? userSnap.data() : {}) });
+      setLoading(false);
+      confirmationRef.current = null;
+      router.replace(path("clients", localeRef.current));
+      return null;
+    } catch (error) {
+      signingUpRef.current = false;
+      setLoading(false);
+      const err = error as { code?: string; message?: string };
+      return phoneError(String(err?.code || ""), err?.message || "Код тасдиқланмади.");
+    }
+  };
+
   const logout = async () => {
     await signOut(auth);
     router.replace(path("login", localeRef.current));
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, signup, logout }}>
+    <AuthContext.Provider value={{ user, loading, login, signup, sendSmsCode, confirmSmsCode, logout }}>
       {children}
     </AuthContext.Provider>
   );

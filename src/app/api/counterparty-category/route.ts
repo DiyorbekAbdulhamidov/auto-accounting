@@ -65,7 +65,7 @@ export async function POST(req: Request) {
           inn: inn && inn !== '-' ? inn : '',
           name,
           category,
-          updatedBy: auth.user.email,
+          updatedBy: auth.user.accountKey,
           updatedAt: new Date().toISOString(),
         },
         { merge: true }

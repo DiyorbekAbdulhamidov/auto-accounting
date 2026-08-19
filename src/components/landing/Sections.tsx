@@ -38,6 +38,7 @@ import { useLocale, useT } from "@/context/LanguageContext";
 import { BRAND } from "@/lib/brand";
 import { path } from "@/lib/routes";
 import { PLANS } from "@/lib/plans";
+import PromoBanner from "@/components/landing/PromoBanner";
 import { LogoMark } from "@/components/Brand";
 import ReconciliationAnimation, { ReconciliationAnimationText } from "@/components/guide/ReconciliationAnimation";
 import { ColourKey } from "@/components/guide/Guide";
@@ -114,7 +115,7 @@ export function Hero() {
             </div>
 
             <p className="mt-3 text-caption text-ink-3">
-              {t("Карта сўралмайди. Бепул режада 3 та корхона, сверка чексиз.")}
+              {t("Карта сўралмайди. 1 ноябргача корхона сони чексиз, сверка ҳам чексиз.")}
             </p>
 
             <div className="mt-7">
@@ -428,6 +429,12 @@ export function Pricing({ heading = true }: { heading?: boolean }) {
             </p>
           </>
         )}
+
+        {/* Очилиш даври. Режа карталари ЎЗГАРМАЙДИ — улар доимий
+            ҳақиқатни кўрсатади (1 ноябрдан кейин нима бўлишини), эълон
+            эса ҳозир нима бўлаётганини айтади. Иккиси бир экранда
+            туради, шунда ноябрда ҳеч ким «алдандим» демайди. */}
+        <PromoBanner className={heading ? "mt-6" : ""} />
 
         <div className={cx("grid grid-cols-1 gap-5 md:grid-cols-3", heading && "mt-8")}>
           {items.map((it) => (

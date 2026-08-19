@@ -11,11 +11,20 @@
 
 import { NextResponse } from "next/server";
 import { getAdminServices, getAdminInitError, type AdminServices } from "./firebaseAdmin";
-import { resolveWorkspaceId } from "./workspace";
+import { accountKeyOf, resolveWorkspaceId } from "./workspace";
 
 export interface AuthUser {
   uid: string;
-  email: string;
+  /**
+   * HISOB KALITI: email bo'lsa email, bo'lmasa telefon raqami (E.164).
+   *
+   * `firestore.rules` dagi `authKey()` bilan AYNAN bir xil qoida bo'lishi
+   * SHART — aks holda server bir hujjatni, qoidalar boshqasini tekshiradi.
+   * Audit izi (`updatedBy`, `createdBy`) ham shu qiymatni yozadi.
+   */
+  accountKey: string;
+  /** Haqiqiy email — SMS bilan kirgan foydalanuvchida BO'LMAYDI. */
+  email?: string;
   role: string;
   /** Foydalanuvchining ish maydoni. Yo'q bo'lsa shu yerda YARATILADI —
    *  aks holda ma'lumot egasiz yozilib qolardi (src/lib/workspace.ts). */
@@ -59,12 +68,16 @@ export async function requireUser(req: Request): Promise<AuthResult> {
       return deny("Сессия яроқсиз ёки муддати тугаган. Қайта киринг.", 401);
     }
 
+    // Email YOKI telefon raqami. Ilgari faqat email qabul qilinardi va
+    // SMS bilan kirgan odam 403 olardi.
     const email = decoded.email;
-    if (!email) {
-      return deny("Фойдаланувчи электрон почтаси аниқланмади.", 403);
+    const phone = decoded.phone_number;
+    const accountKey = accountKeyOf(email, phone);
+    if (!accountKey) {
+      return deny("Фойдаланувчи аниқланмади: электрон почта ҳам, телефон рақами ҳам йўқ.", 403);
     }
 
-    const snap = await admin.db.collection("allowed_users").doc(email).get();
+    const snap = await admin.db.collection("allowed_users").doc(accountKey).get();
     if (!snap.exists) {
       return deny("Сизга бу тизимга киришга рухсат берилмаган.", 403);
     }
@@ -81,14 +94,20 @@ export async function requireUser(req: Request): Promise<AuthResult> {
       const { FieldValue } = await import("firebase-admin/firestore");
       workspaceId = await resolveWorkspaceId(
         admin.db as unknown as Parameters<typeof resolveWorkspaceId>[0],
-        email,
+        accountKey,
         FieldValue.serverTimestamp()
       );
     }
 
     return {
       ok: true,
-      user: { uid: decoded.uid, email, role: String(data.role ?? "user"), workspaceId },
+      user: {
+        uid: decoded.uid,
+        accountKey,
+        email,
+        role: String(data.role ?? "user"),
+        workspaceId,
+      },
       admin,
     };
   } catch (e) {

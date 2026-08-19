@@ -16,6 +16,7 @@ import {
   suggestMerges,
   type MergeGroup,
 } from '@/lib/counterpartyMerge';
+import { buildFailureRecord, logParseFailure } from '@/lib/parseFailureLog';
 import type { Firestore } from 'firebase-admin/firestore';
 
 /** Qo'lda birlashtirilgan kontragent guruhlari. O'qilmasa sverka
@@ -99,6 +100,26 @@ export async function POST(req: Request) {
     }
 
     const report = analyzeIncome(inputs, { includePending });
+
+    // YIQILGAN FAYL JURNALI. Kirim tomonida varaq kesimi yo'q
+    // (`analyzeIncome` faqat varaq NOMLARINI qaytaradi), shuning
+    // uchun yozuv soddaroq: «bitta ham kontragent chiqmadi».
+    await logParseFailure(
+      auth.admin.db,
+      buildFailureRecord({
+        workspaceId: auth.user.workspaceId,
+        companyId,
+        side: 'in',
+        at: new Date().toISOString(),
+        fileCount: files.length,
+        parsedCount: report.parties.length,
+        detectedFormats: [
+          ...(report.meta?.bankSheets || []),
+          ...(report.meta?.facturaSheets || []),
+        ],
+        warnings: report.meta?.warnings,
+      })
+    );
 
     if (report.parties.length === 0) {
       return NextResponse.json(

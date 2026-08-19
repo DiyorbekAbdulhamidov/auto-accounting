@@ -575,6 +575,55 @@ export const DICTIONARY: Record<string, Entry> = {
 
   'Сақланган ҳисобот': { ru: 'Сохранённый отчёт', en: 'Saved report' },
 
+  'Кўрсатув учун маълумотлар олдиндан тўлдирилган — «Тизимга кириш»ни босинг': {
+    ru: 'Данные заполнены заранее для демонстрации — нажмите «Вход в систему»',
+    en: 'Fields are pre-filled for the demo — just press “Sign in”',
+  },
+
+  // ---------- Очилиш даври ----------
+  '1 ноябргача ҳаммаси бепул ва чексиз.': {
+    ru: 'До 1 ноября всё бесплатно и без ограничений.',
+    en: 'Everything is free and unlimited until 1 November.',
+  },
+  'Карта сўралмайди — фақат рўйхатдан ўтасиз. Кейин бепул режа қайтади: 3 та корхона, сверка чексиз. Юклаган корхоналарингиз ЙЎҚОЛМАЙДИ — улар кўринишда қолади, фақат янгисини қўшиш тўхтайди.': {
+    ru: 'Карта не нужна — только регистрация. Потом вернётся бесплатный тариф: 3 организации, сверок без ограничений. Загруженные организации НЕ пропадут — они останутся видимыми, остановится только добавление новых.',
+    en: 'No card required — just sign up. Afterwards the free plan returns: 3 companies, unlimited reconciliations. Companies you already added will NOT disappear — they stay visible; only adding new ones stops.',
+  },
+  'Карта сўралмайди. 1 ноябргача корхона сони чексиз, сверка ҳам чексиз.': {
+    ru: 'Карта не нужна. До 1 ноября число организаций не ограничено, сверок тоже.',
+    en: 'No card required. Until 1 November the number of companies is unlimited, and so are reconciliations.',
+  },
+
+  // ---------- Телефон билан кириш (SMS) ----------
+  'Телефон рақамингизни киритинг — парол керак эмас': {
+    ru: 'Введите номер телефона — пароль не нужен',
+    en: 'Enter your phone number — no password needed',
+  },
+  'Телефон рақами': { ru: 'Номер телефона', en: 'Phone number' },
+  '+998 автоматик қўшилади': { ru: '+998 добавится автоматически', en: '+998 is added automatically' },
+  'SMS код олиш': { ru: 'Получить SMS-код', en: 'Get SMS code' },
+  'Юборилмоқда...': { ru: 'Отправка...', en: 'Sending...' },
+  'SMS кодни киритинг': { ru: 'Введите SMS-код', en: 'Enter the SMS code' },
+  'SMS код': { ru: 'SMS-код', en: 'SMS code' },
+  'Код юборилди': { ru: 'Код отправлен', en: 'Code sent to' },
+  'Рақамни ўзгартириш': { ru: 'Изменить номер', en: 'Change number' },
+  'Телефон рақами нотўғри. Мисол: 90 123 45 67': {
+    ru: 'Неверный номер телефона. Пример: 90 123 45 67',
+    en: 'Invalid phone number. Example: 90 123 45 67',
+  },
+  'Email ва парол билан кириш': {
+    ru: 'Войти по email и паролю', en: 'Sign in with email and password',
+  },
+  'Телефон рақами билан кириш': {
+    ru: 'Войти по номеру телефона', en: 'Sign in with a phone number',
+  },
+  'Email билан кириш': { ru: 'Вход по email', en: 'Sign in with email' },
+
+  "SMS юбориш учун Firebase'да Blaze режаси ёқилиши керак (ҳозир бепул Spark режаси). Email ва парол билан киришингиз мумкин.": {
+    ru: 'Для отправки SMS в Firebase нужен тариф Blaze (сейчас бесплатный Spark). Вы можете войти по email и паролю.',
+    en: 'Sending SMS requires the Blaze plan in Firebase (currently the free Spark plan). You can sign in with email and password.',
+  },
+
   // ---------- Иш майдони аъзолари ----------
   'Жамоа': { ru: 'Команда', en: 'Team' },
   'Иш майдони аъзолари': { ru: 'Участники рабочего пространства', en: 'Workspace members' },

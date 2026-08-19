@@ -80,7 +80,7 @@ export async function POST(req: Request) {
         side,
         name: name || '',
         // AUDIT IZI: byuroda «kim buni birlashtirgan?» degan savolga javob
-        updatedBy: auth.user.email,
+        updatedBy: auth.user.accountKey,
         updatedAt: new Date().toISOString(),
       },
       { merge: false } // to'liq almashtiriladi: a'zo olib tashlansa qolib ketmasin

@@ -92,7 +92,7 @@ export async function GET(req: Request) {
     return NextResponse.json({
       success: true,
       members,
-      isOwner: ws.ownerEmail === auth.user.email,
+      isOwner: ws.ownerEmail === auth.user.accountKey,
       ownerEmail: ws.ownerEmail,
       plan,
       planLabel: limits.label,
@@ -125,7 +125,7 @@ export async function POST(req: Request) {
     if (!ws) {
       return NextResponse.json({ error: 'Иш майдони топилмади.' }, { status: 404 });
     }
-    if (ws.ownerEmail !== auth.user.email) {
+    if (ws.ownerEmail !== auth.user.accountKey) {
       return NextResponse.json(
         { error: 'Аъзоларни фақат иш майдони эгаси бошқаради.' },
         { status: 403 }
@@ -204,7 +204,7 @@ export async function POST(req: Request) {
         // yo'q (hujjat mavjudligi yetarli), lekin ekranda ko'rinadi.
         status: userSnap.exists ? 'active' : 'invited',
         addedAt: now,
-        addedBy: auth.user.email,
+        addedBy: auth.user.accountKey,
       },
       { merge: true }
     );
@@ -217,7 +217,7 @@ export async function POST(req: Request) {
         role: 'user',
         status: 'active',
         workspaceId,
-        invitedBy: auth.user.email,
+        invitedBy: auth.user.accountKey,
         invitedAt: now,
       },
       { merge: true }

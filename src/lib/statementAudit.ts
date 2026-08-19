@@ -101,6 +101,12 @@ export interface SheetReport {
   fileDebit?: number;
   fileCredit?: number;
   note?: string;
+  /** FAQAT `TANILMADI` varaqlar uchun: dastlabki qatorlarning matn
+   *  kataklari. Ekranda KO'RSATILMAYDI — u yiqilgan fayl jurnaliga
+   *  ketadi (`parse_failures`), ya'ni «qaysi shakl tanilmadi» degan
+   *  savolga javob beradi. Bu maydonsiz jurnal «yiqildi» deyishdan
+   *  boshqa hech narsa aytolmaydi. */
+  sampleRows?: string[][];
 }
 
 /** QOLDIQ TENGLAMASI natijasi. Mantiqning o'zi `bankStatements.ts` da —
@@ -889,7 +895,20 @@ export function auditFiles(files: InputFile[], options: AuditOptions = {}): Audi
       }
 
       carriedTitle = [];
-      sheets.push({ file: file.name, sheet: sd.sheet, format: 'TANILMADI', rows: 0, debit: 0, credit: 0, note: 'Ўқилмади' });
+      sheets.push({
+        file: file.name,
+        sheet: sd.sheet,
+        format: 'TANILMADI',
+        rows: 0,
+        debit: 0,
+        credit: 0,
+        note: 'Ўқилмади',
+        // Dastlabki 5 qator × 15 katak. Shapka odatda shu oraliqda
+        // bo'ladi; ko'proq olish ma'no bermaydi va hujjatni kattalashtiradi.
+        sampleRows: sd.rows.slice(0, 5).map((r) =>
+          r.slice(0, 15).map((c) => (c === null || c === undefined ? '' : String(c).slice(0, 60)))
+        ),
+      });
       warnings.push(`«${label}» — варақ танилмади ва ҲИСОБГА ОЛИНМАДИ (${sd.rows.length} қатор).`);
     }
 

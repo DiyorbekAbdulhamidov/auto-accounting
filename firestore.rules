@@ -14,14 +14,46 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
+    // ---- HISOB KALITI ----
+    // Email bo'lsa email, bo'lmasa TELEFON RAQAMI (E.164, `+998...`).
+    //
+    // Nega shunday: SMS bilan kirganda `request.auth.token.email` NULL
+    // bo'ladi. Ilgari bu yerda to'g'ridan-to'g'ri `token.email`
+    // ishlatilardi, ya'ni telefon bilan kirgan odamda `isAllowed()`
+    // false qaytarib butun ilova hamma narsani RAD ETARDI.
+    //
+    // Email USTUNLIKKA ega: bir hisobga ikkalasi ham bog'langan bo'lsa
+    // kalit o'zgarmaydi va mavjud hujjatlar joyida qoladi.
+    //
+    // Ikkala qiymat ham Firebase tomonidan TASDIQLANGAN credential'dan
+    // keladi — foydalanuvchi ularni o'zi qo'yib bo'lmaydi.
+    // `.get(kalit, standart)` ATAYLAB — nuqta bilan EMAS.
+    //
+    // 2026-08-18 da o'lchandi: telefon bilan kirgan foydalanuvchining
+    // tokenida `email` kaliti UMUMAN YO'Q (bo'sh satr ham emas):
+    //   { phone_number: "+998...", firebase: { sign_in_provider: "phone" } }
+    // Qoidalarda mavjud bo'lmagan kalitga `token.email` deb murojaat
+    // qilish XATO beradi va butun qoida RAD ETADI — foydalanuvchi
+    // «Missing or insufficient permissions» xabarini oladi, sababi esa
+    // hech qayerda ko'rinmaydi.
+    //
+    // Standart qiymat '' (null emas): shunda mantiq klientdagi
+    // `email || phone` bilan AYNAN bir xil bo'ladi — bo'sh satr ham,
+    // yo'q kalit ham telefonga o'tkazadi.
+    function authKey() {
+      return request.auth.token.get('email', '') != ''
+        ? request.auth.token.get('email', '')
+        : request.auth.token.get('phone_number', '');
+    }
+
     function userDoc() {
-      return get(/databases/$(database)/documents/allowed_users/$(request.auth.token.email)).data;
+      return get(/databases/$(database)/documents/allowed_users/$(authKey())).data;
     }
 
     function isAllowed() {
       return request.auth != null
-        && request.auth.token.email != null
-        && exists(/databases/$(database)/documents/allowed_users/$(request.auth.token.email))
+        && authKey() != ''
+        && exists(/databases/$(database)/documents/allowed_users/$(authKey()))
         // status maydoni yo'q eski hujjatlar ham faol hisoblanadi (apiAuth.ts bilan bir xil)
         && userDoc().get('status', 'active') == 'active';
     }
@@ -47,7 +79,7 @@ service cloud.firestore {
       return isAllowed()
         && workspaceId != null
         && workspaceId != ''
-        && exists(/databases/$(database)/documents/workspaces/$(workspaceId)/members/$(request.auth.token.email));
+        && exists(/databases/$(database)/documents/workspaces/$(workspaceId)/members/$(authKey()));
     }
 
     // Ish maydoni hujjatini a'zolar o'qiydi; yozish faqat Admin SDK orqali.
@@ -55,7 +87,7 @@ service cloud.firestore {
       allow read: if isMember(workspaceId);
       allow write: if false;
 
-      match /members/{email} {
+      match /members/{accountKey} {
         allow read: if isMember(workspaceId);
         allow write: if false;
       }
@@ -63,8 +95,11 @@ service cloud.firestore {
 
     // Ruxsat ro'yxati: har kim faqat O'Z hujjatini o'qiy oladi (AuthContext shuni qiladi).
     // Yozish faqat Admin SDK orqali — u qoidalarni chetlab o'tadi, shuning uchun bu yerda yopiq.
-    match /allowed_users/{email} {
-      allow read: if request.auth != null && request.auth.token.email == email;
+    //
+    // Hujjat identifikatori = `authKey()`, ya'ni email YOKI telefon raqami.
+    // Shuning uchun wildcard `{email}` emas, `{accountKey}` deb ataladi.
+    match /allowed_users/{accountKey} {
+      allow read: if request.auth != null && authKey() != '' && authKey() == accountKey;
       allow write: if false;
     }
 

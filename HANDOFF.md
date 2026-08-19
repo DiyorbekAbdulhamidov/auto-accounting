@@ -1221,3 +1221,373 @@ lekin bitta ham amal haqiqiy sessiyada o'tkazilmagan.
 ostidagi subkolleksiya va faqat Admin SDK (API route) orqali
 o'qiladi/yoziladi. Klient uchun umumiy `match /{document=**}` yopiq
 qoidasi amal qiladi (toifalar bilan bir xil naqsh).
+
+
+---
+
+## 18. Ochilish rejasi: bepul davr · jurnal · SMS bilan kirish (2026-08-18)
+
+Reja: **1 sentabrga to'liq tayyor**, 1 sentabr → 1 noyabr **bepul va
+cheksiz**, faqat ro'yxatdan o'tish shart.
+
+### 18a. Bepul davr — bitta konstanta
+
+`src/lib/plans.ts`: `PROMO_UNTIL = '2026-11-01T00:00:00+05:00'`.
+`limitsOf()` davr ichida `companies` va `members` ni `Infinity` qiladi.
+
+**Nega reja maydoni EMAS:** har foydalanuvchiga rejani qo'yish uchun
+admin paneli, keyin qaytarib olish uchun yana bir amal kerak bo'lardi.
+Davr global — sana bitta joyda turadi va tugagach O'ZI tugaydi.
+
+**Nega 2 OY, 1 emas:** buxgalter sverkani OYDA BIR MARTA qiladi. Bir
+oylik davrda tsikl bir marta bajariladi — bu sinov, odat emas. O'lchov
+savoli «ikkinchi oyda ham qaytadimi»; ikkinchi oy pulli bo'lsa,
+«yordam bermagani uchun ketdi» bilan «pulli bo'lgani uchun ketdi» ni
+ajratib bo'lmaydi.
+
+**Davr tugaganda ma'lumot YASHIRILMAYDI** — tekshirildi: cheklov FAQAT
+`/api/companies` POST da qo'llanadi, o'qishda filtr yo'q. 12 korxona
+yuklagan buxgalter 1 noyabrdan keyin ham hammasini ko'radi, faqat
+13-chisini qo'sha olmaydi.
+
+Vaqt mintaqasi ataylab yozilgan: server UTC, Toshkent +05:00 —
+ko'rsatilmasa davr besh soat oldin tugardi. Harness shu chegarani
+tekshiradi.
+
+**Narx sahifasiga ta'sir qilmadi:** `limitsOf()` faqat cheklovni
+qo'llash uchun, marketing sahifalari `PLANS` ni to'g'ridan-to'g'ri
+o'qiydi. ⚠️ Ya'ni narx sahifasida hali «3 та корхона» turadi —
+e'londa «cheksiz» deyilsa, sahifa matnini ham yangilash kerak.
+
+### 18b. Yiqilgan fayl jurnali (`parse_failures`)
+
+Yangi: `src/lib/parseFailureLog.ts`, ikkala yuklash route'ida.
+
+Muammo: fayl o'qilmasa foydalanuvchi xato ko'rib KETADI, biz esa
+bilmaymiz. `excel_formats` faqat MUVAFFAQIYATLI o'rganilgan
+shakllarni saqlaydi — tizim g'alabalarini eslaydi, mag'lubiyatlarini
+yo'q. 10+ buxgalter, har biri o'z bankining shakli bilan: notanish
+shakl deyarli aniq chiqadi.
+
+Yoziladi FAQAT: varaq tanilmadi, yoki fayl tasdiqlanmadi, yoki bitta
+ham kontragent chiqmadi. Muvaffaqiyatli yuklashda hech narsa
+yozilmaydi — aks holda kolleksiya har yuklashda o'sardi.
+Ogohlantirishning O'ZI sabab emas (davr mos kelmasligi —
+foydalanuvchi xatosi, parser yiqilishi emas).
+
+**SUMMALAR yozuvga tushmaydi** — harness alohida tekshiradi. Jurnalning
+vazifasi «qaysi SHAKL tanilmadi», «qancha pul» emas. Yozuv ish
+maydoniga bog'langan va faqat server o'qiydi, ya'ni yangi ma'lumot
+oqimi yaratilmaydi (`sverka_reports` da allaqachon to'liq moliyaviy
+tafsilot turadi).
+
+`SheetReport` ga `sampleRows` qo'shildi: tanilmagan varaqning
+dastlabki 5 qatori × 15 katagi. Bu «qaysi shakl» savoliga javob
+beradigan YAGONA artefakt — usiz jurnal «yiqildi» deyishdan boshqa
+hech narsa aytolmaydi. Qo'shimcha maydon, hech qanday raqamga
+tegmaydi (105 → 115 tekshiruv o'tdi).
+
+Qoidalar fayliga band QO'SHILMADI: klient bu kolleksiyaga tegmaydi.
+
+### 18c. SMS (telefon) bilan kirish
+
+**Parol tiklash BEKOR QILINDI** — SMS'da parol yo'q, demak «parolni
+unutdim» holati ham yo'q.
+
+**Nega bu kichik o'zgarish emas:** telefon autentifikatsiyasida
+`request.auth.token.email` NULL bo'ladi. Ilgari qoidalar unga
+to'g'ridan-to'g'ri tayanardi, ya'ni telefon bilan kirgan odamda
+`isAllowed()` false qaytarib **butun ilova hamma narsani rad etardi**.
+
+**Yechim — `authKey()`:** email bo'lsa email, bo'lmasa
+`phone_number`. Qoida UCH joyda AYNAN bir xil bo'lishi shart va
+bittadan manba oladi:
+
+| Joy | Nima |
+|---|---|
+| `firestore.rules` | `authKey()` funksiyasi |
+| server | `apiAuth.ts`, `signup/route.ts` → `accountKeyOf()` |
+| klient | `AuthContext.tsx` → `accountKeyOf()` |
+
+`accountKeyOf()` — `src/lib/workspace.ts` da. Biri farq qilsa server
+bir hujjatni, qoidalar boshqasini tekshiradi va sababi ko'rinmaydi.
+
+**Email USTUN:** bir hisobga ikkalasi bog'langan bo'lsa kalit
+o'zgarmaydi va mavjud hujjatlar joyida qoladi. Shu sabab
+`webleaders.uz@gmail.com` va `admin@gmail.com` ishlashda davom etadi.
+
+**Uid'ga o'tilmadi** — u toza bo'lardi, lekin mavjud ma'lumotni
+migratsiya qilishni talab qiladi. 13 kun ichida bunga kirishilmadi.
+
+**Qoidalar DEPLOY QILINDI** (ikkala kalitni qabul qiladi). Tartib
+muhim edi: qoidalar avval — shunda telefon foydalanuvchisi qulflanib
+qolmaydi.
+
+Boshqa o'zgarishlar:
+- `AuthUser.email` endi IXTIYORIY, `accountKey` qo'shildi. Audit izi
+  (`updatedBy`, `createdBy`, `addedBy`, `invitedBy`) `accountKey` ni
+  yozadi. **Bu shart edi:** Firestore `undefined` qiymatga istisno
+  tashlaydi, ya'ni telefon foydalanuvchisi toifani o'zgartirsa amal
+  yiqilardi.
+- `resolveWorkspaceId` va `defaultWorkspaceName` kalit bilan ishlaydi
+  (telefonda `@` yo'q — raqam shundayligicha nom bo'ladi).
+- Telefonda RO'YXATDAN O'TISH alohida amal EMAS: Firebase raqamni
+  birinchi ko'rganda hisobni o'zi ochadi, shuning uchun kod
+  tasdiqlangach har doim `/api/signup` chaqiriladi (idempotent).
+- **Xato bo'lsa hisob O'CHIRILMAYDI** (email oqimidan farqi):
+  telefon hisobi QAYTA KELGAN foydalanuvchiga tegishli bo'lishi
+  mumkin, o'chirish uning butun ma'lumotini yo'q qilardi.
+- Yiqilgan `RecaptchaVerifier` tozalanadi — aks holda keyingi urinish
+  ham yiqilardi.
+- `src/lib/phone.ts`: `toE164()` beshta yozuv shaklini bitta kalitga
+  keltiradi. Bu MUHIM — raqam hisob kaliti, «+998901234567» va
+  «998901234567» ikki xil hisob bo'lib qolsa odam ma'lumotini
+  topolmaydi.
+
+### ⚠️ SMS ISHLASHI UCHUN FIREBASE CONSOLE'DA QILINADIGAN ISHLAR
+
+Kod tayyor, lekin bulardan biri qilinmasa SMS ketmaydi:
+
+1. **Authentication → Sign-in method → Phone → yoqish.**
+   Yoqilmasa xato: `auth/operation-not-allowed` — ekranda o'zbekcha
+   izoh chiqadi va aynan shu joyni ko'rsatadi.
+2. **Billing (Blaze).** Telefon autentifikatsiyasi odatda pulli reja
+   talab qiladi.
+3. **Test phone numbers** — Console'da sinov raqami qo'shilsa
+   (masalan `+998901234567` / kod `123456`) butun oqimni HAQIQIY SMS
+   yubormasdan tekshirib bo'ladi. **Sinovni shu bilan qiling** —
+   begona raqamga kod jo'natish kerak emas.
+4. **Authorized domains** — ishlab chiqarish domeni qo'shilsin.
+   Unutilsa jonli saytda login JIMGINA ishlamaydi.
+5. **+998 ga SMS yetib borishini** tasdiqlash. Yetib bormasa zaxira
+   yo'l — mahalliy shlyuz (Eskiz.uz) + Firebase custom token, lekin
+   u OTP oqimini o'zimiz yozishni talab qiladi.
+
+### Tekshiruv (2026-08-18, uchinchi qism)
+
+```
+verify-parsers   124/124 ✔   (yangi: bepul davr 12, jurnal 10, telefon 9)
+tsc · eslint     toza
+next build       xatosiz, 41 marshrut
+kirish sahifasi  brauzerda o'lchandi (u OCHIQ sahifa):
+                 · telefon → kod → email zaxira o'tishlari ishlaydi
+                 · yaroqsiz raqam klientda ushlanadi
+                 · kontrast: yorug' 5,43 · tungi 6,29 · 0 xato
+```
+
+Sinov ATAYLAB SMS yubormasdan o'tkazildi — haqiqiy raqamga kod
+jo'natish begona odamga xabar yuborish bo'lardi.
+
+**Yo'l-yo'lakay tuzatilgan soxta signal:** `LoginForm.tsx` izohi
+qurilmada `12345678` ni qidirishni aytardi, u esa polyfill ichidagi
+`"0123456789"` matniga tushib SOXTA moslik beradi. Ishonchli belgi —
+dev EMAIL: `grep -rl "webleaders.uz@gmail.com" .next/static` hech
+narsa topmaydi (tasdiqlandi).
+
+
+### 18d. Narx matni · superadmin telefoni · sessiya muddati (2026-08-18)
+
+**Narx sahifasi.** Yangi `PromoBanner.tsx`. Reja KARTALARI o'zgarmadi —
+ular doimiy haqiqatni ko'rsatadi (1 noyabrdan keyin nima bo'lishini),
+e'lon esa hozir nima bo'layotganini aytadi. Ikkisi bir ekranda turadi,
+shunda noyabrda hech kim «aldandim» demaydi. FAQ va bosh sahifadagi
+qator ham yangilandi.
+
+Gidratatsiya tuzog'i ataylab chetlab o'tildi: shart JSX ichida EMAS
+(`promoActive() && <div>` yozilsa, 1 noyabrdan oldin qurilgan statik
+sahifa serverda e'lonni chizadi, keyin ochilgan brauzer chizmaydi —
+HANDOFF §12 dagi bilan bir xil xato). HTML har doim bir xil chiziladi,
+qaror gidratatsiyadan KEYIN DOM'da qo'llanadi. Yon foydasi: davr
+tugaganda e'lon o'zi yo'qoladi, qayta deploy kutilmaydi.
+
+Tekshirildi: qurilgan statik HTML'da e'lon TO'RTTALA tilda ham bor
+(`.next/server/app/{uz,uz-cyrl,ru,en}/pricing.html`).
+
+**Superadmin telefoni.** `+998900104240` MAVJUD hisobga bog'landi
+(`webleaders.uz@gmail.com`, uid `5ZdRolReWc…`), almashtirilmadi.
+
+Sabab: email — hisob KALITI, unga 3 korxona va 3 hisobot bog'langan.
+Kalit o'zgarsa hammasi yetim qolardi. Endi hisobda ikkala usul bor
+(`phone, password`), `authKey()` esa emailni ustun ko'radi — ya'ni SMS
+bilan kirilganda ham AYNAN o'sha ish maydoniga tushiladi.
+
+Xavfsizlik to'ri: agar token ichida email negadir bo'lmasa, kalit
+telefon bo'lib bo'sh ish maydoni ochiladi — ma'lumot O'CHMAYDI va
+email+parol bilan qaytib kirsa bo'ladi. Ya'ni bu qadam qaytariladigan.
+
+**Sessiya muddati.** Kodda `setPersistence` YO'Q, ya'ni Firebase
+standarti amal qiladi: `browserLocalPersistence`. Demak bitta SMS
+bilan kirgan odam **muddatsiz** kirgan bo'lib qoladi — ID token har
+soatda o'zi yangilanadi, brauzer yopilsa ham saqlanadi. Sessiya faqat
+shu hollarda tugaydi: «Чиқиш» bosilsa, brauzer ma'lumoti tozalansa,
+hisob o'chirilsa/bloklansa yoki token bekor qilinsa.
+
+Ya'ni buxgalter oyiga bir marta kirsa ham qayta SMS so'ralmaydi —
+bu ochilish davri uchun to'g'ri xulq (har oyda SMS so'ralsa,
+qaytish yo'lida ortiqcha to'siq bo'lardi va SMS puli ham ketardi).
+
+
+### 18e. SMS mintaqa siyosati — Console'da UCHINCHI joy (2026-08-18)
+
+Telefon provideri yoqilgan, sinov raqami qo'shilgan, `Save` kulrang
+(saqlanmagan o'zgarish yo'q) — lekin ilova baribir
+`auth/operation-not-allowed` berardi.
+
+Sabab Firebase'ning O'ZIDAN so'rab aniqlandi. Klient SDK boradigan
+endpoint'ga to'g'ridan-to'g'ri murojaat qilindi:
+
+```
+POST identitytoolkit.googleapis.com/v1/accounts:sendVerificationCode
+  { phoneNumber: "+998901234567" }        (Console'dagi SINOV raqami)
+->
+  OPERATION_NOT_ALLOWED : SMS unable to be sent until this region
+                          enabled by the app developer.
+```
+
+Ya'ni provider EMAS, **SMS mintaqa siyosati** to'sayotgan edi:
+Firebase qaysi davlatlarga SMS yuborilishini alohida ro'yxat bilan
+cheklaydi va O'zbekiston ruxsat etilmagan.
+
+**Joyi:** Authentication -> **Settings** -> SMS region policy.
+`Sign-in method` yorlig'ida EMAS — shuning uchun topilmadi.
+
+Bu usul umuman foydali: telefon oqimini brauzersiz, SMS yubormasdan
+tekshirib bo'ladi (sinov raqami ishlatilsa hech kimga xabar ketmaydi).
+Javoblar: `OPERATION_NOT_ALLOWED` — provider yoki mintaqa;
+`MISSING_RECAPTCHA_TOKEN` — provider yoqilgan, brauzerda ishlaydi;
+`sessionInfo` — hammasi joyida.
+
+**Xato xabari tuzatildi:** `operation-not-allowed` IKKI sababdan keladi
+va Firebase ikkalasiga ham bir xil kod beradi. Ilova endi ikkalasini
+ham aytadi, aks holda foydalanuvchi noto'g'ri joyni qidiradi.
+
+
+### 18f. Telefon tokenida `email` KALITI YO'Q — qoidalar rad etardi (2026-08-18)
+
+SMS ishladi, kod qabul qilindi, `/api/signup` hujjatlarni yaratdi —
+lekin foydalanuvchi «Missing or insufficient permissions» xatosini
+oldi. Xato Firestore SDK'niki, ya'ni AUTENTIFIKATSIYADAN KEYINGI
+o'qish rad etilardi.
+
+**Sabab o'lchandi, taxmin qilinmadi.** Sinov raqami bilan haqiqiy
+token olindi va ichi ochildi:
+
+```
+{ phone_number: "+998901234567",
+  firebase: { sign_in_provider: "phone", identities: {phone:[...]} },
+  sub, user_id, aud, iss, iat, exp }
+
+'email' kaliti BORMI : false          <-- bo'sh satr EMAS, UMUMAN YO'Q
+```
+
+Qoidadagi `request.auth.token.email` mavjud bo'lmagan kalitga nuqta
+bilan murojaat qiladi — Firestore qoidalarida bu XATO beradi va butun
+qoida RAD ETADI. Klientdagi `email || phone` esa buni bemalol
+o'tkazadi. Ya'ni men o'zim ogohlantirgan «uch joy bir xil bo'lsin»
+qoidasi aynan shu yerda buzilgan edi: mantiq bir xil ko'rinardi,
+lekin YO'Q KALIT holatida ikki tilda ikki xil ishlaydi.
+
+**Tuzatish:** `request.auth.token.get('email', '')`. Standart qiymat
+`''` (null emas) — shunda mantiq klientdagi `email || phone` bilan
+AYNAN bir xil bo'ladi.
+
+**Tekshirildi (haqiqiy token bilan, deploy'dan keyin):**
+
+| Amal | Natija |
+|---|---|
+| Telefon: o'z `allowed_users` hujjatini o'qish | 200 RUXSAT |
+| Telefon: begona hujjatni o'qish | 403 RAD |
+| Telefon: o'z ish maydoni korxonalari | 200, 0 ta |
+| Telefon: begona ish maydoni korxonalari | 403 RAD |
+| Email: kalit EMAIL bo'lib qoldi | ✔ |
+| Email: korxonalar | 200, 3 ta |
+| Email: chiqim hisobotlari | 200, 3 ta |
+
+Ya'ni tuzatish teshik ochmadi va email yo'li ham buzilmadi.
+
+**YO'L-YO'LAKAY TASDIQLANDI:** parol bilan kirilgan tokenda
+`phone_number` da'vosi ham bor edi (`sign_in_provider: password`).
+Demak Firebase da'volarni HISOB YOZUVIDAN oladi, kirish usulidan emas.
+Teskarisi ham amal qiladi: superadmin SMS bilan kirganda tokenda EMAIL
+ham bo'ladi va `authKey()` uni ustun ko'rib o'sha ish maydoniga
+tushiradi. Bu endi taxmin emas, o'lchangan.
+
+### Brauzersiz tekshirish usuli (juda foydali chiqdi)
+
+Identity Toolkit REST API klient SDK bilan aynan bir xil yo'ldan
+boradi, ya'ni butun oqimni brauzersiz va SMS'siz sinash mumkin:
+
+```
+accounts:sendVerificationCode   -> sessionInfo (sinov raqamida SMS YO'Q)
+accounts:signInWithPhoneNumber  -> idToken
+firestore.googleapis.com/...    -> qoidalar HAQIQIY token bilan sinaladi
+accounts:signInWithPassword     -> email yo'li regressiyasi
+```
+
+Skriptlar sessiya scratchpad'ida. Qoidalarga har tegilganda shuni
+yurgizish kerak — 200/403 raqamlari «ishlashi kerak» degan gapdan
+ancha ishonchli.
+
+
+### 18g. Haqiqiy SMS uchun Blaze SHART (2026-08-18)
+
+Sinov raqami bilan hammasi ishladi, haqiqiy raqam esa
+`auth/billing-not-enabled` berdi. Bu xato EMAS: Spark (bepul) rejada
+Firebase haqiqiy SMS umuman yubormaydi. Sinov raqamlari ishlayveradi —
+ular SMS yubormaydi.
+
+**Ya'ni 1 sentabr uchun kritik yo'lga YANA BITTA band qo'shildi:**
+domen + hosting + **Blaze rejasi**. Blazesiz bitta ham haqiqiy
+buxgalter tizimga kira olmaydi.
+
+Ikkita amaliy xulosa:
+
+1. **Ishlab chiqish uchun Blaze KERAK EMAS** — sinov raqamlari yetadi.
+   O'z hisobingizga hozir email+parol bilan kiravering.
+2. **Xarajat:** har SMS pullik. Sessiya muddatsiz bo'lgani uchun
+   (§18d) taxminan «bitta foydalanuvchi × bitta qurilma = bitta SMS»,
+   ya'ni oyma-oy takrorlanmaydi. Lekin Blaze yoqilganda Google Cloud'da
+   BYUDJET OGOHLANTIRISHI qo'yilsin — telefon autentifikatsiyasi
+   suiiste'molga ochiq va hisob kutilmaganda o'sishi mumkin.
+
+Agar +998 uchun narx qimmat chiqsa, zaxira yo'l o'zgarmaydi: mahalliy
+shlyuz (Eskiz.uz) + Firebase custom token. Lekin unda OTP oqimi —
+kod yaratish, muddat, urinish cheklovi — bizning zimmamizda bo'ladi.
+
+**Superadmin SMS bilan kirishi Blazesiz sinalmaydi**, lekin natija
+allaqachon DALIL bilan ma'lum (§18f): parol tokenida `phone_number`
+bor edi, demak da'volar hisob yozuvidan olinadi va SMS tokenida email
+ham bo'ladi.
+
+
+### 18h. Kirish yo'llari almashtirildi: EMAIL asosiy (2026-08-18)
+
+Sabab amaliy: hakamlar/mijozlar tez orada tizimni ko'radi, SMS esa
+Blaze'ga bog'liq (§18g). Email+parol hech qanday tashqi shartga
+bog'liq emas.
+
+- `useState<Step>("email")` — boshlang'ich qadam. Blaze yoqilgach
+  teskarisiga o'tkazish uchun SHU BITTA qatorni o'zgartirish yetadi.
+- Telefon yo'li olib tashlanmadi — pastdagi havolada qoldi.
+
+**Oldindan to'ldirish endi sozlanadi.** Ilgari u faqat
+`NODE_ENV === "development"` da ishlardi va deploy'da maydonlar bo'sh
+chiqardi — ya'ni ko'rsatishda foyda bermasdi. Endi:
+
+```
+NEXT_PUBLIC_DEMO_EMAIL
+NEXT_PUBLIC_DEMO_PASSWORD
+```
+
+Qo'yilmasa — dev rejimida eski sinov hisobiga qaytadi, ishlab
+chiqarishda to'ldirish umuman bo'lmaydi. Tekshirildi: qurilgan
+`.next` ichida hisob ma'lumoti YO'Q.
+
+⚠️ **`NEXT_PUBLIC_` qiymati brauzerga yuboriladi va uni sahifa
+manbasidan o'qish mumkin — ya'ni MAXFIY EMAS.** Shu sabab bu yerga
+superadmin hisobi QO'YILMASIN: saytni ochgan har kim haqiqiy mijoz
+ma'lumotiga to'liq kira olardi. Alohida ko'rsatuv hisobi kerak —
+o'z ish maydoni va namuna ma'lumoti bilan.
+
+Belgi matni ham o'zgardi: «Синов режими» emas, «Кўрсатув учун
+маълумотлар олдиндан тўлдирилган — «Тизимга кириш»ни босинг».

@@ -34,6 +34,29 @@ export const SVERKA_REPORTS = 'sverka_reports';
  *  `firestore.rules` da yozilgan. */
 export const INCOME_REPORTS = 'income_reports';
 
+/**
+ * HISOB KALITI — bitta manba.
+ *
+ * Email bo'lsa email, bo'lmasa telefon raqami (E.164, `+998...`).
+ * Bu qoida UCH joyda bir xil bo'lishi SHART:
+ *   · `firestore.rules` dagi `authKey()`
+ *   · server (`apiAuth.ts`, `signup/route.ts`)
+ *   · klient (`AuthContext.tsx`)
+ *
+ * Biri farq qilsa server bir hujjatni, qoidalar boshqasini tekshiradi va
+ * foydalanuvchi «ruxsat yo'q» xatosini oladi — sababi esa ko'rinmaydi.
+ * Shu sabab funksiya shu yerda, hamma uni CHAQIRADI.
+ *
+ * Firebase klient `User` da maydon `phoneNumber`, serverda esa
+ * `phone_number` — shuning uchun ikkita alohida parametr.
+ */
+export function accountKeyOf(
+  email?: string | null,
+  phone?: string | null
+): string | null {
+  return email || phone || null;
+}
+
 export type WorkspaceRole = 'owner' | 'member';
 
 export interface WorkspaceDoc {
@@ -50,9 +73,15 @@ export interface MemberDoc {
   addedAt: unknown;
 }
 
-/** Ish maydoni nomi: «Aziz (buxgalter)» emas, oddiy va o'zgartirsa bo'ladigan */
-export function defaultWorkspaceName(email: string): string {
-  const local = email.split('@')[0] || 'Ish maydoni';
+/**
+ * Ish maydoni nomi: «Aziz (buxgalter)» emas, oddiy va o'zgartirsa bo'ladigan.
+ *
+ * Kalit TELEFON RAQAMI ham bo'lishi mumkin (`+998...`) — unda `@` yo'q va
+ * bo'lish natijasi raqamning o'zi bo'ladi. Shu holda raqam shundayligicha
+ * qoladi: buxgalter o'z ish maydonini raqamidan tanib oladi.
+ */
+export function defaultWorkspaceName(accountKey: string): string {
+  const local = accountKey.split('@')[0] || 'Ish maydoni';
   return local.charAt(0).toUpperCase() + local.slice(1);
 }
 
@@ -77,29 +106,34 @@ interface AdminLikeDb {
  */
 export async function resolveWorkspaceId(
   db: AdminLikeDb,
-  email: string,
+  /** Hisob kaliti: email YOKI telefon raqami (E.164). SMS bilan kirganda
+   *  email UMUMAN bo'lmaydi — `firestore.rules` dagi `authKey()` bilan
+   *  bir xil qoida. */
+  accountKey: string,
   now: unknown
 ): Promise<string> {
-  const userRef = db.collection(ALLOWED_USERS).doc(email);
+  const userRef = db.collection(ALLOWED_USERS).doc(accountKey);
   const snap = await userRef.get();
   const existing = snap.exists ? snap.data()?.workspaceId : undefined;
   if (typeof existing === 'string' && existing) return existing;
 
-  // Ish maydoni identifikatori — emailning o'zi. Barqaror, taxmin
+  // Ish maydoni identifikatori — hisob kalitining o'zi. Barqaror, taxmin
   // qilinadigan va migratsiyada qayta hisoblash oson.
-  const workspaceId = email;
+  const workspaceId = accountKey;
 
   await db.collection(WORKSPACES).doc(workspaceId).set(
     {
-      name: defaultWorkspaceName(email),
-      ownerEmail: email,
+      name: defaultWorkspaceName(accountKey),
+      // Tarixiy nom — o'zgartirilmaydi (bazada allaqachon ma'lumot bor).
+      // Ichida telefon raqami ham turishi mumkin.
+      ownerEmail: accountKey,
       createdAt: now,
       plan: 'free',
     },
     { merge: true }
   );
   await db.collection(WORKSPACES).doc(workspaceId)
-    .collection(MEMBERS).doc(email)
+    .collection(MEMBERS).doc(accountKey)
     .set({ role: 'owner', status: 'active', addedAt: now }, { merge: true });
 
   await userRef.set({ workspaceId }, { merge: true });

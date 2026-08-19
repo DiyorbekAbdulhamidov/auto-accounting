@@ -33,7 +33,7 @@ export async function POST(req: Request) {
         role: role || "user",
         status: "active",
         createdAt: new Date().toISOString(),
-        createdBy: auth.user.email,
+        createdBy: auth.user.accountKey,
       });
       return userRecord;
     };

@@ -55,6 +55,10 @@ const { analyzeIncome } = jiti(path.join(PROJ, 'src/lib/incomeParser.ts'));
 const { buildIncomeWorkbook } = jiti(path.join(PROJ, 'src/lib/incomeExcel.ts'));
 const { buildAging } = jiti(path.join(PROJ, 'src/lib/aging.ts'));
 const { readWorkbookSmart } = jiti(path.join(PROJ, 'src/lib/excelWorkbook.ts'));
+const { promoActive, limitsOf, PROMO_UNTIL } = jiti(path.join(PROJ, 'src/lib/plans.ts'));
+const { buildFailureRecord } = jiti(path.join(PROJ, 'src/lib/parseFailureLog.ts'));
+const { toE164, formatPhone } = jiti(path.join(PROJ, 'src/lib/phone.ts'));
+const { accountKeyOf } = jiti(path.join(PROJ, 'src/lib/workspace.ts'));
 const {
   mergeOutgoingRows,
   mergeIncomingRows,
@@ -759,6 +763,171 @@ function runMergeTest() {
   );
 }
 
+
+/* ============================================================
+ * BEPUL DAVR (2026-09-01 … 2026-11-01)
+ * ------------------------------------------------------------
+ * Sana chegarasi va VAQT MINTAQASI tekshiriladi. Server UTC'da
+ * ishlaydi, Toshkent esa +05:00 — mintaqa ko'rsatilmasa davr besh
+ * soat oldin tugardi va cheklov kutilmaganda yopilardi.
+ * ============================================================ */
+function runPromoTest() {
+  console.log(`\n============================================================`);
+  console.log('BEPUL DAVR: chegara va vaqt mintaqasi');
+
+  const at = (iso) => new Date(iso);
+
+  ok(promoActive(at('2026-09-01T00:00:00+05:00')), 'davr boshida faol');
+  ok(promoActive(at('2026-10-15T12:00:00+05:00')), 'davr o\'rtasida faol');
+
+  // PROMO_UNTIL = 2026-11-01T00:00+05:00  ===  2026-10-31T19:00Z
+  ok(promoActive(at('2026-10-31T18:59:00Z')), 'Toshkent yarim tunidan BIR DAQIQA oldin faol');
+  ok(!promoActive(at('2026-10-31T19:01:00Z')), 'Toshkent yarim tunidan keyin TUGADI');
+  ok(
+    Date.parse(PROMO_UNTIL) === Date.parse('2026-10-31T19:00:00Z'),
+    'mintaqa hisobga olindi: +05:00 → 19:00 UTC'
+  );
+
+  // Cheklovlar
+  const during = limitsOf('free', at('2026-10-01T00:00:00+05:00'));
+  const after = limitsOf('free', at('2026-11-02T00:00:00+05:00'));
+  ok(during.companies === Infinity, 'davr ichida korxona CHEKSIZ');
+  ok(during.members === Infinity, 'davr ichida foydalanuvchi CHEKSIZ');
+  ok(after.companies === 3, `davr tugagach bepul reja qaytdi: ${after.companies} korxona`);
+  ok(after.members === 1, 'davr tugagach foydalanuvchi cheklovi qaytdi');
+  ok(during.label === after.label, `reja NOMI o'zgarmadi: «${during.label}»`);
+  ok(
+    during.priceUzs === 0 && after.priceUzs === 0,
+    'narx tegilmadi (narx sahifasi PLANS ni o\'zi o\'qiydi)'
+  );
+
+  // Pulli rejalarda ham davr ishlashi kerak — ular allaqachon cheksiz
+  ok(
+    limitsOf('byuro', at('2026-10-01T00:00:00+05:00')).members === Infinity,
+    'byuro rejasida ham davr ichida foydalanuvchi cheksiz'
+  );
+}
+
+
+/* ============================================================
+ * YIQILGAN FAYL JURNALI
+ * ------------------------------------------------------------
+ * Ikki shart tekshiriladi:
+ *   1) MUVAFFAQIYATLI yuklashda hech narsa yozilmaydi — aks holda
+ *      kolleksiya har yuklashda o'sadi va haqiqiy muammoni ichidan
+ *      topib bo'lmaydi;
+ *   2) SUMMALAR yozuvga TUSHMAYDI — jurnalning vazifasi «qaysi
+ *      shakl tanilmadi», «qancha pul» emas.
+ * ============================================================ */
+function runFailureLogTest() {
+  console.log(`\n============================================================`);
+  console.log('YIQILGAN FAYL JURNALI: qachon yoziladi va nima yozilmaydi');
+
+  const base = {
+    workspaceId: 'w', companyId: 'c', side: 'out', at: '2026-09-01T00:00:00Z', fileCount: 1,
+  };
+
+  // 1) Hammasi joyida — yozilmaydi
+  ok(
+    buildFailureRecord({
+      ...base, parsedCount: 42,
+      sheets: [{ file: 'a.xls', sheet: 'Лист1', format: 'COLUMNAR', rows: 100, debit: 500, credit: 400 }],
+      unverifiedFiles: [], detectedFormats: ['COLUMNAR'], warnings: [],
+    }) === null,
+    "muvaffaqiyatli yuklashda yozuv YO'Q"
+  );
+
+  // 2) Ogohlantirishning O'ZI sabab emas (davr mos kelmasligi —
+  //    foydalanuvchi xatosi, parser yiqilishi emas)
+  ok(
+    buildFailureRecord({
+      ...base, parsedCount: 42,
+      sheets: [{ file: 'a.xls', sheet: 'Лист1', format: 'COLUMNAR', rows: 100 }],
+      unverifiedFiles: [], warnings: ['ДАВРЛАР МОС КЕЛМАЙДИ: ... 2 723 410 208,97 сўм'],
+    }) === null,
+    "faqat ogohlantirish bo'lsa ham yozuv YO'Q"
+  );
+
+  // 3) Tanilmagan varaq — yoziladi
+  const rec = buildFailureRecord({
+    ...base, parsedCount: 10,
+    sheets: [
+      { file: 'a.xls', sheet: 'Лист1', format: 'COLUMNAR', rows: 100, debit: 999, credit: 888 },
+      {
+        file: 'notanish.xls', sheet: 'Варақ2', format: 'TANILMADI', rows: 0, note: 'Ўқилмади',
+        debit: 0, credit: 0, allDebit: 777, allCredit: 666,
+        sampleRows: [['Дебет', 'Кредит', 'Контрагент']],
+      },
+    ],
+    unverifiedFiles: [], detectedFormats: ['COLUMNAR'], warnings: ['bir', 'ikki'],
+  });
+  ok(!!rec && rec.reason === 'TANILMADI', 'tanilmagan varaq yozuv yaratdi');
+  ok(rec.sheets.length === 1, "faqat MUAMMOLI varaq yozildi (tanilganlari emas)");
+  ok(
+    Array.isArray(rec.sheets[0].sampleRows) && rec.sheets[0].sampleRows[0][0] === 'Дебет',
+    'shapka namunasi saqlandi — «qaysi shakl» savoliga javob shu'
+  );
+  ok(rec.warningCount === 2, `ogohlantirish SONI yozildi: ${rec.warningCount}`);
+
+  // Summalar yozuvda BO'LMASLIGI shart
+  const flat = JSON.stringify(rec);
+  const leaked = ['999', '888', '777', '666', '2 723 410'].filter((n) => flat.includes(n));
+  ok(leaked.length === 0, `summalar yozuvga TUSHMADI (tekshirildi: 999/888/777/666)`);
+  ok(!/"debit"|"credit"|allDebit|allCredit/.test(flat), 'debet/kredit maydonlari umuman yo\'q');
+
+  // 4) Bitta ham kontragent chiqmadi — eng og'ir holat
+  const empty = buildFailureRecord({ ...base, parsedCount: 0, sheets: [], warnings: [] });
+  ok(!!empty && empty.reason === 'BOSH', "bitta ham kontragent chiqmasa reason='BOSH'");
+
+  // 5) O'qildi lekin tasdiqlanmadi
+  const unver = buildFailureRecord({
+    ...base, parsedCount: 5, sheets: [{ file: 'a.xls', sheet: 'S', format: 'COLUMNAR', rows: 9 }],
+    unverifiedFiles: ['a.xls'], warnings: [],
+  });
+  ok(!!unver && unver.reason === 'TASDIQLANMADI', "tasdiqlanmagan fayl reason='TASDIQLANMADI'");
+}
+
+
+/* ============================================================
+ * TELEFON RAQAMI VA HISOB KALITI
+ * ------------------------------------------------------------
+ * Nega tekshiriladi: raqam E.164 ga to'g'ri o'girilmasa SMS
+ * UMUMAN ketmaydi. Undan ham qimmati — raqam hisob KALITI
+ * bo'ladi, ya'ni «+998901234567» va «998901234567» ikki xil
+ * hisob bo'lib qolsa, odam o'z ma'lumotini topolmaydi.
+ * ============================================================ */
+function runPhoneTest() {
+  console.log(`\n============================================================`);
+  console.log('TELEFON RAQAMI: E.164 va hisob kaliti');
+
+  const same = '+998901234567';
+  const forms = ['901234567', '90 123 45 67', '998901234567', '+998 90 123-45-67', '(90) 123 45 67'];
+  let bad = 0;
+  for (const f of forms) {
+    if (toE164(f) !== same) {
+      bad++;
+      console.log(`     «${f}» -> ${toE164(f)}`);
+    }
+  }
+  ok(bad === 0, `${forms.length} xil yozuv BITTA kalitga keldi: ${same}`);
+
+  // Rad etilishi SHART: taxmin qilib begona raqamga SMS yuborilmaydi
+  const rejects = ['', '123', '9012345678', '79012345678', '+7 901 234 56 78', 'abc'];
+  const wrongly = rejects.filter((r) => toE164(r) !== null);
+  ok(wrongly.length === 0, `noto'g'ri raqamlar rad etildi (${rejects.length} ta sinaldi)`);
+
+  ok(formatPhone(same) === '+998 90 123 45 67', `ekran shakli: ${formatPhone(same)}`);
+  ok(formatPhone('notanish') === 'notanish', "tanilmagan qiymat o'zgartirilmaydi");
+
+  // ---- HISOB KALITI ----
+  // Qoida UCH joyda bir xil: firestore.rules authKey(), apiAuth, AuthContext
+  ok(accountKeyOf('a@b.uz', null) === 'a@b.uz', 'email bo\'lsa email kalit bo\'ladi');
+  ok(accountKeyOf(null, same) === same, "email yo'q bo'lsa telefon kalit bo'ladi");
+  ok(accountKeyOf('a@b.uz', same) === 'a@b.uz', 'ikkalasi bo\'lsa EMAIL ustun (mavjud hujjatlar joyida qoladi)');
+  ok(accountKeyOf(null, null) === null, "ikkalasi ham yo'q bo'lsa null (kirish rad etiladi)");
+  ok(accountKeyOf('', same) === same, "bo'sh email telefonni to'smaydi");
+}
+
 for (const name of Object.keys(ETALON)) run(name, [name]);
 run('IMANMAX 7 oylik (oborotka + faktura)', [
   'IMANMAX 7 oylik OBOROTKA.xlsx',
@@ -769,6 +938,9 @@ runSwapTest();
 runPeriodTest();
 runOpenInvoiceTest();
 runMergeTest();
+runPromoTest();
+runFailureLogTest();
+runPhoneTest();
 
 // Eksportni qayta o'qish sinovi ExcelJS tufayli asinxron — shuning
 // uchun yakuniy hisob shu yerda chiqariladi.
