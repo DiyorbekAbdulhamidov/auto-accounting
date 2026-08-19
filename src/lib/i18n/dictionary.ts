@@ -580,19 +580,6 @@ export const DICTIONARY: Record<string, Entry> = {
     en: 'Fields are pre-filled for the demo — just press “Sign in”',
   },
 
-  // ---------- Очилиш даври ----------
-  '1 ноябргача ҳаммаси бепул ва чексиз.': {
-    ru: 'До 1 ноября всё бесплатно и без ограничений.',
-    en: 'Everything is free and unlimited until 1 November.',
-  },
-  'Карта сўралмайди — фақат рўйхатдан ўтасиз. Кейин бепул режа қайтади: 3 та корхона, сверка чексиз. Юклаган корхоналарингиз ЙЎҚОЛМАЙДИ — улар кўринишда қолади, фақат янгисини қўшиш тўхтайди.': {
-    ru: 'Карта не нужна — только регистрация. Потом вернётся бесплатный тариф: 3 организации, сверок без ограничений. Загруженные организации НЕ пропадут — они останутся видимыми, остановится только добавление новых.',
-    en: 'No card required — just sign up. Afterwards the free plan returns: 3 companies, unlimited reconciliations. Companies you already added will NOT disappear — they stay visible; only adding new ones stops.',
-  },
-  'Карта сўралмайди. 1 ноябргача корхона сони чексиз, сверка ҳам чексиз.': {
-    ru: 'Карта не нужна. До 1 ноября число организаций не ограничено, сверок тоже.',
-    en: 'No card required. Until 1 November the number of companies is unlimited, and so are reconciliations.',
-  },
 
   // ---------- Телефон билан кириш (SMS) ----------
   'Телефон рақамингизни киритинг — парол керак эмас': {

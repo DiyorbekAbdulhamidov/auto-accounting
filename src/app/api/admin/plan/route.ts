@@ -1,13 +1,12 @@
 // app/api/admin/plan/route.ts
 //
-// FOYDALANUVCHI REJASINI QO'LDA QO'YISH — 1-noyabr uchun zaxira yo'l.
+// FOYDALANUVCHI REJASINI QO'LDA QO'YISH — to'lov tizimi kelgunicha yagona yo'l.
 //
 // Nega kerak: `workspaces/{id}.plan` maydoniga butun kodda faqat `'free'`
-// yoziladi (`signup/route.ts` va `workspace.ts`). Ya'ni bepul davr
-// tugagach (`PROMO_UNTIL`, `src/lib/plans.ts`) HAMMA 3 ta korxona /
-// 1 ta foydalanuvchi chekloviga qaytadi va uni ko'tarishning mahsulot
-// ichidagi yo'li YO'Q edi — 12 mijozli buxgalter 13-chisini qo'sha
-// olmay qolardi va to'lay ham olmasdi.
+// yoziladi (`signup/route.ts` va `workspace.ts`). Bepul reja esa BIRINCHI
+// KUNDAN cheklangan (3 korxona / 1 foydalanuvchi), ya'ni 12 mijozli
+// buxgalter 4-chisini qo'sha olmaydi va to'lashning mahsulot ichidagi
+// yo'li hali YO'Q. Pul qo'lda olinadi, reja shu yerdan ko'tariladi.
 //
 // Bu route to'lov tizimi EMAS. To'lov qo'lda (Click orqali) qabul
 // qilinadi, keyin admin shu yerdan rejani qo'yadi. Click integratsiyasi
@@ -21,7 +20,7 @@
 import { NextResponse } from 'next/server';
 import type { Firestore } from 'firebase-admin/firestore';
 import { requireAdmin } from '@/lib/apiAuth';
-import { PLANS, limitsOf, planOf, promoActive, PROMO_UNTIL, type Plan } from '@/lib/plans';
+import { PLANS, planOf, type Plan } from '@/lib/plans';
 import { ALLOWED_USERS, MEMBERS, WORKSPACES } from '@/lib/workspace';
 
 export const runtime = 'nodejs';
@@ -96,7 +95,6 @@ async function loadState(
 /** Ekranda ko'rsatish uchun: reja, amaldagi cheklov va bepul davr holati. */
 function describe(state: { plan: Plan; companies: number; members: number; workspaceId: string }) {
   const base = PLANS[state.plan];
-  const effective = limitsOf(state.plan);
   const num = (n: number) => (Number.isFinite(n) ? n : null); // Infinity -> null (JSON)
   return {
     workspaceId: state.workspaceId,
@@ -105,12 +103,9 @@ function describe(state: { plan: Plan; companies: number; members: number; works
     priceUzs: base.priceUzs,
     companies: state.companies,
     members: state.members,
-    // Rejaning O'ZIDAGI cheklov
+    // Rejaning cheklovi. Vaqtinchalik «cheksiz davr» YO'Q — reja nima
+    // desa, hozir ham shu amal qiladi (src/lib/plans.ts).
     planLimits: { companies: num(base.companies), members: num(base.members) },
-    // HOZIR amal qiladigan cheklov (bepul davrda ikkalasi ham cheksiz)
-    effectiveLimits: { companies: num(effective.companies), members: num(effective.members) },
-    promoActive: promoActive(),
-    promoUntil: PROMO_UNTIL,
   };
 }
 

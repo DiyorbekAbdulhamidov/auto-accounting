@@ -12,7 +12,6 @@
 "use client";
 
 import { useState, useEffect, useMemo, useCallback } from "react";
-import { SVERKA_REPORTS } from "@/lib/workspace";
 import { db } from "@/lib/firebase";
 import { authFetch } from "@/lib/authFetch";
 import { useAuth } from "@/context/AuthContext";
@@ -57,14 +56,25 @@ interface Company {
   createdAt?: { toMillis?: () => number };
 }
 
-interface ReconciliationReport {
+/**
+ * Ro'yxat uchun YENGIL yozuv — `/api/reports/summary` qaytaradi.
+ *
+ * Ilgari bu yerda TO'LIQ hujjat turardi va sahifa ish maydonidagi
+ * hamma hisobotni `firmsData` bilan birga yuklardi — har biri 900 KB
+ * gacha. Ro'yxatga esa shu besh son yetadi. Batafsil: route izohi.
+ */
+interface ReportLite {
   id: string;
   companyId: string;
-  savedAt: { toDate?: () => Date } | null;
-  totals: { debit: number; credit: number; diff: number };
-  /** Saqlangan kontragentlar. Hujjat baribir to'liq o'qiladi,
-   *  shuning uchun «nechtasida farq bor» ni sanash BEPUL. */
-  firmsData?: { totalDebit: number; totalCredit: number }[];
+  /** Millisekund. `serverTimestamp()` hali yozilmagan bo'lsa null. */
+  savedAtMs: number | null;
+  /** `totals` maydoni bormi — «сақланган» belgisi shunga qarab qo'yiladi */
+  hasTotals: boolean;
+  debit: number;
+  credit: number;
+  /** Nechta kontragentda farq bor. Eski hujjatlarda maydon YO'Q → null
+   *  → ekranda «—». Migratsiya qilinmaydi. */
+  diffCount: number | null;
 }
 
 /**
@@ -98,7 +108,7 @@ export default function ClientsPage() {
   const { user } = useAuth();
   const workspaceId: string | undefined = user?.workspaceId;
   const [companies, setCompanies] = useState<Company[]>([]);
-  const [reports, setReports] = useState<ReconciliationReport[]>([]);
+  const [reports, setReports] = useState<ReportLite[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
   const [loading, setLoading] = useState(true);
@@ -134,16 +144,18 @@ export default function ClientsPage() {
   // hisoboti qolib ketgan bo'lsa ("yetim" hisobot), u umumiy summaga kirmasligi kerak —
   // aks holda ro'yxat bo'sh bo'lsa ham yuqorida raqam turaveradi.
   const calculateTotals = useCallback(
-    (reportsList: ReconciliationReport[], year: number, companiesList: Company[]) => {
+    (reportsList: ReportLite[], year: number, companiesList: Company[]) => {
       const liveCompanyIds = new Set(companiesList.map((c) => c.id));
       let tolov = 0;
       let faktura = 0;
       reportsList.forEach((report) => {
         if (!liveCompanyIds.has(report.companyId)) return;
-        const reportYear = report.savedAt?.toDate ? report.savedAt.toDate().getFullYear() : new Date().getFullYear();
-        if (reportYear === year && report.totals) {
-          tolov += Number(report.totals.debit) || 0;
-          faktura += Number(report.totals.credit) || 0;
+        const reportYear = report.savedAtMs
+          ? new Date(report.savedAtMs).getFullYear()
+          : new Date().getFullYear();
+        if (reportYear === year && report.hasTotals) {
+          tolov += report.debit;
+          faktura += report.credit;
         }
       });
       setTotals({ tolov, faktura, farq: tolov - faktura });
@@ -177,10 +189,15 @@ export default function ClientsPage() {
         .sort((a, b) => (b.createdAt?.toMillis?.() ?? 0) - (a.createdAt?.toMillis?.() ?? 0));
       setCompanies(companiesList);
 
-      const reportsSnapshot = await getDocs(
-        query(collection(db, SVERKA_REPORTS), where("workspaceId", "==", workspaceId))
-      );
-      const reportsList = reportsSnapshot.docs.map((d) => ({ id: d.id, ...d.data() } as ReconciliationReport));
+      // Hisobotlar SERVER orqali: `select()` faqat admin SDK'da bor,
+      // ya'ni og'ir `firmsData` umuman uzatilmaydi (route izohiga qarang).
+      const res = await authFetch("/api/reports/summary");
+      const payload = (await res.json().catch(() => ({}))) as {
+        reports?: ReportLite[];
+        error?: string;
+      };
+      if (!res.ok) throw new Error(payload.error || "Ҳисоботларни ўқиб бўлмади.");
+      const reportsList = Array.isArray(payload.reports) ? payload.reports : [];
       setReports(reportsList);
 
       calculateTotals(reportsList, selectedYear, companiesList);
@@ -212,24 +229,20 @@ export default function ClientsPage() {
       let withDiff: number | null = null;
 
       reports.forEach((report) => {
-        const at = report.savedAt?.toDate ? report.savedAt.toDate() : null;
+        const at = report.savedAtMs ? new Date(report.savedAtMs) : null;
         const reportYear = at ? at.getFullYear() : new Date().getFullYear();
         if (report.companyId !== companyId || reportYear !== selectedYear) return;
-        if (report.totals) {
-          tolov += Number(report.totals.debit) || 0;
-          faktura += Number(report.totals.credit) || 0;
+        if (report.hasTotals) {
+          tolov += report.debit;
+          faktura += report.credit;
           saved = true;
         }
         const ms = at ? at.getTime() : 0;
         if (ms > lastMs) {
           lastMs = ms;
           lastAt = at;
-          const firms = report.firmsData;
-          withDiff = Array.isArray(firms)
-            ? firms.filter(
-                (f) => Math.abs((Number(f.totalDebit) || 0) - (Number(f.totalCredit) || 0)) > 0.01
-              ).length
-            : null;
+          // Sanash SAQLASHDA bajarilgan. Eski hujjatda maydon yo'q → null.
+          withDiff = report.diffCount;
         }
       });
 

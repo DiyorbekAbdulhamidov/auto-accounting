@@ -55,7 +55,8 @@ const { analyzeIncome } = jiti(path.join(PROJ, 'src/lib/incomeParser.ts'));
 const { buildIncomeWorkbook } = jiti(path.join(PROJ, 'src/lib/incomeExcel.ts'));
 const { buildAging } = jiti(path.join(PROJ, 'src/lib/aging.ts'));
 const { readWorkbookSmart } = jiti(path.join(PROJ, 'src/lib/excelWorkbook.ts'));
-const { promoActive, limitsOf, PROMO_UNTIL } = jiti(path.join(PROJ, 'src/lib/plans.ts'));
+const plans = jiti(path.join(PROJ, 'src/lib/plans.ts'));
+const { limitsOf, companyLimitReached } = plans;
 const { buildFailureRecord } = jiti(path.join(PROJ, 'src/lib/parseFailureLog.ts'));
 const { toE164, formatPhone } = jiti(path.join(PROJ, 'src/lib/phone.ts'));
 const { accountKeyOf } = jiti(path.join(PROJ, 'src/lib/workspace.ts'));
@@ -765,47 +766,43 @@ function runMergeTest() {
 
 
 /* ============================================================
- * BEPUL DAVR (2026-09-01 … 2026-11-01)
+ * BEPUL REJA CHEKLOVI
  * ------------------------------------------------------------
- * Sana chegarasi va VAQT MINTAQASI tekshiriladi. Server UTC'da
- * ishlaydi, Toshkent esa +05:00 — mintaqa ko'rsatilmasa davr besh
- * soat oldin tugardi va cheklov kutilmaganda yopilardi.
+ * Ilgari bu yerda 1-noyabrgacha davom etadigan «hamma cheksiz»
+ * davri sinalardi. Davr olib tashlandi (2026-08-19), sinov esa
+ * TESKARISINI qo'riqlaydi: cheklov VAQTGA bog'liq EMAS.
+ *
+ * Nega shu muhim: cheklov faqat YARATISHDA tekshiriladi. Bir
+ * kunga ochilib qolgan «cheksiz» oyna mangu bepul hisob yasab
+ * beradi — o'sha oynada yig'ilgan korxonalar keyin ham qoladi.
+ * Shuning uchun `limitsOf` ga sana berilsa ham javob O'ZGARMASLIGI
+ * kerak.
  * ============================================================ */
-function runPromoTest() {
+function runPlanLimitTest() {
   console.log(`\n============================================================`);
-  console.log('BEPUL DAVR: chegara va vaqt mintaqasi');
+  console.log('BEPUL REJA: cheklov va vaqtga bog\'liq emasligi');
 
-  const at = (iso) => new Date(iso);
+  const free = limitsOf('free');
+  ok(free.companies === 3, `bepul reja: ${free.companies} korxona`);
+  ok(free.members === 1, 'bepul reja: 1 foydalanuvchi');
+  ok(free.priceUzs === 0, 'bepul reja: narx 0');
 
-  ok(promoActive(at('2026-09-01T00:00:00+05:00')), 'davr boshida faol');
-  ok(promoActive(at('2026-10-15T12:00:00+05:00')), 'davr o\'rtasida faol');
+  ok(limitsOf('buxgalter').companies === Infinity, 'Бухгалтер: korxona cheksiz');
+  ok(limitsOf('buxgalter').members === 1, 'Бухгалтер: 1 foydalanuvchi');
+  ok(limitsOf('byuro').companies === Infinity, 'Бюро: korxona cheksiz');
+  ok(limitsOf('byuro').members === 5, 'Бюро: 5 foydalanuvchi');
+  ok(limitsOf(undefined).companies === 3, 'noma\'lum reja bepulga tushadi');
 
-  // PROMO_UNTIL = 2026-11-01T00:00+05:00  ===  2026-10-31T19:00Z
-  ok(promoActive(at('2026-10-31T18:59:00Z')), 'Toshkent yarim tunidan BIR DAQIQA oldin faol');
-  ok(!promoActive(at('2026-10-31T19:01:00Z')), 'Toshkent yarim tunidan keyin TUGADI');
+  // VAQT: ikkinchi argument berilsa ham e'tiborga OLINMAYDI.
   ok(
-    Date.parse(PROMO_UNTIL) === Date.parse('2026-10-31T19:00:00Z'),
-    'mintaqa hisobga olindi: +05:00 → 19:00 UTC'
+    limitsOf('free', new Date('2026-10-01T00:00:00+05:00')).companies === 3,
+    'sana berilsa ham cheklov o\'zgarmadi (yashirin «cheksiz oyna» yo\'q)'
   );
+  ok(plans.promoActive === undefined, 'vaqtinchalik cheksiz davr KODDA YO\'Q');
+  ok(plans.PROMO_UNTIL === undefined, 'davr sanasi ham qolmadi');
 
-  // Cheklovlar
-  const during = limitsOf('free', at('2026-10-01T00:00:00+05:00'));
-  const after = limitsOf('free', at('2026-11-02T00:00:00+05:00'));
-  ok(during.companies === Infinity, 'davr ichida korxona CHEKSIZ');
-  ok(during.members === Infinity, 'davr ichida foydalanuvchi CHEKSIZ');
-  ok(after.companies === 3, `davr tugagach bepul reja qaytdi: ${after.companies} korxona`);
-  ok(after.members === 1, 'davr tugagach foydalanuvchi cheklovi qaytdi');
-  ok(during.label === after.label, `reja NOMI o'zgarmadi: «${during.label}»`);
-  ok(
-    during.priceUzs === 0 && after.priceUzs === 0,
-    'narx tegilmadi (narx sahifasi PLANS ni o\'zi o\'qiydi)'
-  );
-
-  // Pulli rejalarda ham davr ishlashi kerak — ular allaqachon cheksiz
-  ok(
-    limitsOf('byuro', at('2026-10-01T00:00:00+05:00')).members === Infinity,
-    'byuro rejasida ham davr ichida foydalanuvchi cheksiz'
-  );
+  ok(companyLimitReached('free', 3), '3 ta korxonada yopiladi');
+  ok(!companyLimitReached('free', 2), '2 tada hali ochiq');
 }
 
 
@@ -1031,7 +1028,7 @@ runSwapTest();
 runPeriodTest();
 runOpenInvoiceTest();
 runMergeTest();
-runPromoTest();
+runPlanLimitTest();
 runFailureLogTest();
 runPhoneTest();
 

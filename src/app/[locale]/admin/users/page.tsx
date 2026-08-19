@@ -134,9 +134,6 @@ interface PlanState {
   members: number;
   /** `null` — cheksiz (JSON `Infinity` ni saqlay olmaydi) */
   planLimits: { companies: number | null; members: number | null };
-  effectiveLimits: { companies: number | null; members: number | null };
-  promoActive: boolean;
-  promoUntil: string;
 }
 
 const PLAN_OPTIONS = [
@@ -253,15 +250,6 @@ function PlanCard() {
               </dd>
             </div>
           </dl>
-
-          {state.promoActive && (
-            // Admin «qo'ydim, lekin hech narsa o'zgarmadi» deb hayron
-            // bo'lmasligi uchun: bepul davrda cheklov baribir cheksiz.
-            <Alert tone="info">
-              Bepul davr davom etmoqda ({`${state.promoUntil.slice(0, 10)} gacha`}) — hozir cheklov
-              hammada cheksiz. Qo&apos;yilgan reja o&apos;sha sanadan keyin kuchga kiradi.
-            </Alert>
-          )}
 
           <Field label="Yangi reja" htmlFor="plan-value">
             <Select id="plan-value" value={plan} onChange={(e) => setPlan(e.target.value)}>

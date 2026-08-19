@@ -994,6 +994,14 @@ export default function OutgoingReconciliation({
         { debit: 0, credit: 0, diff: 0 }
       );
 
+      // «Нечтасида фарқ бор» — SAQLASHDA sanaladi. Korxonalar ro'yxati
+      // shu sonni ko'rsatadi; ilgari u yerda butun `firmsData` (900 KB
+      // gacha) yuklab olinib sanalardi. Qoida ro'yxatdagi bilan AYNAN
+      // bir xil: |debet − kredit| > 0,01.
+      const diffCount = selectedFullData.filter(
+        (f) => Math.abs(f.totalDebit - f.totalCredit) > 0.01
+      ).length;
+
       if (!workspaceId) {
         notify.error(t("Иш майдони аниқланмади. Тизимдан чиқиб, қайта киринг."));
         return;
@@ -1013,6 +1021,7 @@ export default function OutgoingReconciliation({
         // Қайси давр кесими сақлангани — кейин очилганда аниқ бўлиши учун
         period,
         totals,
+        diffCount,
         firmsData: selectedFullData,
       });
       // `serverTimestamp()` klientda hali BO'SH — tarix qatori sanasiz

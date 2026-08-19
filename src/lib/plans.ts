@@ -51,51 +51,34 @@ export function planOf(value: unknown): Plan {
 }
 
 /* ============================================================
-   BEPUL DAVR (2026-09-01 … 2026-11-01)
+   NEGA VAQTINCHALIK «CHEKSIZ» DAVR YO'Q
    ------------------------------------------------------------
-   Qaror: ochilish davrida HAMMA cheksiz ishlatadi, faqat
-   ro'yxatdan o'tish shart.
-   
-   Nega BITTA konstanta, reja maydoni emas: aks holda har
-   foydalanuvchiga rejani qo'yish uchun admin paneli, keyin uni
-   qaytarib olish uchun yana bir amal kerak bo'lardi. Davr global
-   bo'lgani uchun sana bitta joyda turadi va tugagach O'ZI tugaydi.
-   
-   NEGA 2 OY, 1 emas: buxgalter sverkani OYDA BIR MARTA qiladi.
-   Bir oylik davrda u tsiklni bir marta bajaradi — bu sinov, odat
-   emas. O'lchov savoli esa «ikkinchi oyda ham qaytadimi». Agar
-   ikkinchi oy pulli bo'lsa, «yordam bermagani uchun ketdi» bilan
-   «pulli bo'lgani uchun ketdi» ni ajratib bo'lmaydi.
-   
-   DAVR TUGAGANDA MA'LUMOT YASHIRILMAYDI. Cheklov FAQAT yaratishda
-   tekshiriladi (`/api/companies` POST), o'qishda hech qanday filtr
-   yo'q. Ya'ni 12 korxona yuklagan buxgalter 1 noyabrdan keyin ham
-   hammasini ko'radi — faqat 13-chisini qo'sha olmaydi.
-   
-   Vaqt mintaqasi ATAYLAB ko'rsatilgan: server UTC'da ishlaydi,
-   Toshkent esa +05:00. Ko'rsatilmasa davr 5 soat oldin tugardi.
+   Ilgari bu yerda 2026-09-01 … 2026-11-01 oralig'ida hamma
+   cheklovni CHEKSIZ qiladigan global davr turardi. U olib
+   tashlandi (qaror: 2026-08-19).
+
+   Sabab bitta va u kodda ko'rinib turardi: cheklov FAQAT
+   yaratishda tekshiriladi (`/api/companies` POST). Ya'ni ochiq
+   oynada 30 ta korxona yig'ib olgan foydalanuvchi 1 noyabrdan
+   keyin ham hammasini SAQLAB QOLADI — o'qishda hech qanday filtr
+   yo'q. Davr «tanishtiruv» emas, MANGU bepul hisob yasab berardi
+   va uni qaytarib olishning yagona yo'li — ma'lumotni yashirish,
+   bu esa qilinmaydi.
+
+   Endi bepul reja bir xil: birinchi kundan 3 ta korxona, 1 ta
+   foydalanuvchi, sverka cheksiz. Ochilish sanasi (1 sentabr) —
+   marketing hodisasi, cheklov emas.
    ============================================================ */
-
-export const PROMO_UNTIL = '2026-11-01T00:00:00+05:00';
-
-/** Bepul davr hali davom etyaptimi. `now` sinov uchun beriladi. */
-export function promoActive(now: Date = new Date()): boolean {
-  return now.getTime() < Date.parse(PROMO_UNTIL);
-}
 
 /**
  * Amaldagi cheklovlar.
  *
- * MUHIM: bu funksiya faqat CHEKLOVNI QO'LLASH uchun. Narx sahifasi va
- * JSON-LD `PLANS` ni to'g'ridan-to'g'ri o'qiydi, shuning uchun bepul
- * davr e'lon qilingan narxlarni buzmaydi.
+ * Narx sahifasi va JSON-LD `PLANS` ni to'g'ridan-to'g'ri o'qiydi.
+ * Bu funksiya esa cheklovni QO'LLASH uchun — ikkalasi bir manbadan
+ * kelishi uchun shu yerda turadi.
  */
-export function limitsOf(plan: unknown, now: Date = new Date()): PlanLimits {
-  const base = PLANS[planOf(plan)];
-  if (!promoActive(now)) return base;
-  // Reja NOMI o'zgarmaydi — xabarlarda «Бепул» ko'rinib turishi kerak,
-  // aks holda foydalanuvchi qaysi rejada ekanini bilmaydi.
-  return { ...base, companies: Infinity, members: Infinity };
+export function limitsOf(plan: unknown): PlanLimits {
+  return PLANS[planOf(plan)];
 }
 
 /** Cheklovga yetgandami? Chaqiruvchi buni SERVERDA tekshiradi —
