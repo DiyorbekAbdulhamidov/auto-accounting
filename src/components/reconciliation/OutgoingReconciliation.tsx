@@ -499,6 +499,19 @@ export default function OutgoingReconciliation({
     setActRow(null);
   };
 
+  /* ЭКРАНДАГИ АКТ = ЮКЛАБ ОЛИНАДИГАН АКТ.
+     ------------------------------------------------------------
+     `reconciliationAct.ts` да «Сальдо конечное» = бошланғич қолдиқ +
+     дебет − кредит. Экрандаги ойна эса фақат давр ҳаракатини
+     кўрсатарди, яъни қолдиқ киритилган контрагентда экран ва ҳужжат
+     АЙНАН ўша қолдиққа фарқ қиларди (2026-08-19 да ўлчанган: экранда
+     30 000 000, ҳужжатда 31 000 000). Иккиси бир манбадан ҳисобланади.
+
+     Асосий жадвалдаги «Фарқ» ЎЗГАРМАЙДИ — у ҳамон дебет − кредит,
+     қолдиқ унга қўшилмайди. Бу фақат АКТ, яъни расмий ҳужжат шакли. */
+  const actOpening = actRow ? opening.balances[rowKey(actRow)] : undefined;
+  const actSaldo = (actOpening ?? 0) + (actRow?.difference ?? 0);
+
   const handleFileUpload = async (e: React.FormEvent) => {
     e.preventDefault();
     if (files.length === 0) {
@@ -564,7 +577,7 @@ export default function OutgoingReconciliation({
         setSheetReports(data.sheets || []);
         setBalanceChecks(data.balanceChecks || []);
         setShowReport(true);
-        notify.error(t("Файл ўқилмади"), data.error || t("Номаълум хатолик юз берди"));
+        notify.error(t("Файл ўқилмади"), data.error ? t(data.error) : t("Номаълум хатолик юз берди"));
       }
     } catch (error) {
       console.error("Юклашда хато:", error);
@@ -1263,7 +1276,7 @@ export default function OutgoingReconciliation({
                               ? `${formatNum(s.allDebit || 0)} / ${formatNum(s.allCredit || 0)}`
                               : "—"}
                           </td>
-                          <td className="px-3 py-2 text-ink-3">{s.note || ""}</td>
+                          <td className="px-3 py-2 text-ink-3">{s.note ? t(s.note) : ""}</td>
                         </tr>
                       );
                     })}
@@ -1922,6 +1935,17 @@ ${t("Ўзгартирган")}: ${who.by}${who.at ? ` · ${who.at.slice(0, 10)}`
           >
             {actRow && (
               <div className="space-y-4">
+                {/* «Сальдо начальное» — ҳужжатдаги БИРИНЧИ қатор. Жадвал
+                    устида турибди, чунки ҳужжатда ҳам ундан олдин келади. */}
+                {actOpening !== undefined && (
+                  <div className="flex items-center justify-between rounded-md border border-line bg-surface-2 px-3 py-2">
+                    <span className="text-caption text-ink-3">{t("Бошланғич қолдиқ")}</span>
+                    <span className="text-body font-semibold tabular text-ink">
+                      {formatNum(actOpening)}
+                    </span>
+                  </div>
+                )}
+
                 <div className="grid grid-cols-3 gap-2 text-center">
                   <div className="rounded-md border border-line bg-surface-2 p-3">
                     <p className="text-caption text-cash">{t("Дебет (тўлов)")}</p>
@@ -1932,27 +1956,29 @@ ${t("Ўзгартирган")}: ${who.by}${who.at ? ` · ${who.at.slice(0, 10)}`
                     <p className="mt-1 text-body font-semibold tabular">{formatNum(actRow.totalCredit)}</p>
                   </div>
                   <div className="rounded-md border border-line bg-surface-2 p-3">
-                    <p className="text-caption text-ink-3">{t("Сальдо")}</p>
+                    <p className="text-caption text-ink-3">
+                      {actOpening === undefined ? t("Сальдо") : t("Якуний қолдиқ")}
+                    </p>
                     <p
                       className={cx(
                         "mt-1 text-body font-semibold tabular",
-                        toneText[verdict(actRow.difference).tone]
+                        toneText[verdict(actSaldo).tone]
                       )}
                     >
-                      {formatNum(Math.abs(actRow.difference))}
+                      {formatNum(Math.abs(actSaldo))}
                     </p>
                   </div>
                 </div>
 
                 <p className="text-caption text-ink-2">
-                  {Math.abs(actRow.difference) < 0.01
+                  {Math.abs(actSaldo) < 0.01
                     ? t("Қарздорлик йўқ.")
-                    : actRow.difference > 0
-                      ? `${t("Улар қарздор — етказиб берувчи")} ${formatNum(actRow.difference)} ${t("сўмлик фактура ёзмаган.")}`
-                      : `${t("Биз қарздормиз —")} ${formatNum(-actRow.difference)} ${t("сўм тўланмаган.")}`}
+                    : actSaldo > 0
+                      ? `${t("Улар қарздор — етказиб берувчи")} ${formatNum(actSaldo)} ${t("сўмлик фактура ёзмаган.")}`
+                      : `${t("Биз қарздормиз —")} ${formatNum(-actSaldo)} ${t("сўм тўланмаган.")}`}
                 </p>
 
-                {opening.balances[rowKey(actRow)] === undefined && (
+                {actOpening === undefined && (
                   <Alert tone="warn">
                     {t("Бу контрагентга бошланғич қолдиқ киритилмаган — акт фақат юкланган давр ҳаракатини кўрсатади.")}
                   </Alert>

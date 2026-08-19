@@ -819,6 +819,38 @@ function runPromoTest() {
  *   2) SUMMALAR yozuvga TUSHMAYDI — jurnalning vazifasi «qaysi
  *      shakl tanilmadi», «qancha pul» emas.
  * ============================================================ */
+/**
+ * Qiymat Firestore'ga yozilishi mumkinmi.
+ *
+ * Firestore ikki narsani QABUL QILMAYDI va ikkalasi ham istisno tashlaydi:
+ *   · `undefined` (siyrak massiv teshigi ham shunday ko'rinadi)
+ *   · massiv ICHIDA massiv
+ *
+ * Birinchi mos kelmagan joyning yo'lini qaytaradi, hammasi joyida bo'lsa
+ * `null`. Sinov shu funksiya orqali yoziladi: matnni emas, YOZUVNI
+ * tekshiradi — shakl o'zgarsa sinov ham o'zgarishi kerak bo'ladi.
+ */
+function firestoreUnsafePath(value, path = 'rec', insideArray = false) {
+  if (value === undefined) return `${path} = undefined`;
+  if (Array.isArray(value)) {
+    if (insideArray) return `${path} — massiv ichida massiv`;
+    for (let i = 0; i < value.length; i++) {
+      // `i in value` FALSE bo'lsa — bu teshik, ya'ni `undefined`
+      if (!(i in value)) return `${path}[${i}] = teshik (undefined)`;
+      const bad = firestoreUnsafePath(value[i], `${path}[${i}]`, true);
+      if (bad) return bad;
+    }
+    return null;
+  }
+  if (value && typeof value === 'object') {
+    for (const [k, v] of Object.entries(value)) {
+      const bad = firestoreUnsafePath(v, `${path}.${k}`, false);
+      if (bad) return bad;
+    }
+  }
+  return null;
+}
+
 function runFailureLogTest() {
   console.log(`\n============================================================`);
   console.log('YIQILGAN FAYL JURNALI: qachon yoziladi va nima yozilmaydi');
@@ -864,8 +896,20 @@ function runFailureLogTest() {
   ok(!!rec && rec.reason === 'TANILMADI', 'tanilmagan varaq yozuv yaratdi');
   ok(rec.sheets.length === 1, "faqat MUAMMOLI varaq yozildi (tanilganlari emas)");
   ok(
-    Array.isArray(rec.sheets[0].sampleRows) && rec.sheets[0].sampleRows[0][0] === 'Дебет',
+    Array.isArray(rec.sheets[0].sampleRows) && rec.sheets[0].sampleRows[0].cells[0] === 'Дебет',
     'shapka namunasi saqlandi — «qaysi shakl» savoliga javob shu'
+  );
+
+  // FIRESTORE SHAKLI — 2026-08-19 gacha jurnal HECH QACHON yozilmagan.
+  // Ikkita xato bir-birini yashirib turgan edi va ikkalasi ham
+  // `logParseFailure` da YUTILARDI, ya'ni ekranda hech narsa ko'rinmasdi:
+  //   1) siyrak (sparse) massiv teshigi -> `undefined` -> istisno
+  //   2) massiv ichida massiv (`string[][]`) — Firestore uni RAD ETADI
+  //      («Property array contains an invalid nested entity»)
+  // Shuning uchun tekshiruv MATNGA emas, yozuvning O'ZIGA qo'yiladi.
+  ok(
+    firestoreUnsafePath(rec) === null,
+    `yozuv Firestore shakliga mos (${firestoreUnsafePath(rec) || 'undefined ham, ichma-ich massiv ham yo\'q'})`
   );
   ok(rec.warningCount === 2, `ogohlantirish SONI yozildi: ${rec.warningCount}`);
 
@@ -885,6 +929,55 @@ function runFailureLogTest() {
     unverifiedFiles: ['a.xls'], warnings: [],
   });
   ok(!!unver && unver.reason === 'TASDIQLANMADI', "tasdiqlanmagan fayl reason='TASDIQLANMADI'");
+
+  // 6) HAQIQIY FAYLDAN — uchidan uchiga.
+  //
+  // Yuqoridagi sinovlar `sampleRows` ni QO'LDA beradi, ya'ni massiv
+  // zich (dense) chiqadi. Haqiqiy Excel'da esa chap kataklari bo'sh
+  // qator SIYRAK massiv beradi va aynan shu yiqitardi. Shuning uchun
+  // varaq shu yerda XLSX bilan quriladi va `auditFiles` dan o'tkaziladi.
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(
+    wb,
+    XLSX.utils.aoa_to_sheet([
+      ['38-MAKTAB'],
+      [],
+      [null, null, null, null, null, null, null, '2022/2023-o‘quv yil'], // <-- chap kataklar BO'SH
+      ['T/R', 'Shahar', 'O‘quvchi F.I.O', 'Ball'],
+      // Qator soni ATAYLAB yetarli: kam bo'lsa varaq «sarlavha varag'i»
+      // deb hisoblanadi (`isTitleOnly`) va TANILMADI umuman yozilmaydi.
+      ['1', 'Angren', 'Aliyev A.', '37.8'],
+      ['2', 'Angren', 'Valiyev V.', '36.1'],
+      ['3', 'Angren', 'G‘aniyev G.', '35.0'],
+      ['4', 'Angren', 'Doniyorov D.', '34.2'],
+      ['5', 'Angren', 'Eshonov E.', '33.7'],
+      ['6', 'Angren', 'Fozilov F.', '32.9'],
+      ['7', 'Angren', 'Halilov H.', '31.4'],
+    ]),
+    'Kimyo'
+  );
+  const strayBuffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+  const strayResult = auditFiles([{ name: 'begona.xlsx', buffer: strayBuffer }]);
+  const strayRec = buildFailureRecord({
+    ...base,
+    parsedCount: strayResult.parties ? strayResult.parties.length : 0,
+    sheets: strayResult.sheets,
+    unverifiedFiles: [],
+    detectedFormats: strayResult.detectedFormats || [],
+    warnings: strayResult.warnings || [],
+  });
+  ok(!!strayRec, 'begona fayl uchun yozuv yaratildi');
+  ok(
+    firestoreUnsafePath(strayRec) === null,
+    `begona fayl yozuvi Firestore'ga yozila oladi (${firestoreUnsafePath(strayRec) || "bo'sh katak '' bo'lib saqlandi"})`
+  );
+  const strayCells = strayRec.sheets[0] && strayRec.sheets[0].sampleRows
+    ? strayRec.sheets[0].sampleRows.map((r) => r.cells)
+    : [];
+  ok(
+    strayCells.some((cells) => cells[0] === '' && cells.includes('2022/2023-o‘quv yil')),
+    "chap tomondagi bo'sh kataklar '' bo'lib saqlandi (teshik emas)"
+  );
 }
 
 

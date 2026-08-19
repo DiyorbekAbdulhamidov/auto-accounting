@@ -544,7 +544,7 @@ export default function IncomingReconciliation({
         setMergeSuggestions(data.mergeSuggestions || []);
       } else {
         setReport(null);
-        setError(data.error || t("Номаълум хатолик юз берди."));
+        setError(data.error ? t(data.error) : t("Номаълум хатолик юз берди."));
       }
     } catch (err) {
       console.error(err);
@@ -762,6 +762,18 @@ export default function IncomingReconciliation({
     );
     setActParty(null);
   };
+
+  /* ЭКРАНДАГИ АКТ = ЮКЛАБ ОЛИНАДИГАН АКТ.
+     ------------------------------------------------------------
+     `reconciliationAct.ts` да «Сальдо конечное» = бошланғич қолдиқ +
+     дебет − кредит. Экрандаги ойна фақат давр ҳаракатини кўрсатарди,
+     яъни қолдиқ киритилган контрагентда экран ва ҳужжат ўша қолдиққа
+     фарқ қиларди (чиқим сверкасида 2026-08-19 да ўлчанган, бу ерда ҳам
+     худди шу код). Иккиси энди бир манбадан ҳисобланади.
+
+     Асосий жадвалдаги «Фарқ» ЎЗГАРМАЙДИ — қолдиқ унга қўшилмайди. */
+  const actOpening = actParty ? opening.balances[actParty.key] : undefined;
+  const actSaldo = (actOpening ?? 0) + (actParty?.difference ?? 0);
 
   const TABS: TabItem<TabKey>[] = [
     { key: "RECONCILIATION", label: t("Сверка"), icon: Table2, count: displayRows.length },
@@ -1593,6 +1605,15 @@ export default function IncomingReconciliation({
       >
         {actParty && (
           <div className="space-y-4">
+            {/* «Сальдо начальное» — ҳужжатдаги БИРИНЧИ қатор, шунинг учун
+                жадвал устида. */}
+            {actOpening !== undefined && (
+              <div className="flex items-center justify-between rounded-md border border-line bg-surface-2 px-3 py-2">
+                <span className="text-caption text-ink-3">{t("Бошланғич қолдиқ")}</span>
+                <span className="text-body font-semibold tabular text-ink">{fmt(actOpening)}</span>
+              </div>
+            )}
+
             {/* Ҳисоб-китоб хулосаси */}
             <div className="grid grid-cols-3 gap-2 text-center">
               <div className="rounded-md border border-line bg-surface-2 p-3">
@@ -1604,25 +1625,37 @@ export default function IncomingReconciliation({
                 <p className="mt-1 text-body font-semibold tabular">{fmt(actParty.bankCredit)}</p>
               </div>
               <div className="rounded-md border border-line bg-surface-2 p-3">
-                <p className="text-caption text-ink-3">{t("Сальдо")}</p>
+                <p className="text-caption text-ink-3">
+                  {actOpening === undefined ? t("Сальдо") : t("Якуний қолдиқ")}
+                </p>
                 <p
                   className={cx(
                     "mt-1 text-body font-semibold tabular",
-                    toneText[verdict(actParty.difference).tone]
+                    toneText[verdict(actSaldo).tone]
                   )}
                 >
-                  {fmt(Math.abs(actParty.difference))}
+                  {fmt(Math.abs(actSaldo))}
                 </p>
               </div>
             </div>
 
             <p className="text-caption text-ink-2">
-              {Math.abs(actParty.difference) < 0.01
+              {Math.abs(actSaldo) < 0.01
                 ? t("Қарздорлик йўқ.")
-                : actParty.difference > 0
-                  ? `${t("Улар қарздор — мижоз")} ${fmt(actParty.difference)} ${t("сўм тўламаган.")}`
-                  : `${t("Биз қарздормиз —")} ${fmt(-actParty.difference)} ${t("сўм ортиқча тушган.")}`}
+                : actSaldo > 0
+                  ? `${t("Улар қарздор — мижоз")} ${fmt(actSaldo)} ${t("сўм тўламаган.")}`
+                  : `${t("Биз қарздормиз —")} ${fmt(-actSaldo)} ${t("сўм ортиқча тушган.")}`}
             </p>
+
+            {/* Ҳужжат остига ҳам худди шу изоҳ ёзилади
+                (`reconciliationAct.ts`) — экран билан ҳужжат бир хил
+                гапиради. Чиқим сверкасида бу изоҳ бор эди, киримда
+                тушиб қолган эди. */}
+            {actOpening === undefined && (
+              <Alert tone="warn">
+                {t("Бу контрагентга бошланғич қолдиқ киритилмаган — акт фақат юкланган давр ҳаракатини кўрсатади.")}
+              </Alert>
+            )}
 
             <p className="text-caption text-ink-3">
               {t("Файлда фақат жадвалнинг ўзи бўлади: Дата · Документ · Дебет · Кредит — икки томонлама, Сальдо ва Обороты қаторлари билан.")}

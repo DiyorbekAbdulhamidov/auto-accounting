@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 import { cx } from "./styles";
 import { useModule } from "./Module";
+import { useT } from "@/context/LanguageContext";
 
 /**
  * Yagona modal oyna.
@@ -45,6 +46,11 @@ export default function Modal({
   // `module` деб аталмайди: Next.js буни модуль тизимининг ўзгарувчиси
   // билан адаштиради ва lint қоидаси уни таъқиқлайди.
   const moduleKind = useModule();
+  // Ёпиш тугмасининг ЯГОНА матни — экран ўқувчи фақат шуни эшитади.
+  // Илгари у қаттиқ кирилл эди ва лотин/ru/en интерфейсда ҳам «Ёпиш»
+  // бўлиб қоларди. `useT` провайдерсиз ҳам ишлайди (контекст стандарт
+  // қиймати — айнан ўзини қайтарувчи `t`).
+  const t = useT();
 
   useEffect(() => {
     if (!open) return;
@@ -94,7 +100,7 @@ export default function Modal({
             type="button"
             onClick={onClose}
             className="-m-1 shrink-0 rounded-md p-1 text-ink-3 transition-colors hover:bg-surface-2 hover:text-ink"
-            aria-label="Ёпиш"
+            aria-label={t("Ёпиш")}
           >
             <X className="h-5 w-5" />
           </button>

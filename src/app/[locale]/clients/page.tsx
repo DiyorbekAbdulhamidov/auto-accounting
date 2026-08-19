@@ -12,11 +12,11 @@
 "use client";
 
 import { useState, useEffect, useMemo, useCallback } from "react";
-import { INCOME_REPORTS, SVERKA_REPORTS } from "@/lib/workspace";
+import { SVERKA_REPORTS } from "@/lib/workspace";
 import { db } from "@/lib/firebase";
 import { authFetch } from "@/lib/authFetch";
 import { useAuth } from "@/context/AuthContext";
-import { addDoc, collection, doc, getDocs, query, serverTimestamp, where, writeBatch } from "firebase/firestore";
+import { addDoc, collection, getDocs, query, serverTimestamp, where } from "firebase/firestore";
 import NextLink from "next/link";
 import { Building2, Plus, ArrowRight, FolderOpen, Trash2, Users } from "lucide-react";
 import SortHeader from "@/components/SortHeader";
@@ -119,9 +119,13 @@ export default function ClientsPage() {
   const [totals, setTotals] = useState<Totals>({ tolov: 0, faktura: 0, farq: 0 });
 
   const formatMoney = (amount: number) => {
-    if (!amount) return "0";
+    // ИККИ хона ҲАР ДОИМ. Илгари `minimumFractionDigits: 0` эди ва
+    // 3 883 286 487,20 юқоридаги картада «...,2» бўлиб кўринарди —
+    // қуйидаги жадвалда эса «...,20». Битта саҳифада битта сон икки
+    // хил ёзилса, бухгалтер уни икки хил сон деб ўқийди.
+    if (!amount) return "0,00";
     return amount.toLocaleString("ru-RU", {
-      minimumFractionDigits: 0,
+      minimumFractionDigits: 2,
       maximumFractionDigits: 2,
     });
   };
@@ -267,7 +271,7 @@ export default function ClientsPage() {
       if (!res.ok) {
         // Хато ойнанинг ИЧИДА кўрсатилади. `alert()` ойнани ёпмасди ва
         // фойдаланувчи ёзганини кўрмай қоларди.
-        setAddError(data.error || t("Хатолик юз берди. Қайта уриниб кўринг."));
+        setAddError(data.error ? t(data.error) : t("Хатолик юз берди. Қайта уриниб кўринг."));
         return;
       }
 
@@ -325,15 +329,14 @@ export default function ClientsPage() {
     }
   };
 
-  // 🗑️ Firmani va uning BARCHA sverka hisobotlarini o'chirish.
+  // 🗑️ Firmani va unga tegishli HAMMA narsani o'chirish.
   //
-  // Firestore'da kaskad o'chirish YO'Q — firma hujjatini o'chirish uning
-  // hisobotlarini o'chirmaydi. Ular qolib ketsa, firma ro'yxatdan
-  // yo'qolgani bilan summalari tizimda osilib qoladi.
-  //
-  // IKKALA kolleksiya ham tozalanadi: chiqim (`sverka_reports`) va
-  // kirim (`income_reports`). Bittasi unutilsa — jimgina yetim
-  // ma'lumot qoladi.
+  // Butun kaskad SERVERDA (`DELETE /api/companies`). Ilgari u shu yerda
+  // `writeBatch` bilan bajarilardi va faqat ikkita hisobot kolleksiyasini
+  // tozalardi. Klient yeta olmaydigan joylar jimgina qolib ketardi:
+  // `companies/{id}` ostidagi subkolleksiyalar (birlashtirish, toifa)
+  // uchun qoida umuman yo'q, `opening_balances` ni esa faqat admin
+  // o'chira olardi. Sabablar to'liq route ichida yozilgan.
   const handleDeleteCompany = async (companyId: string, companyName: string) => {
     if (!confirm(`"${companyName}" — ${t("корхонасини ва унинг барча сверка ҳисоботларини бутунлай ўчириб ташламоқчимисиз?")}`)) {
       return;
@@ -342,31 +345,13 @@ export default function ClientsPage() {
     try {
       setLoading(true);
 
-      const refs: import("firebase/firestore").DocumentReference[] = [];
-      for (const name of [SVERKA_REPORTS, INCOME_REPORTS]) {
-        const snap = await getDocs(
-          query(
-            collection(db, name),
-            where("workspaceId", "==", workspaceId),
-            where("companyId", "==", companyId)
-          )
-        );
-        snap.docs.forEach((d) => refs.push(d.ref));
+      const res = await authFetch(`/api/companies?id=${encodeURIComponent(companyId)}`, {
+        method: "DELETE",
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || `HTTP ${res.status}`);
       }
-
-      // Bitta batch'da 500 tagacha amal bo'ladi — bo'laklarga bo'lamiz
-      const CHUNK = 450;
-      for (let i = 0; i < refs.length; i += CHUNK) {
-        const batch = writeBatch(db);
-        refs.slice(i, i + CHUNK).forEach((ref) => batch.delete(ref));
-        await batch.commit();
-      }
-
-      // Hisobotlar o'chgandan keyingina firmaning o'zini o'chiramiz —
-      // oradan uzilib qolsa, yetim hisobot emas, qayta urinsa bo'ladigan holat qoladi
-      const finalBatch = writeBatch(db);
-      finalBatch.delete(doc(db, "companies", companyId));
-      await finalBatch.commit();
 
       await loadDashboardData();
     } catch (error) {

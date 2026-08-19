@@ -142,7 +142,15 @@ export default function TeamModal({
   };
 
   const members = data?.members || [];
-  const limit = data?.limit ?? 1;
+  /* ЧЕКЛОВ: `null` = ЧЕКСИЗ.
+     ------------------------------------------------------------
+     Сервер `limitsOf()` дан `Infinity` олади, лекин `JSON.stringify(Infinity)`
+     — бу `"null"`. Яъни чексизлик симда ЙЎҚОЛАДИ ва клиентга `null` етиб
+     келади. Илгари бу ерда `?? 1` турарди: `??` айнан `null` ни ушлайди,
+     шунинг учун БЕПУЛ ДАВРДА ҳам ҳамма «1 / 1» кўриб, ҳеч кимни таклиф
+     қила олмасди — сервер эса ўша сўровни бемалол қабул қиларди.
+     `null` = чексиз келишуви `/api/companies` да ҳам шундай. */
+  const limit = data ? (data.limit ?? Infinity) : 1;
   const full = members.length >= limit;
 
   return (

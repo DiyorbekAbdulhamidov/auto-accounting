@@ -69,6 +69,16 @@ interface SeedEntry {
   label: string;
 }
 
+/** Korxona ichidagi toifa qarorlari: `companies/{id}/counterparty_categories`.
+ *  Nomi SHU YERDA — uni ikkita route ishlatadi (yozadi va korxona
+ *  o'chirilganda tozalaydi), ikki joyda alohida yozilsa bittasi
+ *  o'zgarib, ikkinchisi jimgina boshqa kolleksiyaga qarab qolardi. */
+export const CATEGORIES_COLLECTION = 'counterparty_categories';
+
+/** Korxonalararo statistika (yuqori darajali kolleksiya): har STIR uchun
+ *  qaysi korxona qanday toifa qo'yganini saqlaydi. */
+export const CATEGORY_STATS_COLLECTION = 'counterparty_category_stats';
+
 export const SEED_CATEGORIES: Record<string, SeedEntry> = {
   // --- Byudjet: fakturasi hech qachon kelmaydi ---
   '201122919': { category: 'byudjet', label: 'Молия вазирлиги ғазначилиги' },

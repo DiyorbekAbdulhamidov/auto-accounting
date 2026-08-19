@@ -3,6 +3,7 @@
 import NextLink from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { buttonClasses, cx } from "./styles";
+import { useT } from "@/context/LanguageContext";
 
 /**
  * Sahifa sarlavhasi — hamma sahifada bir xil joyda va bir xil tartibda:
@@ -29,13 +30,16 @@ export default function PageHeader({
   actions?: React.ReactNode;
   className?: string;
 }) {
+  // «Орқага» — иконкали ҳаволанинг ЯГОНА матни, шунинг учун таржима
+  // қилинади (илгари лотин интерфейсда ҳам кириллча эшитиларди).
+  const t = useT();
   return (
     <div className={cx("flex flex-wrap items-start justify-between gap-4", className)}>
       <div className="flex min-w-0 items-start gap-3">
         {backHref && (
           <NextLink
             href={backHref}
-            aria-label="Орқага"
+            aria-label={t("Орқага")}
             className={cx(buttonClasses("secondary", "md", { iconOnly: true }), "mt-0.5")}
           >
             <ArrowLeft className="h-4 w-4" />

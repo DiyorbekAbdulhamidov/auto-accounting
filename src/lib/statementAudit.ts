@@ -905,8 +905,19 @@ export function auditFiles(files: InputFile[], options: AuditOptions = {}): Audi
         note: 'Ўқилмади',
         // Dastlabki 5 qator × 15 katak. Shapka odatda shu oraliqda
         // bo'ladi; ko'proq olish ma'no bermaydi va hujjatni kattalashtiradi.
-        sampleRows: sd.rows.slice(0, 5).map((r) =>
-          r.slice(0, 15).map((c) => (c === null || c === undefined ? '' : String(c).slice(0, 60)))
+        //
+        // `Array.from` ATAYLAB — `map` EMAS. Excel qatori SIYRAK (sparse)
+        // massiv bo'lishi mumkin: chap kataklari bo'sh sarlavha, birlashtirilgan
+        // katak va h.k. `Array.prototype.map` esa teshiklarni O'TKAZIB
+        // YUBORADI va natijada ham teshik qoldiradi — ya'ni quyidagi
+        // `undefined ? ''` qorovuli ular uchun UMUMAN ishlamasdi.
+        // Oqibati: Firestore `undefined` ga istisno tashlab, `parse_failures`
+        // yozuvini butunlay rad etardi va xato jimgina yutilardi (2026-08-19).
+        // `Array.from` teshikni ham element deb ko'radi va qorovuldan o'tkazadi.
+        sampleRows: Array.from(sd.rows.slice(0, 5), (r) =>
+          Array.from(r.slice(0, 15), (c) =>
+            c === null || c === undefined ? '' : String(c).slice(0, 60)
+          )
         ),
       });
       warnings.push(`«${label}» — варақ танилмади ва ҲИСОБГА ОЛИНМАДИ (${sd.rows.length} қатор).`);

@@ -96,7 +96,10 @@ export async function GET(req: Request) {
       ownerEmail: ws.ownerEmail,
       plan,
       planLabel: limits.label,
-      limit: limits.members,
+      // `Infinity` JSON'да жимгина `null` га айланади. Шартнома ЯШИРИЛМАЙДИ —
+      // ошкор ёзилади: `null` = ЧЕКСИЗ (`/api/companies` даги `remaining` билан
+      // бир хил келишув). Клиент буни `data.limit ?? Infinity` деб ўқийди.
+      limit: Number.isFinite(limits.members) ? limits.members : null,
       current: members.length,
     });
   } catch (error) {

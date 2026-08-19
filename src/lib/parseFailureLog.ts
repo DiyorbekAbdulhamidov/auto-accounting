@@ -34,6 +34,25 @@ export type FailureReason =
   /** O'qildi, lekin raqamini tasdiqlab bo'lmadi (na «Итого», na qoldiq) */
   | 'TASDIQLANMADI';
 
+/**
+ * Namuna qatori.
+ *
+ * Nega `string[]` emas, `{ cells: string[] }`: FIRESTORE MASSIV ICHIDA
+ * MASSIVNI SAQLAY OLMAYDI. `sampleRows: string[][]` yozishga urinilsa
+ * butun hujjat rad etiladi:
+ *
+ *   3 INVALID_ARGUMENT: Property array contains an invalid nested entity.
+ *
+ * Ya'ni jurnal TANILMAGAN varaq uchun HECH QACHON yozilmagan — xato esa
+ * `logParseFailure` da yutilgani uchun jimgina o'tib ketgan (2026-08-19
+ * da o'lchandi). Massivni obyektga o'rash — Firestore ruxsat beradigan
+ * yagona shakl; kataklar ALOHIDA qoladi, ya'ni «qaysi ustun bor edi»
+ * degan savolga javob yo'qolmaydi.
+ */
+export interface FailureSampleRow {
+  cells: string[];
+}
+
 /** Muammoli varaqning tavsifi. SUMMALAR YO'Q — ataylab. */
 export interface FailureSheet {
   file: string;
@@ -43,7 +62,7 @@ export interface FailureSheet {
   note?: string;
   /** `TANILMADI` varaqlarda dastlabki qatorlar — «qaysi shakl» degan
    *  savolga javob beradigan YAGONA artefakt. */
-  sampleRows?: string[][];
+  sampleRows?: FailureSampleRow[];
 }
 
 export interface FailureRecord {
@@ -116,7 +135,12 @@ export function buildFailureRecord(input: {
       format: str(s.format),
       rows: num(s.rows),
       ...(s.note ? { note: s.note } : {}),
-      ...(s.sampleRows && s.sampleRows.length ? { sampleRows: s.sampleRows } : {}),
+      // Massiv ichidagi massiv obyektga o'raladi — sabab `FailureSampleRow`
+      // izohida. O'rash AYNAN shu yerda: parser tabiiy `string[][]` beradi,
+      // Firestore cheklovi esa faqat SAQLASHGA tegishli.
+      ...(s.sampleRows && s.sampleRows.length
+        ? { sampleRows: s.sampleRows.map((cells) => ({ cells })) }
+        : {}),
     })),
     unverifiedFiles: unverified,
     detectedFormats: input.detectedFormats || [],

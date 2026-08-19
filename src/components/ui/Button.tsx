@@ -31,9 +31,23 @@ export default function Button({
   children,
   ...rest
 }: Props) {
+  /* BELGILI TUGMANING NOMI.
+     ------------------------------------------------------------
+     `iconOnly` tugmada matn YO'Q — ichida faqat SVG turadi. `title`
+     sichqoncha ustiga kelganda ko'rinadi, lekin ekran o'quvchi uni
+     ishonchli o'qimaydi: qulay nom `aria-label` dan olinadi. Shu sabab
+     `title` bo'lsa-yu `aria-label` yozilmagan bo'lsa, o'shani nom qilib
+     qo'yamiz — aks holda tugma «tugma» deb eshitiladi (hisobotni
+     o'chirish tugmasida aynan shunday edi). */
+  const ariaLabel =
+    iconOnly && !rest["aria-label"] && typeof rest.title === "string"
+      ? rest.title
+      : rest["aria-label"];
+
   return (
     <button
       {...rest}
+      aria-label={ariaLabel}
       disabled={disabled || loading}
       className={cx(buttonClasses(variant, size, { iconOnly, block }), className)}
     >

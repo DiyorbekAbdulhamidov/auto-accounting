@@ -12,17 +12,21 @@
 // qilinadi va kontragent asosiy sverkaga qaytariladi.
 import { NextResponse } from 'next/server';
 import { assertCompanyAccess, requireUser } from '@/lib/apiAuth';
-import { categoryDocId, CATEGORY_LABELS, type Category } from '@/lib/counterpartyCategory';
+import {
+  categoryDocId,
+  CATEGORY_LABELS,
+  CATEGORIES_COLLECTION,
+  CATEGORY_STATS_COLLECTION,
+  type Category,
+} from '@/lib/counterpartyCategory';
 
 export const runtime = 'nodejs';
 
-const CATEGORIES_COLLECTION = 'counterparty_categories';
-
-/** Korxonalararo statistika. Bu yerdagi ma'lumot HECH QACHON toifa
- *  bo'lib qo'llanmaydi — u faqat boshqa korxonalarda «?» belgisi
- *  chiqaradi. Shu sabab bitta buxgalterning xatosi boshqa mijozning
- *  pulini yashirib qo'ya olmaydi. */
-const STATS_COLLECTION = 'counterparty_category_stats';
+/* Kolleksiya nomlari `@/lib/counterpartyCategory` da — korxona
+   o'chirilganda ularni `/api/companies` DELETE ham tozalaydi.
+   Statistikadagi ma'lumot HECH QACHON toifa bo'lib qo'llanmaydi — u
+   faqat boshqa korxonalarda «?» belgisi chiqaradi. Shu sabab bitta
+   buxgalterning xatosi boshqa mijozning pulini yashirib qo'ya olmaydi. */
 
 function isCategory(v: unknown): v is Category {
   return typeof v === 'string' && Object.prototype.hasOwnProperty.call(CATEGORY_LABELS, v);
@@ -77,7 +81,7 @@ export async function POST(req: Request) {
     if (inn && inn !== '-') {
       try {
         await auth.admin.db
-          .collection(STATS_COLLECTION).doc(inn)
+          .collection(CATEGORY_STATS_COLLECTION).doc(inn)
           .set(
             {
               inn,
