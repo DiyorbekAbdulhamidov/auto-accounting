@@ -587,6 +587,72 @@ export const DICTIONARY: Record<string, Entry> = {
     en: 'SMS not sent: the verification did not respond. Reload the page and try again, or sign in with email and password.',
   },
 
+  // ---------- Қўлда тўлов ----------
+  'Корхона сони чекланмайди': {
+    ru: 'Число организаций не ограничено',
+    en: 'Unlimited companies',
+  },
+  '1 та фойдаланувчи': {
+    ru: '1 пользователь',
+    en: '1 user',
+  },
+  'тагача фойдаланувчи': {
+    ru: 'пользователей',
+    en: 'users',
+  },
+  'Режаларни солиштириш': {
+    ru: 'Сравнить тарифы',
+    en: 'Compare plans',
+  },
+  'ойига': {
+    ru: 'в месяц',
+    en: 'per month',
+  },
+  'Қуйидаги картага': {
+    ru: 'На карту ниже',
+    en: 'To the card below',
+  },
+  'сўм ўтказинг': {
+    ru: 'сум переводом',
+    en: '— transfer this amount',
+  },
+  'Чекни ботга ташланг:': {
+    ru: 'Отправьте чек боту:',
+    en: 'Send the receipt to the bot:',
+  },
+  'Режа очилади — одатда бир неча соат ичида, кечи билан 1 иш куни.': {
+    ru: 'Тариф откроется — обычно в течение нескольких часов, максимум 1 рабочий день.',
+    en: 'Your plan is opened — usually within a few hours, at most 1 business day.',
+  },
+  'Нусха олиш': {
+    ru: 'Копировать',
+    en: 'Copy',
+  },
+  'Нусха олинди': {
+    ru: 'Скопировано',
+    en: 'Copied',
+  },
+  'Нусха олинмади — рақамни қўлда кўчиринг.': {
+    ru: 'Не скопировалось — перепишите номер вручную.',
+    en: 'Could not copy — please enter the number manually.',
+  },
+  'Режа очилганда шу ботдан хабар келади.': {
+    ru: 'Когда тариф откроется, бот пришлёт уведомление.',
+    en: 'The bot will notify you once the plan is open.',
+  },
+  'Корхона сонини чеклашсиз қилиш учун режани очинг:': {
+    ru: 'Чтобы снять ограничение по числу организаций, откройте тариф:',
+    en: 'To remove the limit on companies, open a paid plan:',
+  },
+  'Кўпроқ фойдаланувчи керак бўлса — режани очинг:': {
+    ru: 'Если нужно больше пользователей — откройте тариф:',
+    en: 'If you need more users, open a paid plan:',
+  },
+  'Ҳозир тўлай олмайман — кейинроқ хабар беринг': {
+    ru: 'Сейчас не могу оплатить — сообщите позже',
+    en: 'I cannot pay right now — let me know later',
+  },
+
   // ---------- Ҳуқуқий саҳифалар ----------
   'Оммавий оферта': {
     ru: 'Публичная оферта',

@@ -23,6 +23,7 @@ import { Mail, Phone, UserPlus, X } from "lucide-react";
 import { useT } from "@/context/LanguageContext";
 import { authFetch } from "@/lib/authFetch";
 import { formatPhone } from "@/lib/phone";
+import { PaymentBox } from "@/components/PaymentBox";
 import {
   Alert,
   Badge,
@@ -245,12 +246,17 @@ export default function TeamModal({
                 {t("Режа чекловига етдингиз")} — {members.length} / {limit}
               </p>
               <p className="text-caption text-ink-3">
-                {t("Кўпроқ фойдаланувчи керак бўлса — бизга айтинг, режани очамиз.")}
+                {t("Кўпроқ фойдаланувчи керак бўлса — режани очинг:")}
               </p>
+              <PaymentBox plan="byuro" />
               {onNeedMore && (
-                <Button variant="primary" size="sm" onClick={onNeedMore}>
-                  {t("Кўпроқ керак")}
-                </Button>
+                <button
+                  type="button"
+                  onClick={onNeedMore}
+                  className="text-caption text-ink-3 underline hover:text-ink-2"
+                >
+                  {t("Ҳозир тўлай олмайман — кейинроқ хабар беринг")}
+                </button>
               )}
             </div>
           ) : (

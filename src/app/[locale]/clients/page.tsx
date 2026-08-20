@@ -14,6 +14,7 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { db } from "@/lib/firebase";
 import { authFetch } from "@/lib/authFetch";
+import { PaymentBox } from "@/components/PaymentBox";
 import { useAuth } from "@/context/AuthContext";
 import { addDoc, collection, getDocs, query, serverTimestamp, where } from "firebase/firestore";
 import NextLink from "next/link";
@@ -672,17 +673,27 @@ export default function ClientsPage() {
                 {t("Сизда")} <b>{limitHit.current}</b> {t("та бор.")}
               </p>
               <p className="mt-1.5">
-                {t("Кўпроқ корхона керак бўлса — айтинг. Тариф ҳали ишга туширилмаган, шунинг учун ҳозир пул сўралмайди.")}
+                {t("Корхона сонини чеклашсиз қилиш учун режани очинг:")}
               </p>
+              <div className="mt-2.5">
+                <PaymentBox plan="buxgalter" />
+              </div>
+              {/* ТЎЛАМАЙДИГАН ОДАМ ҲАМ ЙЎҚОТИЛМАЙДИ. Кимлар деворга
+                  урилиб, лекин тўламагани — энг қимматли рақам: у
+                  нарх юқорилигини ёки вақт эмаслигини кўрсатади. */}
               <div className="mt-2.5">
                 {interestSent ? (
                   <span className="text-caption font-medium text-ok">
                     ✓ {t("Сўровингиз қайд этилди")}
                   </span>
                 ) : (
-                  <Button variant="primary" size="sm" onClick={handleNeedMore}>
-                    {t("Кўпроқ керак")}
-                  </Button>
+                  <button
+                    type="button"
+                    onClick={handleNeedMore}
+                    className="text-caption text-ink-3 underline hover:text-ink-2"
+                  >
+                    {t("Ҳозир тўлай олмайман — кейинроқ хабар беринг")}
+                  </button>
                 )}
               </div>
             </Alert>
