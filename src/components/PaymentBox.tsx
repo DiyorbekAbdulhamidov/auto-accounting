@@ -16,6 +16,8 @@ import { useState } from "react";
 import { Copy, Check, Send } from "lucide-react";
 import NextLink from "next/link";
 import { useLocale, useT } from "@/context/LanguageContext";
+import { useAuth } from "@/context/AuthContext";
+import { accountKeyOf } from "@/lib/workspace";
 import { path } from "@/lib/routes";
 import { PLANS, type Plan } from "@/lib/plans";
 import { MANUAL_PAYMENT } from "@/lib/payment";
@@ -24,18 +26,42 @@ import { Button, notify } from "@/components/ui";
 export function PaymentBox({ plan }: { plan: Exclude<Plan, "free"> }) {
   const t = useT();
   const locale = useLocale();
-  const [copied, setCopied] = useState(false);
+  const { user } = useAuth();
+  const [copied, setCopied] = useState<"card" | "note" | null>(null);
   const limits = PLANS[plan];
   const price = limits.priceUzs.toLocaleString("ru-RU");
 
-  const copyCard = async () => {
+  /* ============================================================
+     CHEK KIMNIKI — TO'LOVNING ENG ZAIF JOYI
+     ------------------------------------------------------------
+     Karta chekida hisob ko'rsatilmaydi. Odam faqat skrinshot
+     tashlasa, rejani KIMGA ochish noma'lum qoladi va uni qidirish
+     kerak bo'ladi — to'lagan odam esa kutib turadi.
+
+     Yechim: hisob kaliti EKRANDA turadi va bitta bosishda tayyor
+     xabar bo'lib nusxalanadi. Odam yozmaydi — qo'yadi, ya'ni xato
+     yozish imkoni ham yo'q.
+
+     Ko'rsatiladigan qiymat — ISH MAYDONI kaliti: reja aynan ish
+     maydoniga qo'yiladi (`/api/admin/plan`), foydalanuvchiga emas.
+     ============================================================ */
+  const account =
+    (typeof user?.workspaceId === "string" && user.workspaceId) ||
+    accountKeyOf(user?.email, typeof user?.phone === "string" ? user.phone : null) ||
+    "";
+
+  const note = `Moslik — «${t(limits.label)}» ${price} ${t("сўм")}\n${t("Ҳисоб")}: ${account}`;
+
+  const copy = async (what: "card" | "note") => {
     try {
-      await navigator.clipboard.writeText(MANUAL_PAYMENT.cardPlain);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+      await navigator.clipboard.writeText(
+        what === "card" ? MANUAL_PAYMENT.cardPlain : note
+      );
+      setCopied(what);
+      setTimeout(() => setCopied(null), 2000);
     } catch {
-      // Brauzer ruxsat bermasa — raqam baribir ekranda turibdi
-      notify.warn(t("Нусха олинмади — рақамни қўлда кўчиринг."));
+      // Brauzer ruxsat bermasa — matn baribir ekranda turibdi
+      notify.warn(t("Нусха олинмади — қўлда кўчиринг."));
     }
   };
 
@@ -61,7 +87,7 @@ export function PaymentBox({ plan }: { plan: Exclude<Plan, "free"> }) {
           <b>1.</b> {t("Қуйидаги картага")} <b>{price}</b> {t("сўм ўтказинг")}
         </li>
         <li>
-          <b>2.</b> {t("Чекни ботга ташланг:")}{" "}
+          <b>2.</b> {t("Чекни ВА қуйидаги маълумотни ботга ташланг:")}{" "}
           <a
             href={MANUAL_PAYMENT.botUrl}
             target="_blank"
@@ -86,12 +112,31 @@ export function PaymentBox({ plan }: { plan: Exclude<Plan, "free"> }) {
         <Button
           size="sm"
           variant="ghost"
-          onClick={copyCard}
-          icon={copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+          onClick={() => copy("card")}
+          icon={copied === "card" ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
         >
-          {copied ? t("Нусха олинди") : t("Нусха олиш")}
+          {copied === "card" ? t("Нусха олинди") : t("Нусха олиш")}
         </Button>
       </div>
+
+      {/* HISOB — chek bilan birga yuboriladigan qator */}
+      {account && (
+        <div className="mt-2 rounded-lg border border-line bg-surface-2 px-3 py-2.5">
+          <p className="text-caption text-ink-3">{t("Чек билан бирга шуни юборинг")}</p>
+          <p className="mt-0.5 break-all font-mono text-body text-ink">
+            {t("Ҳисоб")}: {account}
+          </p>
+          <Button
+            className="mt-1.5"
+            size="sm"
+            variant="secondary"
+            onClick={() => copy("note")}
+            icon={copied === "note" ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+          >
+            {copied === "note" ? t("Нусха олинди") : t("Хабарни нусхалаш")}
+          </Button>
+        </div>
+      )}
 
       <p className="mt-2.5 flex items-start gap-2 text-caption text-ink-3">
         <Send className="mt-0.5 h-3.5 w-3.5 shrink-0" />

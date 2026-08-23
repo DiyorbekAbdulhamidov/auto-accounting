@@ -167,6 +167,8 @@ export default function TeamModal({
      `null` = чексиз келишуви `/api/companies` да ҳам шундай. */
   const limit = data ? (data.limit ?? Infinity) : 1;
   const full = members.length >= limit;
+  /** Chegara 1 ta — ya'ni ish maydonida faqat egasi bo'la oladi */
+  const onlyOwnerAllowed = full && limit === 1 && members.length === 1;
 
   return (
     <Modal
@@ -242,12 +244,31 @@ export default function TeamModal({
             // 2026-08-18 dagi qaror: cheklov «yo'q» demaydi, «qanday
             // ochish mumkin» deydi.
             <div className="space-y-2 rounded-lg border border-line bg-surface-2 p-4">
-              <p className="text-body text-ink">
-                {t("Режа чекловига етдингиз")} — {members.length} / {limit}
-              </p>
-              <p className="text-caption text-ink-3">
-                {t("Кўпроқ фойдаланувчи керак бўлса — режани очинг:")}
-              </p>
+              {/* BEPUL REJA ALOHIDA GAPIRADI. Sanoqqa EGASI ham kiradi,
+                  ya'ni bepul rejada («1 ta foydalanuvchi») odam hech kimni
+                  qo'shmasdan turib «1 / 1» ni ko'radi va buni nuqson deb
+                  o'ylaydi — 2026-08-20 da aynan shu savol tug'ildi.
+                  Bunday holatda sanoq umuman ko'rsatilmaydi: u faqat
+                  2 va undan katta chegarada ma'noli. */}
+              {onlyOwnerAllowed ? (
+                <>
+                  <p className="text-body text-ink">
+                    {t("Бепул режада иш майдонида фақат сиз ишлайсиз.")}
+                  </p>
+                  <p className="text-caption text-ink-3">
+                    {t("Ҳамкасбингизни қўшиш учун «Бюро» режаси керак:")}
+                  </p>
+                </>
+              ) : (
+                <>
+                  <p className="text-body text-ink">
+                    {t("Режа чекловига етдингиз")} — {members.length} / {limit}
+                  </p>
+                  <p className="text-caption text-ink-3">
+                    {t("Кўпроқ фойдаланувчи керак бўлса — режани очинг:")}
+                  </p>
+                </>
+              )}
               <PaymentBox plan="byuro" />
               {onNeedMore && (
                 <button

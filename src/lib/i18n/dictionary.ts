@@ -588,6 +588,34 @@ export const DICTIONARY: Record<string, Entry> = {
   },
 
   // ---------- Қўлда тўлов ----------
+  'Ҳисоб': {
+    ru: 'Аккаунт',
+    en: 'Account',
+  },
+  'Чек билан бирга шуни юборинг': {
+    ru: 'Отправьте это вместе с чеком',
+    en: 'Send this together with the receipt',
+  },
+  'Хабарни нусхалаш': {
+    ru: 'Копировать сообщение',
+    en: 'Copy message',
+  },
+  'Чекни ВА қуйидаги маълумотни ботга ташланг:': {
+    ru: 'Отправьте боту чек И данные ниже:',
+    en: 'Send the bot the receipt AND the details below:',
+  },
+  'Нусха олинмади — қўлда кўчиринг.': {
+    ru: 'Не скопировалось — перепишите вручную.',
+    en: 'Could not copy — please enter it manually.',
+  },
+  'Бепул режада иш майдонида фақат сиз ишлайсиз.': {
+    ru: 'На бесплатном тарифе в рабочем пространстве работаете только вы.',
+    en: 'On the free plan you are the only person in the workspace.',
+  },
+  'Ҳамкасбингизни қўшиш учун «Бюро» режаси керак:': {
+    ru: 'Чтобы добавить коллегу, нужен тариф «Бюро»:',
+    en: 'To add a colleague you need the Byuro plan:',
+  },
   'Корхона сони чекланмайди': {
     ru: 'Число организаций не ограничено',
     en: 'Unlimited companies',

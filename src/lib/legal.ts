@@ -95,8 +95,13 @@ const OFFER_CYRL: LegalDoc = {
         '«Бюро» режаси: ойига 39 999 сўм. Корхона сони чекланмайди, 5 тагача фойдаланувчи.',
         'Сверкалар сони ҳамма режада чекланмайди.',
         'Нархлар Ўзбекистон сўмида кўрсатилган ва бошқа солиқлар қўшилмайди.',
-        'Тўлов CLICK тўлов тизими орқали, бир ой учун олдиндан амалга оширилади. ' +
-          'Тўлов ўтгач режа Фойдаланувчининг иш майдонига дарҳол қўйилади.',
+        'Тўлов бир ой учун олдиндан амалга оширилади.',
+        'Ҳозирча тўлов Ижрочининг банк картасига ўтказма орқали қабул қилинади. ' +
+          'Карта рақами ва тўлов тартиби тизим ичида, режа чеклови кўринган ' +
+          'жойда ёзилган. Тўлов чеки Ижрочига юборилгач режа очилади — одатда ' +
+          'бир неча соат ичида, кечи билан 1 иш куни.',
+        'Онлайн тўлов тизими (CLICK) уланганидан кейин тўлов у орқали ҳам ' +
+          'қабул қилинади ва ушбу офертада эълон қилинади.',
         'Ижрочи нархни ўзгартириш ҳуқуқига эга. Янги нарх фақат кейинги тўлов даврига ' +
           'татбиқ этилади — тўланган давр ўзгармайди.',
       ],
@@ -202,8 +207,13 @@ const OFFER_RU: LegalDoc = {
         'Тариф «Бюро»: 39 999 сум в месяц. Число организаций не ограничено, до 5 пользователей.',
         'Количество сверок не ограничено на всех тарифах.',
         'Цены указаны в сумах Республики Узбекистан, дополнительные налоги не начисляются.',
-        'Оплата производится через платёжную систему CLICK, авансом за один месяц. ' +
-          'После прохождения платежа тариф немедленно применяется к рабочему пространству.',
+        'Оплата производится авансом за один месяц.',
+        'Пока оплата принимается переводом на банковскую карту Исполнителя. ' +
+          'Номер карты и порядок оплаты указаны внутри сервиса — там, где ' +
+          'показывается ограничение тарифа. После отправки чека Исполнителю ' +
+          'тариф открывается: обычно в течение нескольких часов, максимум 1 рабочий день.',
+        'После подключения платёжной системы (CLICK) оплата будет приниматься ' +
+          'и через неё, о чём будет объявлено в настоящей оферте.',
         'Исполнитель вправе изменить цену. Новая цена применяется только к следующему ' +
           'оплачиваемому периоду — оплаченный период не меняется.',
       ],
@@ -307,8 +317,13 @@ const OFFER_EN: LegalDoc = {
         'Byuro plan: 39,999 UZS per month. Unlimited companies, up to 5 users.',
         'The number of reconciliations is unlimited on every plan.',
         'Prices are stated in Uzbek soums; no additional taxes are added.',
-        'Payment is made through the CLICK payment system, in advance for one month. ' +
-          'Once the payment clears, the plan is applied to the workspace immediately.',
+        'Payment is made in advance for one month.',
+        'For now, payment is accepted by transfer to the bank card of the Provider. ' +
+          'The card number and payment steps are shown inside the service, at the ' +
+          'point where the plan limit appears. Once the receipt is sent to the ' +
+          'Provider the plan is opened — usually within a few hours, at most 1 business day.',
+        'Once an online payment system (CLICK) is connected, payment will also be ' +
+          'accepted through it, and this offer will be updated accordingly.',
         'The Provider may change prices. A new price applies only to the next payment ' +
           'period — a period already paid for is not affected.',
       ],

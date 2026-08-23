@@ -88,5 +88,10 @@ export const config = {
   // `_next`, `api`, va nuqtali fayllar (favicon.ico, sitemap.xml,
   // robots.txt, icon.svg) tegilmaydi — aks holda ular ham
   // yo'naltirilib, umuman yuklanmasdi.
-  matcher: ['/((?!_next|api|.*\\.).*)'],
+  //
+  // `opengraph-image` ALOHIDA yozilgan: u Next'ning metama'lumot
+  // fayli, lekin manzilida NUQTA yo'q — ya'ni yuqoridagi qoidaga
+  // tushmasdi va til bilan yo'naltirilib 307 qaytarardi. Natijada
+  // Telegram havolani rasmsiz ko'rsatardi.
+  matcher: ['/((?!_next|api|opengraph-image|twitter-image|.*\\.).*)'],
 };

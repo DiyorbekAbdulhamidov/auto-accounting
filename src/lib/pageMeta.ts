@@ -28,6 +28,22 @@ import { PATHS, type PathKey } from './routes';
 import { SITE_URL, seo } from './seo';
 import { BRAND } from './brand';
 
+/**
+ * HAVOLA RASMI — `src/app/opengraph-image.tsx` chizadi.
+ *
+ * ATAYLAB shu yerda OSHKORA yoziladi. Next metama'lumot faylini
+ * ildizdan o'zi qo'shadi deb kutish mumkin edi, lekin sahifalar
+ * `[locale]` ichida va `generateMetadata` o'z `openGraph` obyektini
+ * qaytaradi — natijada `og:image` tegi UMUMAN chiqmasdi.
+ * Jonli qurilmada tekshirildi: 2026-08-21.
+ */
+const OG_IMAGE = {
+  url: `${SITE_URL}/opengraph-image`,
+  width: 1200,
+  height: 630,
+  alt: BRAND.name,
+};
+
 function url(locale: Locale, key: PathKey): string {
   return `${SITE_URL}/${locale}${PATHS[key]}`;
 }
@@ -58,11 +74,13 @@ export function pageMeta(locale: Locale, key: PathKey): Metadata {
       url: canonical,
       title: `${copy.title} · ${BRAND.name}`,
       description: copy.description,
+      images: [OG_IMAGE],
     },
     twitter: {
       card: 'summary_large_image',
       title: `${copy.title} · ${BRAND.name}`,
       description: copy.description,
+      images: [OG_IMAGE.url],
     },
     // Kirish ortidagi sahifalar indekslanmaydi: ular mijoz ma'lumoti
     // va qidiruvda hech qanday qiymati yo'q.
