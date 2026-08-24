@@ -84,7 +84,7 @@ export default function ClientPage({
   }, [id, workspaceId]);
 
   if (loading) {
-    return <PageLoader text={t("Корхона юкланмоқда...")} />;
+    return <PageLoader shape="table" cols={5} text={t("Корхона юкланмоқда...")} />;
   }
 
   if (notFound || !company) {

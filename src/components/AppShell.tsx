@@ -43,11 +43,11 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className={layout.page}>
-      {/* Очиқ саҳифалардаги шапка билан БИР ХИЛ материал (`.glass`):
+      {/* Очиқ саҳифалардаги шапка билан БИР ХИЛ материал (тўлиқ сирт):
           одам кириш ва иш саҳифаси орасида ўтганда сирт ўзгармайди.
           Бренд градиенти бу ерда ЙЎҚ — иш саҳифасида диққат
           жадвалда бўлиши керак. */}
-      <header className="glass sticky top-0 z-40 border-b border-line">
+      <header className="sticky top-0 z-40 border-b border-line bg-surface">
         <div className="mx-auto flex w-full max-w-[1500px] items-center justify-between gap-3 px-4 py-2.5 md:px-6">
           <NextLink href={path("clients", locale)} aria-label={t("Мижозлар")}>
             <Logo size="sm" />

@@ -1,0 +1,38 @@
+{
+  "artboards": [
+    { "file": "Main.dc.html", "title": "A — Терминал", "x": 0, "y": 0, "w": 1440, "h": 900 },
+    { "file": "Qogoz.dc.html", "title": "B — Қоғоз", "x": 1560, "y": 0, "w": 1440, "h": 900 },
+    { "file": "Chuqurlik.dc.html", "title": "C — Чуқурлик", "x": 3120, "y": 0, "w": 1440, "h": 900 }
+  ],
+  "annotations": [
+    {
+      "id": "brief",
+      "x": 0,
+      "y": -190,
+      "w": 620,
+      "text": "Moslik — bosh sahifa, uchta yo'nalish.\nHar uchalasida AYNAN bir xil ma'lumot: sarlavha, va'da, sverka natijasi va uchta kontragent.\nFarqi faqat DIZAYN tilida — shuning uchun solishtirish halol.\nBittasini tanlang, keyin o'sha til bo'yicha qolgan ekranlarni quraman."
+    },
+    {
+      "id": "a-note",
+      "x": 0,
+      "y": 950,
+      "w": 460,
+      "text": "A — ТЕРМИНАЛ\nQora, zich, aniq. Raqamlar monoshrift bilan, ustunlar tekis. Ramp/Bloomberg ohangi.\n+ Ma'lumot birinchi o'rinda, professional va jiddiy ko'rinadi.\n− Qora fon issiq emas; ba'zi buxgalter uchun \"sovuq\" tuyulishi mumkin."
+    },
+    {
+      "id": "b-note",
+      "x": 1560,
+      "y": 950,
+      "w": 460,
+      "text": "B — ҚОҒОЗ\nIliq qog'oz, serif sarlavha, haqiqiy daftar chizig'i, qizil qalam bilan belgilangan farq.\n+ Buxgalterning o'z dunyosi; hech bir raqobatchida yo'q.\n− Kamroq \"texnologik\" ko'rinadi; yosh auditoriyaga zamonaviy tuyulmasligi mumkin."
+    },
+    {
+      "id": "c-note",
+      "x": 3120,
+      "y": 950,
+      "w": 460,
+      "text": "C — ЧУҚУРЛИК\nBrend rangining maydoni, suzayotgan mahsulot oynasi, gradient sarlavha. Linear/Stripe ohangi.\n+ Eng \"zamonaviy\" va e'tibor tortadigan.\n− Bu til hozir eng ko'p ishlatiladigan til — o'ziga xoslik kamroq."
+    }
+  ],
+  "launch": { "view": "canvas" }
+}

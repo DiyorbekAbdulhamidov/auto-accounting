@@ -41,6 +41,14 @@ export const DICTIONARY: Record<string, Entry> = {
   'янги': { ru: 'новый', en: 'new' },
   'таниш': { ru: 'известный', en: 'known' },
   'барчаси': { ru: 'все', en: 'all' },
+  'Тема': { ru: 'Тема', en: 'Theme' },
+  'бошланғич': { ru: 'начальный', en: 'opening' },
+  'кирим': { ru: 'приход', en: 'in' },
+  'чиқим': { ru: 'расход', en: 'out' },
+  'охирги қолдиқ': { ru: 'конечный остаток', en: 'closing balance' },
+  'Қурилмадагидек': { ru: 'Как на устройстве', en: 'Match device' },
+  'Ёруғ': { ru: 'Светлая', en: 'Light' },
+  'Тунги': { ru: 'Тёмная', en: 'Dark' },
   'Тунги/Кундузги режим': { ru: 'Ночной/Дневной режим', en: 'Dark / light mode' },
   'Тилни танлаш': { ru: 'Выбор языка', en: 'Choose language' },
 
@@ -222,6 +230,7 @@ export const DICTIONARY: Record<string, Entry> = {
   //   1) «Ўқиш ҳисоботи» — у ерда бухгалтер файлни текширади;
   //   2) АКТ СВЕРКИ — расмий икки томонлама ҳужжат шакли.
   // Батафсил: MAHSULOT-QARORLARI.md, 2-бўлим.
+  'Тўланган': { ru: 'Оплачено', en: 'Paid' },
   'Тўланган пул': { ru: 'Оплачено', en: 'Money paid out' },
   'Жами тўланган пул': { ru: 'Всего оплачено', en: 'Total paid out' },
   'Умумий тўланган пул': { ru: 'Всего оплачено', en: 'Total paid out' },
@@ -706,45 +715,17 @@ export const DICTIONARY: Record<string, Entry> = {
     ru: 'Исполнитель',
     en: 'Provider',
   },
-  'Мақоми': {
-    ru: 'Статус',
-    en: 'Status',
-  },
-  'Маълумотнома': {
-    ru: 'Справка',
-    en: 'Certificate',
-  },
-  'Берган орган': {
-    ru: 'Кем выдана',
-    en: 'Issued by',
-  },
   'Фаолият тури': {
     ru: 'Вид деятельности',
     en: 'Activity',
-  },
-  'Фаолият манзили': {
-    ru: 'Адрес деятельности',
-    en: 'Place of activity',
-  },
-  'Ўзини ўзи банд қилган шахс': {
-    ru: 'Самозанятое лицо',
-    en: 'Self-employed person',
-  },
-  'Ўзбекистон Республикаси Солиқ қўмитаси': {
-    ru: 'Налоговый комитет Республики Узбекистан',
-    en: 'Tax Committee of the Republic of Uzbekistan',
   },
   'Дастурий таъминот ишлаб чиқиш': {
     ru: 'Разработка программного обеспечения',
     en: 'Software development',
   },
-  'Тошкент вилояти, Ангрен шаҳар': {
-    ru: 'Ташкентская область, город Ангрен',
-    en: 'Tashkent region, city of Angren',
-  },
-  'Савол, таклиф ёки тўлов бўйича мурожаат — қуйидаги манзилларга ёзинг.': {
-    ru: 'Вопрос, предложение или обращение по оплате — пишите по адресам ниже.',
-    en: 'Questions, suggestions or payment enquiries — use the contacts below.',
+  'Савол, таклиф ёки тўлов бўйича мурожаат — Телеграм орқали ёзинг.': {
+    ru: 'Вопрос, предложение или обращение по оплате — пишите в Телеграм.',
+    en: 'Questions, suggestions or payment enquiries — write to us on Telegram.',
   },
   'Иш вақти: душанба–жума, 9:00–18:00 (Тошкент вақти).': {
     ru: 'Часы работы: понедельник–пятница, 9:00–18:00 (ташкентское время).',
@@ -995,4 +976,59 @@ export const DICTIONARY: Record<string, Entry> = {
   'иссиқлик': { ru: 'теплоснабжение', en: 'heating' },
   'чиқинди': { ru: 'вывоз отходов', en: 'waste collection' },
   'ёнғин хавфсизлиги': { ru: 'пожарная безопасность', en: 'fire safety' },
+
+  // --- Namuna nomlari, aloqa va rekvizitlar (2026-08-23) ---
+  'Фирма номлари шартли — рақамлар ҳақиқий синовдан.': {
+    ru: 'Названия фирм условные — цифры из реального теста.',
+    en: 'Company names are fictional — the figures come from a real test.',
+  },
+  'Ботга ёзинг:': { ru: 'Напишите боту:', en: 'Message the bot:' },
+  'Тўлов усули ва реквизитлар ботда юборилади.': {
+    ru: 'Способ оплаты и реквизиты будут отправлены в боте.',
+    en: 'The payment method and details are sent in the bot.',
+  },
+  'Телеграм': { ru: 'Телеграм', en: 'Telegram' },
+  'Веб-хизмат': { ru: 'Веб-сервис', en: 'Web service' },
+  'Веб-сайт': { ru: 'Веб-сайт', en: 'Website' },
+  'Алоқа': { ru: 'Связь', en: 'Contact' },
+  'Тўлиқ реквизитлар тўлов тизими уланганда эълон қилинади.': {
+    ru: 'Полные реквизиты будут опубликованы после подключения платёжной системы.',
+    en: 'Full legal details will be published once the payment system is connected.',
+  },
+  'Хабарларга бир иш куни ичида жавоб берилади. Тўловни қайтариш аризаси 3 иш кунида кўрилади.': {
+    ru: 'На сообщения отвечаем в течение одного рабочего дня. Заявление на возврат рассматривается за 3 рабочих дня.',
+    en: 'Messages are answered within one business day. Refund requests are reviewed within 3 business days.',
+  },
+  // --- Korxonalar ro'yxati: ikkala yo'nalish (2026-08-24) ---
+  'Чиқим фарқи': { ru: 'Разница по расходу', en: 'Outgoing difference' },
+  'Кирим фарқи': { ru: 'Разница по приходу', en: 'Incoming difference' },
+  'Биз қарздормиз': { ru: 'Мы должны', en: 'We owe' },
+  'Фактура олиш керак': { ru: 'Нужно получить счёт-фактуру', en: 'Invoice needed' },
+  'Аванс тушган': { ru: 'Поступил аванс', en: 'Advance received' },
+  'Ҳаммаси мос': { ru: 'Всё сходится', en: 'All matched' },
+  'биз тўладикми, фактура келдими': {
+    ru: 'мы оплатили — счёт-фактура пришла?',
+    en: 'we paid — did the invoice arrive?',
+  },
+  'бизга тўлашдими, фактура ёздикми': {
+    ru: 'нам оплатили — мы выставили счёт-фактуру?',
+    en: 'we were paid — did we issue the invoice?',
+  },
+  'биз қарздормиз': { ru: 'мы должны', en: 'we owe' },
+  'фактура олиш керак': { ru: 'нужно получить счёт-фактуру', en: 'invoice needed' },
+  'бизга қарздор': { ru: 'нам должны', en: 'they owe us' },
+  'аванс тушган': { ru: 'поступил аванс', en: 'advance received' },
+  'ёзилган фактура − тушган пул': {
+    ru: 'выставленные счёт-фактуры − поступившие деньги',
+    en: 'invoices issued − money received',
+  },
+  'Рақамлар САҚЛАНГАН сверкалардан олинган.': {
+    ru: 'Цифры взяты из СОХРАНЁННЫХ сверок.',
+    en: 'Figures come from SAVED reconciliations.',
+  },
+  'корхонада': { ru: 'у компаний', en: 'companies' },
+  'тўлов бўйича иш йўқ': { ru: 'по оплате вопросов нет', en: 'nothing to pay' },
+  'тушум бўйича иш йўқ': { ru: 'по поступлениям вопросов нет', en: 'nothing to collect' },
+  'Чиқим айланмаси': { ru: 'Оборот по расходу', en: 'Outgoing turnover' },
+  'Кирим айланмаси': { ru: 'Оборот по приходу', en: 'Incoming turnover' },
 };

@@ -35,9 +35,9 @@ type Pair = {
 };
 
 const PAIRS: Pair[] = [
-  { name: "YOSH ULGURJI SAVDO", paid: "473 954 000", invoice: "473 954 000", matched: true },
-  { name: "KARVON MEBILLARI", paid: "8 271 000", invoice: "8 271 000", matched: true },
-  { name: "HUDUDGAZTA'MINOT", paid: "—", invoice: "50 278 000", matched: false, diff: "50 278 000" },
+  { name: "SAMO SAVDO", paid: "473 954 000", invoice: "473 954 000", matched: true },
+  { name: "NAVRO'Z MEBEL", paid: "8 271 000", invoice: "8 271 000", matched: true },
+  { name: "ORIENT TEXNIKA", paid: "—", invoice: "50 278 000", matched: false, diff: "50 278 000" },
 ];
 
 /** 0 бўш · 1 чиқади · 2 марказга юради · 3 қулфланади · 4 хулоса */

@@ -9,7 +9,7 @@ import { formatPhone, toE164 } from "@/lib/phone";
 import Logo from "@/components/Brand";
 import ThemeToggle from "@/components/ThemeToggle";
 import LanguageToggle from "@/components/LanguageToggle";
-import { Alert, Badge, Button, Card, Field, Input, layout } from "@/components/ui";
+import { Alert, Badge, Button, Field, Input, layout } from "@/components/ui";
 
 /* ============================================================
    KO'RSATUV (DEMO) HISOBI — FORMA OLDINDAN TO'LDIRILADI
@@ -168,31 +168,29 @@ export default function LoginForm() {
         : t("Бухгалтер учун автоматик текширув тизими");
 
   return (
-    <div className={`${layout.page} relative flex items-center justify-center overflow-hidden px-4`}>
-      {/* Фон — бош саҳифадаги АЙНАН ўша тўр ва нурланиш. */}
-      <div className="pointer-events-none absolute inset-0 grid-bg opacity-60" />
-      <div
-        className="pointer-events-none absolute inset-0"
-        style={{
-          background:
-            "radial-gradient(50% 50% at 50% 0%, color-mix(in srgb, var(--brand-out) 16%, transparent) 0%, transparent 70%), " +
-            "radial-gradient(50% 50% at 50% 100%, color-mix(in srgb, var(--brand-in) 16%, transparent) 0%, transparent 70%)",
-        }}
-      />
+    /* ============================================================
+       КИРИШ — ФАҚАТ КИРИШ
+       ------------------------------------------------------------
+       Иккига бўлинган экран синаб кўрилди ва ОЛИБ ТАШЛАНДИ: ўнг
+       томондаги «мана нима оласиз» панели бу ерда ортиқча эди.
+       Кириш саҳифасига келган одам аллақачон ҚАРОР ҚИЛГАН — унга
+       яна сотиш керак эмас, унга ФОРМА керак.
+       ============================================================ */
+    <div className={`${layout.page} paper brand-field flex min-h-screen flex-col`}>
+        <div className="flex items-center justify-between px-4 py-5 sm:px-8">
+          <NextLink href={path("home", locale)} aria-label={t("Бош саҳифа")}>
+            <Logo size="sm" />
+          </NextLink>
+          <div className="flex items-center gap-2">
+            <LanguageToggle />
+            <ThemeToggle />
+          </div>
+        </div>
 
-      <NextLink
-        href={path("home", locale)}
-        className="absolute left-4 top-4 z-10"
-        aria-label={t("Бош саҳифа")}
-      >
-        <Logo size="sm" />
-      </NextLink>
-      <div className="absolute right-4 top-4 z-10 flex items-center gap-2">
-        <LanguageToggle />
-        <ThemeToggle />
-      </div>
-
-      <Card elevation={3} className="relative z-10 w-full max-w-sm rounded-xl p-6">
+        <div className="flex flex-1 items-center justify-center px-4 pb-12">
+          {/* Панель: соясиз, битта чизиқ. Форма қоғозда турибди,
+              «сузиб юрган ойна» ичида эмас. */}
+          <div className="w-full max-w-sm rounded-lg border border-line bg-surface p-6">
         <div className="mb-6">
           <h1 className="text-h2 font-semibold text-ink">{title}</h1>
           <p className="mt-1.5 text-body text-ink-2">{subtitle}</p>
@@ -382,7 +380,8 @@ export default function LoginForm() {
             </NextLink>
           </p>
         </div>
-      </Card>
+          </div>
+        </div>
     </div>
   );
 }

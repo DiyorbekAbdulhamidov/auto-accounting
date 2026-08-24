@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import PublicShell, { PublicHeading } from "@/components/landing/PublicShell";
-import { Features, FinalCta, Roadmap } from "@/components/landing/Sections";
+import FeatureGrid from "@/components/landing/FeatureGrid";
+import { FinalCta, Roadmap } from "@/components/landing/Sections";
 import { GuideDirections } from "@/components/guide/Guide";
 import { BreadcrumbJsonLd } from "@/components/JsonLd";
 import { isLocale } from "@/lib/i18n";
@@ -43,7 +44,7 @@ export default async function FeaturesPage({
         {/* Сарлавҳа юқорида `<h1>` бўлиб турибди, шунинг учун бўлим
             ўз сарлавҳасини чизмайди — битта саҳифада иккита h1/h2
             бир хил матн билан турмаслиги керак. */}
-        <Features heading={false} />
+        <FeatureGrid heading={false} />
         <div className="mx-auto w-full max-w-7xl px-4 py-14 md:px-6">
           <GuideDirections />
         </div>

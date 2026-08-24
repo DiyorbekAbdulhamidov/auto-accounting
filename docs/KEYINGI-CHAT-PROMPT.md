@@ -8,134 +8,174 @@ Men o'zbekcha (lotin) yozaman. UI matnlari va `t()` kalitlari — kirill o'zbekc
 
 ```
 node scripts/verify-parsers.cjs   →  142/142
+node scripts/check-contrast.cjs   →  70/70
 npx tsc --noEmit                  →  toza
 npx eslint src --max-warnings=0   →  toza
 npx next build                    →  xatosiz
 ```
 
 Bittasi yiqilsa — **MENGA AYT**, o'zing "tuzatib" ketma.
-Chuqurroq kerak bo'lsa: `HANDOFF.md`, `MAHSULOT-QARORLARI.md`.
+Chuqurroq: `HANDOFF.md`, `MAHSULOT-QARORLARI.md`, `AGENTS.md`.
 
 ---
 
-## 1. HOLAT (2026-08-20)
+## 1. HOLAT (2026-08-24)
 
-**Domen `moslik.uz` to'liq ishlaydi** — canonical, hreflang, `robots.txt`, `sitemap.xml` (8 sahifa × 4 til) hammasi to'g'ri, o'lchangan. Google Search Console'da domen tasdiqlangan, lekin **hali indekslanmagan** (0 klik). Bu normal: domen yangi, havola yo'q. Sitemap `robots.txt` da e'lon qilingan, ya'ni o'zi ham topiladi — qo'lda yuborilsa 2–7 kun, yuborilmasa 2–8 hafta.
+**33 ta fayl o'zgargan, HECH BIRI kommit qilinmagan.** `origin/master` = `8b50b8f`.
+Jonli `moslik.uz` da hali ESKI versiya turibdi — butun dizayn ishi faqat mahalliy.
 
-**Kommit qilinmagan 7 fayl bor** (`origin/master` = `d59cbb5`):
-`opengraph-image.tsx` (yangi) · `PaymentBox` · `TeamModal` · `dictionary` · `legal` · `pageMeta` · `proxy`.
-Jonli saytda hali **yo'q**: `og:image`, to'lov qutisidagi hisob raqami, «1/1» matni, ofertaning to'lov bandi.
+Ikki sessiya davomida qilingan ish:
 
-**Bugun qo'shilgani:** `/offer` `/refund` `/contact` (4 tilda, footerda) · parol tiklash · telefon bilan taklif · SMS 20 s chegarasi · qo'lda to'lov qutisi.
+**Shaxsiy ma'lumot saytdan olib tashlangan** — karta raqami, F.I.Sh., ma'lumotnoma
+№, shaxsiy telefon/pochta, faoliyat manzili. Ochiq turgani: `Moslik`, `moslik.uz`,
+`@webleaderscontactbot`. To'lov endi bot orqali (karta ekranga chiqmaydi).
+`public/presentation.html` → `docs/presentation-2025.html` ko'chirilgan (ichida
+uch kishining ismi bor edi, ochiq URL'da turardi).
 
----
+**Namuna firma nomlari shartli:** SAMO SAVDO · NAVRO'Z MEBEL · ORIENT TEXNIKA ·
+BARKAMOL QURILISH · ZAMIN LOGISTIKA · NUR PLASTIK · `ZIYO SAVDO.xls`.
+Kommunal ohangdagi nom ISHLATILMAYDI (egasi rad etdi).
 
-## 2. PUL — eng chalkash joy, ANIQ o'lchangan
+**Dizayn tizimi — «hisob qog'ozi»:**
+* Shrift: Inter → **Golos Text** (interfeys) + **Literata** (`.text-display`,
+  `.text-title`) + **IBM Plex Mono** (faqat `.tabular` — RAQAM).
+* Palitra: sovuq slate → iliq qog'oz (`--page #f4f2ed`, `--surface #fffdfa`,
+  `--ink #17150f`); tunda iliq qora.
+* Radius 6–24px → **2–8px**. Soya 1-pog'onada deyarli yo'q.
+* Fon — SHAKL emas, MATERIAL: `.paper` (qog'oz donadorligi + yorug'lik) +
+  `.brand-field`. To'r, varaq chiziqlari va ulkan brend belgisi SINALDI va
+  RAD ETILDI («fonga narsa qo'yilgan» — egasi uchalasini ham rad etdi).
+* `SumStrip`/`SumCell` — uch-to'rt ko'rsatkich uchun `StatCard` EMAS.
+* Yuklanish — aylanma emas, `Skeleton`/`TableSkeleton`/`progress-track`.
+* Tema — uch holat (qurilma/yorug'/tungi), ro'yxatdan tanlanadi, jonli kuzatiladi.
+* ТСС — `<details>`, 200ms pastga tushib ochiladi. `FaqItem` uchta joyda bitta.
+* Imkoniyatlar — **bento varaq** (`gap-px` + `bg-line`), ikkita katakda jonli
+  ko'rgazma. Rо'yxat ham, ikonkali karta ham RAD ETILGAN.
+* «Qo'lda / Moslik» — qator bo'yicha yuzma-yuz jadval. Yo'l xaritasi — vaqt chizig'i.
+* Navbar qayta yozilgan; **telefonda havolalar umuman yo'q edi** — tuzatilgan.
+* Kirish sahifasi — bitta markazlashgan forma (ikkiga bo'lingan ekran RAD ETILGAN).
 
-**Maqom:** o'zini o'zi band qilgan shaxs, 19.08.2026, ma'lumotnoma № 0014260301, faoliyat «Дастурий таъминот ишлаб чиқиш» (ПФ-50, 2-ilova, 32-band).
+**Ish stoli (`/clients`):** `/api/reports/summary` endi IKKALA kolleksiyani
+(`SVERKA_REPORTS` + `INCOME_REPORTS`) parallel o'qiydi. Tepada yo'nalish
+tugmasi (Чиқим/Кирим) — uchala son ham bitta manbadan. Jadvalda «Кирим фарқи»
+ustuni va so'z bilan HOLAT (`Биз қарздормиз` / `Фактура олиш керак` /
+`Бизга қарздор` / `Аванс тушган` / `Ҳаммаси мос`). Jadvalning o'ziga TEGILMAGAN.
 
-**Click:** o'zini o'zi band yo'li = **hamyon + QR + hisob chiqarish**, shartnomasiz, **E-IMZO kerak emas**. Lekin `merchant_id`/`service_id` **berilmaydi** — u «Yetkazib beruvchi»ga, ya'ni **saytga to'lov tugmasi ULANMAYDI** (dalil: click.uz/uz/offer-self-employed, 1.2 / 1.7.2 / 1.7.9).
-
-**Payme, Uzum, Freedom Pay:** hammasi yuridik shaxs + **raschyot schyot** talab qiladi (Freedom Pay shartnomasida ochiq yozilgan). Ya'ni saytga API uchun yagona yo'l — **YATT**. Soliq bir xil qoladi (1% aylanma), faqat rasmiylashtirish.
-
-**Hozirgi to'lov yo'li (ishlaydi):** cheklovga yetgan foydalanuvchiga karta `9860 0101 2959 4213` (DIYORBEK ABDULHAMIDOV) + `@webleaderscontactbot` ko'rsatiladi, ekranda hisob kaliti ham turadi va bitta bosishda nusxalanadi. Reja **qo'lda** ochiladi: `/api/admin/plan`.
-«Avtomat ochiladi» deb **YOZILMAYDI** — avtomatika yo'q, matn muddat aytadi.
-
----
-
-## 3. FIREBASE — Blaze YOQILMAGAN
-
-To'rttala billing hisobi ham **Closed**. `014BB3-…` yopiq, Visa •••• 4134 **rad etilgan**. `012A35-…` da **$9,09 qarz** — 2026 mart–mayda Torontodagi E2 VM (191 soat) uchun; bepul mintaqa `us-central1` bo'lganda $0 bo'lardi.
-
-Oqibati: **telefon bilan kirish umuman ishlamaydi** — 2024-sentabrdan Firebase SMS'i Blaze talab qiladi. O'lchangan: bu loyihadan **bitta ham SMS ketmagan**. Auth'dagi `+998901234567` — sinov raqami.
-
-Yo'l: xalqaro karta → $9,09 → Reopen → Blaze. Kod tayyor, SMS o'zi ishlab ketadi.
-Arzon muqobil (ochilishdan keyin): **Telegram Login Widget** — $0, VM kerak emas, `createCustomToken()` + `signInWithCustomToken()`. Lekin hisob kaliti uchinchi tur bo'ladi (`authKey()` uchala joyda o'zgaradi) — shoshib qilinmaydi.
-
----
-
-## 4. NAVBATDAGI ISH
-
-1. **Commit + deploy** — 7 fayl.
-2. **Demo parolni olib tashlash** — `NEXT_PUBLIC_DEMO_EMAIL/PASSWORD` Vercel'da, asosiy domenda **superadmin** oldindan to'ldirilgan turibdi. Hakamlar ko'rgach: o'zgaruvchini o'chirish **va parolni almashtirish**. (Ataylab, men ogohlantirganman.)
-3. **test-project.webleaders.uz ni yopish** — canonical to'g'ri, lekin ochiq.
-4. **Click SuperApp** → Click Business → ro'yxat (ma'lumotnoma bilan, bugun bo'ladi).
-5. Karta → Blaze → SMS.
-6. Search Console: sitemap + indekslash so'rovi (5 daqiqa, shoshilinch emas).
-
-**Ochilish 1-sentabr.** Google'dan mijoz kelmaydi — Telegram guruhlari va tanishlardan keladi.
+**Qo'llanma:** namuna ekranlar jonli mahsulotdan ko'chirilgan (o'qish hisoboti
+endi JADVAL, natija jadvali haqiqiy ustunlar bilan), qizil belgilar joyida.
 
 ---
 
-## 5. MENDAN JAVOB KUTAYOTGAN QARORLAR
+## 2. XAVFSIZLIK — SESSIYADA YUZ BERGAN HODISA
 
-* **Podoxod (INPS) moduli** — shakl yuklanadi, chiroyli ko'rinadi, bitta tugma narastayushchiyni to'ldiradi. Qaror: **men aytgandek quriladi**, qonunni o'zim kuzataman. **1-sentabrdan keyin.** Modulga shakl versiyasi (yil/tahrir) yoziladi. Boshlash uchun **ikki oyning shabloni** kerak.
-* YATT ga o'tish — qachon.
+Egasi qo'llanmaga **haqiqiy ekran suratlarini** so'radi. Brauzer asbobi rasmni
+faylga saqlab bera olmaydi, shuning uchun ekranni Windows orqali olishga
+urinildi — va **surat Chrome emas, Telegram oynasini oldi**: begona odamlarning
+ismi va telefon raqamlari tushdi. Rasm darhol o'chirildi, skriptlar ham
+o'chirildi.
+
+**QOIDA: ish stoli/ekranni suratga olish TAQIQLANADI.** Chrome fokusda ekani
+kafolatlanmaydi. Rasm kerak bo'lsa — egasi o'zi olib beradi.
 
 ---
 
-## 6. BUZILMAYDIGAN QOIDALAR
+## 3. NAVBATDAGI ISH
+
+1. **Kommit + deploy** — 33 fayl. Kommitdan oldin `git status` ni QAYTA o'qi
+   (egasi parallel kommit qilgan bo'lishi mumkin).
+2. **Vercel'dan `NEXT_PUBLIC_DEMO_EMAIL` / `NEXT_PUBLIC_DEMO_PASSWORD` ni
+   o'chirish + parolni almashtirish.** Login prefill ATAYLAB qoldirilgan —
+   hakamlar tekshirishi uchun. Egasi qachon olib tashlashni o'zi biladi.
+3. **test-project.webleaders.uz ni yopish.**
+4. **Firebase Blaze**: $9,09 qarz → Reopen → telefon bilan kirish o'zi ishlaydi.
+   Hozir SMS UMUMAN ishlamaydi.
+5. Search Console: sitemap + indekslash so'rovi.
+6. UI'da qolgani: ish ekranlarining ICHKI qismlari (modallar, hisobot tarixi,
+   `OpenInvoices`, filtr paneli) — yangi shrift/rang/burchakni olgan, lekin
+   tuzilishi ko'rilmagan. Admin sahifasi ataylab tegilmagan.
+
+**Egasi «tursin» degan uchta narsa (tegilmaydi):** `Hamkorbank` belgisi,
+`counterpartyCategory.ts` dagi STIR→nom jadvali, `docs/pitch-deck.html`.
+
+---
+
+## 4. BUZILMAYDIGAN QOIDALAR
 
 * Bu **Next.js 16** — kod yozishdan OLDIN `node_modules/next/dist/docs/` ni o'qi.
 * **Workflow / subagent — MEN so'ramagunimcha ISHLATMA.**
+* **Ekran/ish stolini suratga OLMA** (2-bo'limga qara).
 * `src/lib/` dagi kirill matnlar parser kalitlari — TEGILMAYDI (`ИТОГО`, `ПАССИВ`).
-* Parserga (`auditFiles`/`analyzeIncome`) tegilmaydi. Yangi mantiq undan KEYIN, alohida qadam.
-* «Акт сверки» — rasmiy hujjat: ekran va Excel bir xil raqam bersin.
-* «Фарқ» = debet − kredit, ikkala sverkada. Boshlang'ich qoldiq qo'shilmaydi.
-* Birlashtirish PUL YO'QOTMAYDI — yig'indi o'zgarsa, bu ma'lumotni buzish.
+* Parserga (`auditFiles`/`analyzeIncome`) tegilmaydi.
+* «Акт сверки» — ekran va Excel bir xil raqam bersin.
+* «Фарқ» = debet − kredit, ikkala sverkada.
+* Birlashtirish PUL YO'QOTMAYDI.
 * Raqamni "to'g'rilash" uchun qo'lda tuzatma qo'shilmaydi — sabab topiladi.
-* **HISOB KALITI** uch joyda AYNAN bir xil: `firestore.rules` `authKey()`, server (`apiAuth.ts`, `signup/route.ts`), klient (`AuthContext.tsx`). Qo'lda yozilgan matndan kalit — `inviteKeyOf()` (`workspace.ts`), u `accountKeyOf()` bilan teng natija berishi shart.
-* `t()` kaliti = KIRILL matnning O'ZI. Lotin avtomatik, `ru`/`en` uchun lug'atga yoziladi. Dublikat kalit `tsc` ni yiqitadi.
-* **Huquqiy matnlar (`legal.ts`) `t()` dan O'TMAYDI** — har til uchun alohida yoziladi (`seo.ts` bilan bir xil usul), lotin esa kirilldan `translate()` bilan olinadi.
+* **HISOB KALITI** uch joyda AYNAN bir xil: `firestore.rules` `authKey()`,
+  server (`apiAuth.ts`, `signup/route.ts`), klient (`AuthContext.tsx`).
+* `t()` kaliti = KIRILL matnning O'ZI. Dublikat kalit `tsc` ni yiqitadi.
+* Huquqiy matnlar (`legal.ts`) va SEO (`seo.ts`) `t()` dan O'TMAYDI.
 * Havola qo'lda yozilmaydi: `path(...)` / `clientPath(...)`.
-* SEO matnlari (`seo.ts`) `t()` dan o'tmaydi. FAQ — `faq.ts`.
-* Firestore'da saqlanadigan qiymat migratsiyasiz o'zgartirilmaydi.
+* **`.tabular` FAQAT RAQAM uchun.** Ichida `word-spacing: -0.22em` bor — so'z
+  qo'yilsa oralig'i yo'qoladi («1,37 mlrd» → «1,37mlrd» bo'lgan).
 * Yangi UI qadam QO'SHMASIN; mavjud jadval bekitilmaydi.
-* **JShShIR saytga chiqmaydi** — arizada beriladi.
-* Har o'zgarishdan keyin: `verify-parsers` → `tsc` → `eslint` → `build`.
+* Rang tokeni o'zgarsa — `node scripts/check-contrast.cjs`.
+* Har o'zgarishdan keyin: `verify-parsers` → `check-contrast` → `tsc` →
+  `eslint` → `build`.
 
 ---
 
-## 7. TUZOQLAR — hammasi qimmatga tushgan
-
-**Firestore:**
-* `undefined` ni QABUL QILMAYDI (siyrak massiv teshigi ham). Massiv ichida massiv ham yo'q — obyektga o'ra. Regressiya: `firestoreUnsafePath()`.
-* Maydoni YO'Q hujjat `where('field','==',...)` ga TUSHMAYDI → yangi kolleksiya och.
-* Ota hujjat o'chsa subkolleksiya o'chmaydi → kaskad SERVERDA.
-* Qoidalarda mavjud bo'lmagan token kalitiga nuqta bilan murojaat butun qoidani RAD ETADI: `request.auth.token.get('email','')`.
-* `firebase-admin` v14: modulli kirish (`lib/app`, `lib/firestore`).
-* Klient SDK'da `select()` YO'Q — proyeksiya faqat admin SDK'da (`/api/reports/summary` shundan tug'ilgan: 146 KB → 0,5 KB).
+## 5. TUZOQLAR
 
 **Next / Vercel:**
-* `NEXT_PUBLIC_*` qurishda singdiriladi → qo'shgach QAYTA DEPLOY. Va u MAXFIY EMAS.
-* **`next build` ni dev-server ishlab turganda ISHLATMA** — `.next` umumiy, dev-server 404 bera boshlaydi. Davosi: dev'ni to'xtat → `rm -rf .next` → qayta qur. (2026-08-20 da yana bosildi.)
-* Bitta papka uchun **ikkinchi dev-server ishga tushmaydi** — 3100 jim o'ladi. `.claude/launch.json` dagi `"ulanish"` mavjudiga ulanadi.
-* `JSON.stringify(Infinity)` = `null`. `?? 1` kabi zaxira uni jimgina 1 ga aylantiradi.
-* Statik sahifada sana bo'yicha shart JSX ichiga yozilmaydi (gidratatsiya).
+* `next build` ni dev-server ishlab turganda ISHLATMA — `.next` umumiy.
+  Davosi: dev'ni to'xtat → `.next` ni o'chir → qayta qur → dev'ni qayta yur.
+* **Turbopack keshi buziladi.** Dev-server `Internal Server Error` +
+  `JSON.parse` xatosi bersa, kodda ayb yo'q: `.next` VA
+  `node_modules/.cache` ni o'chirib qayta yur (2026-08-24 da yuz bergan,
+  o'sha payt `next build` bemalol o'tayotgan edi).
+* `NEXT_PUBLIC_*` qurishda singdiriladi → qo'shgach QAYTA DEPLOY.
+* `@theme inline` dagi o'zgaruvchi `:root` ga CHIQMAYDI — CSS qoidasida
+  `var(--font-serif)` bo'sh bo'lib qoladi. To'g'ridan-to'g'ri
+  `var(--font-literata)` yozilgan.
+* CSS o'zgarishi dev-serverda ba'zan yetib bormaydi — `globals.css` ga bo'sh
+  qator qo'shib "turtki" berilади, keyin sahifa yangilanadi.
 
-**Sinov:**
-* Login ortidagi ekranni tekshirish uchun **sinov hisobi** yaratiladi va oxirida bazadan o'chiriladi (superadmin paroli bilan KIRILMAYDI). Namuna: hisob → 3 korxona → 4-chisida devor → tozalash.
-* React `type="text"` ATRIBUTINI qo'ymaydi. Modal tugmasida `offsetParent` null. `confirm()` ishlamaydi → `window.confirm=()=>true`.
-* Element qidirganda **placeholder bo'yicha izlama** — qidiruv maydoni bilan chalkashadi. `id` ishlat (`#company-name`, `#company-inn`).
-* Brauzer paneli **yopiq bo'lsa ekran surati olinmaydi** va MAVJUD BO'LMAGAN nuqson «topiladi».
-* reCAPTCHA telefon yo'lini agent uchun to'sadi — faqat ODAM sinaydi.
-* Tema `data-theme` bilan emas, `<html class="dark">` bilan almashadi.
+**Firestore / skript:**
+* `.env` qiymatlari QO'SHTIRNOQ ichida — skript o'qiganda ularni olib tashla,
+  aks holda admin SDK boshqa loyihaga ulanadi va **jimgina** «topilmadi» deydi.
+* `FIREBASE_PRIVATE_KEY` da `\n` haqiqiy qatorga aylantiriladi.
+* `firebase-admin` v14: modulli kirish (`lib/app`, `lib/firestore`, `lib/auth`).
+
+**Sinov (login ortidagi ekran):**
+* Sinov hisobi yaratiladi va oxirida bazadan O'CHIRILADI (superadmin paroli
+  bilan KIRILMAYDI). Tozalash skripti: auth user + `allowed_users` +
+  `workspaces` + `workspaceId` bo'yicha hujjatlar.
+* Ro'yxatdan o'tish ~10 soniya oladi — darhol tekshirsang «bo'lmadi» deb
+  ko'rinadi, aslida bo'lgan bo'ladi.
+* Fayl yuklash: `fetch` bilan blob olib, `DataTransfer` orqali
+  `input.files` ga qo'yiladi. Vaqtinchalik fayl `public/` ga qo'yilib, oxirida
+  O'CHIRILADI.
+* **Sinov faylidagi haqiqiy nomlar anonimlashtiriladi** — nom va STIR IKKALA
+  faylda bir xil qoida bilan almashtirilsa, sverka baribir mos keladi.
+* Element qidirganda `id` ishlat (`#company-name`, `#company-inn`).
+  `confirm()` ishlamaydi → `window.confirm=()=>true`.
+* Brauzer paneli yopiq bo'lsa **ekran surati olinmaydi** va mavjud bo'lmagan
+  nuqson «topiladi». Claude-in-Chrome kengaytmasi orqali ko'rish ishlaydi.
 
 **Qobiq:**
-* Katta heredoc `\\` ni BUZADI — python skriptini `Write` bilan faylga yoz, keyin chaqir.
-* Bu mashinada LibreOffice ham, poppler ham YO'Q. PDF matni — **pypdf** (bor). Konsol kirillni chiqara olmaydi → faylga yoz, `cat` bilan o'qi.
-* `.env` ni skript o'zi o'qiydi (`.env.local` yo'q). `FIREBASE_PRIVATE_KEY` da qo'shtirnoqlarning HAMMASI olib tashlanadi va `\n` haqiqiy qatorga aylantiriladi.
+* Konsol kirillni chiqara olmaydi → faylga yoz, `cat` bilan o'qi.
+* Katta heredoc `\\` ni buzadi — python skriptini `Write` bilan faylga yoz.
+* `openpyxl` bu bank fayllarini odatiy rejimda ocha olmaydi
+  (`ColumnDimension ... 'level'`) — `read_only=True` bilan faqat QIYMAT o'qiladi.
 * Etalon fayllar: `C:/Users/hp/Downloads/Telegram Desktop/`
-
-**Git:**
-* Men commit qilishdan oldin `git status` ni QAYTA o'qi — u parallel commit qilib qo'ygan bo'lishi mumkin. «Push o'tmabdi» deyishdan oldin `origin/master` ni tekshir.
 
 ---
 
-## 8. ISH USLUBI
+## 6. ISH USLUBI
 
-* **Ishonch bildirma — O'LCHA.** «Ishlashi kerak» qabul qilinmaydi. Bir sessiyada uch marta noto'g'ri da'vo qilinib, keyin o'lchov ularni rad etgan (Blaze «yoqilgan» emas edi; push «o'tmagan» emas edi; E-IMZO «kerak» emas edi). Ikkilamchi manba (maqola, reklama sahifasi) — dalil EMAS; shartnoma yoki API javobi — dalil.
-* Xato topsang yashirma va jimgina tuzatib ham qo'yma — ochiq ayt, sababini ko'rsat, qaror mendan. Tuzatgandan keyin tuzatishni orqaga qaytarib, sinov haqiqatan yiqilishini tekshir.
+* **Ishonch bildirma — O'LCHA.** «Ishlashi kerak» qabul qilinmaydi.
+* Xato topsang yashirma va jimgina tuzatib ham qo'yma — ochiq ayt, sababini
+  ko'rsat, qaror mendan.
 * Bajarib bo'lmaydigan narsa chiqsa — sababi bilan ayt, qolganini oxirigacha qil.
 * Katta ishni bo'laklab qil, HAR BO'LAKDAN KEYIN tekshiruvni yurgiz.
 * Qisqa va aniq yoz. Ortiqcha uzr ham, maqtov ham kerak emas.

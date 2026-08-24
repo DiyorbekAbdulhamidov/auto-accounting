@@ -12,24 +12,25 @@
 // Ikkita qo'lda yozilgan variant vaqt o'tib bir-biridan uzoqlashadi
 // va shartnomaning ikki xil o'qilishi paydo bo'ladi.
 //
-// REKVIZITLAR — 2026-08-19 dagi ma'lumotnomadan.
-// JShShIR bu yerda YO'Q va saytga CHIQMAYDI: u shaxsni tasdiqlovchi
-// raqam, ochiq tursa boshqa hujjatlarni rasmiylashtirishga kalit
-// bo'lib qoladi. Click arizasida u alohida beriladi.
+// REKVIZITLAR — hozircha SHAXSSIZ (2026-08-23). F.I.Sh., ma'lumotnoma
+// raqami, shaxsiy telefon, shaxsiy pochta va karta saytdan OLIB
+// TASHLANGAN. Sabab: to'lov tizimi hali ulanmagan, ya'ni bu
+// ma'lumotlarning ochiq turishi hech narsa bermaydi, lekin ularni
+// avtomatik yig'ib olish mumkin.
+//
+// OGOHLANTIRISH: to'lov tizimi ulanganda rekvizitlar QAYTARILADI —
+// oferta ijrochisi nomsiz qolsa, shartnoma sifatida zaif bo'ladi.
 // ============================================================
 
 import { translate, type Lang } from '@/lib/i18n';
 
-/** Ijrochi rekvizitlari. Tarjima qilinmaydi — ism va raqamlar. */
+/** Xizmat rekvizitlari. Tarjima qilinmaydi. Shaxsiy ma'lumot yo'q. */
 export const MERCHANT = {
-  /** Ma'lumotnomadagi shakl. O'zgartirilmaydi. */
-  fullName: "ABDULHAMIDOV DIYORBEK G'AYRATALIYEVICH",
-  certificateNo: '0014260301',
-  certificateDate: '19.08.2026',
-  phone: '+998 20 012 77 07',
-  /** `tel:` havolasi uchun bo'shliqsiz shakl */
-  phoneHref: '+998200127707',
-  email: 'drkoffical001@gmail.com',
+  brand: 'Moslik',
+  site: 'moslik.uz',
+  /** Yagona ochiq aloqa kanali */
+  telegram: '@webleaderscontactbot',
+  telegramUrl: 'https://t.me/webleaderscontactbot',
 } as const;
 
 export interface LegalSection {
@@ -59,11 +60,10 @@ const OFFER_CYRL: LegalDoc = {
     {
       h: '1. Тарафлар',
       items: [
-        'Ижрочи — ' + MERCHANT.fullName + ', ўзини ўзи банд қилган шахс. ' +
-          'Маълумотнома № ' + MERCHANT.certificateNo + ', ' + MERCHANT.certificateDate +
-          ' да Ўзбекистон Республикаси Солиқ қўмитаси томонидан берилган. ' +
-          'Фаолият тури: дастурий таъминот ишлаб чиқиш. ' +
-          'Фаолият манзили: Тошкент вилояти, Ангрен шаҳар.',
+        'Ижрочи — moslik.uz веб-хизматининг эгаси, Ўзбекистон Республикасида ' +
+          'рўйхатдан ўтган тадбиркорлик субъекти. Фаолият тури: дастурий таъминот ' +
+          'ишлаб чиқиш. Тўлиқ реквизитлар тўлов тизими уланганда шу саҳифада ' +
+          'эълон қилинади. Мурожаат: ' + MERCHANT.telegram + ' Телеграм канали.',
         'Фойдаланувчи — moslik.uz сайтида рўйхатдан ўтган ҳар қандай жисмоний ёки юридик шахс.',
       ],
     },
@@ -96,12 +96,12 @@ const OFFER_CYRL: LegalDoc = {
         'Сверкалар сони ҳамма режада чекланмайди.',
         'Нархлар Ўзбекистон сўмида кўрсатилган ва бошқа солиқлар қўшилмайди.',
         'Тўлов бир ой учун олдиндан амалга оширилади.',
-        'Ҳозирча тўлов Ижрочининг банк картасига ўтказма орқали қабул қилинади. ' +
-          'Карта рақами ва тўлов тартиби тизим ичида, режа чеклови кўринган ' +
-          'жойда ёзилган. Тўлов чеки Ижрочига юборилгач режа очилади — одатда ' +
+        'Ҳозирча тўлов қўлда қабул қилинади: Фойдаланувчи ' + MERCHANT.telegram +
+          ' Телеграм каналига ёзади, тўлов реквизитларини ўша ерда олади ва ' +
+          'тўловни амалга оширади. Тўлов чеки юборилгач режа очилади — одатда ' +
           'бир неча соат ичида, кечи билан 1 иш куни.',
-        'Онлайн тўлов тизими (CLICK) уланганидан кейин тўлов у орқали ҳам ' +
-          'қабул қилинади ва ушбу офертада эълон қилинади.',
+        'Онлайн тўлов тизими уланганидан кейин тўлов у орқали ҳам қабул қилинади ' +
+          'ва ушбу офертада эълон қилинади.',
         'Ижрочи нархни ўзгартириш ҳуқуқига эга. Янги нарх фақат кейинги тўлов даврига ' +
           'татбиқ этилади — тўланган давр ўзгармайди.',
       ],
@@ -172,10 +172,11 @@ const OFFER_RU: LegalDoc = {
     {
       h: '1. Стороны',
       items: [
-        'Исполнитель — ' + MERCHANT.fullName + ', самозанятое лицо. Справка № ' +
-          MERCHANT.certificateNo + ' от ' + MERCHANT.certificateDate +
-          ', выдана Налоговым комитетом Республики Узбекистан. Вид деятельности: ' +
-          'разработка программного обеспечения. Адрес деятельности: Ташкентская область, город Ангрен.',
+        'Исполнитель — владелец веб-сервиса moslik.uz, субъект предпринимательства, ' +
+          'зарегистрированный в Республике Узбекистан. Вид деятельности: разработка ' +
+          'программного обеспечения. Полные реквизиты будут опубликованы на этой ' +
+          'странице после подключения платёжной системы. Связь: Телеграм-канал ' +
+          MERCHANT.telegram + '.',
         'Пользователь — любое физическое или юридическое лицо, зарегистрировавшееся на сайте moslik.uz.',
       ],
     },
@@ -208,12 +209,12 @@ const OFFER_RU: LegalDoc = {
         'Количество сверок не ограничено на всех тарифах.',
         'Цены указаны в сумах Республики Узбекистан, дополнительные налоги не начисляются.',
         'Оплата производится авансом за один месяц.',
-        'Пока оплата принимается переводом на банковскую карту Исполнителя. ' +
-          'Номер карты и порядок оплаты указаны внутри сервиса — там, где ' +
-          'показывается ограничение тарифа. После отправки чека Исполнителю ' +
-          'тариф открывается: обычно в течение нескольких часов, максимум 1 рабочий день.',
-        'После подключения платёжной системы (CLICK) оплата будет приниматься ' +
-          'и через неё, о чём будет объявлено в настоящей оферте.',
+        'Пока оплата принимается вручную: Пользователь пишет в Телеграм-канал ' +
+          MERCHANT.telegram + ', получает там платёжные реквизиты и совершает оплату. ' +
+          'После отправки чека тариф открывается: обычно в течение нескольких часов, ' +
+          'максимум 1 рабочий день.',
+        'После подключения платёжной системы оплата будет приниматься и через неё, ' +
+          'о чём будет объявлено в настоящей оферте.',
         'Исполнитель вправе изменить цену. Новая цена применяется только к следующему ' +
           'оплачиваемому периоду — оплаченный период не меняется.',
       ],
@@ -284,10 +285,10 @@ const OFFER_EN: LegalDoc = {
     {
       h: '1. Parties',
       items: [
-        'Provider — ' + MERCHANT.fullName + ', a self-employed person. Certificate No. ' +
-          MERCHANT.certificateNo + ' dated ' + MERCHANT.certificateDate +
-          ', issued by the Tax Committee of the Republic of Uzbekistan. Activity: software ' +
-          'development. Place of activity: Tashkent region, city of Angren.',
+        'Provider — the owner of the moslik.uz web service, a business entity registered ' +
+          'in the Republic of Uzbekistan. Activity: software development. Full legal ' +
+          'details will be published on this page once the payment system is connected. ' +
+          'Contact: Telegram channel ' + MERCHANT.telegram + '.',
         'User — any individual or legal entity registered on moslik.uz.',
       ],
     },
@@ -318,12 +319,12 @@ const OFFER_EN: LegalDoc = {
         'The number of reconciliations is unlimited on every plan.',
         'Prices are stated in Uzbek soums; no additional taxes are added.',
         'Payment is made in advance for one month.',
-        'For now, payment is accepted by transfer to the bank card of the Provider. ' +
-          'The card number and payment steps are shown inside the service, at the ' +
-          'point where the plan limit appears. Once the receipt is sent to the ' +
-          'Provider the plan is opened — usually within a few hours, at most 1 business day.',
-        'Once an online payment system (CLICK) is connected, payment will also be ' +
-          'accepted through it, and this offer will be updated accordingly.',
+        'For now, payment is handled manually: the User writes to the Telegram channel ' +
+          MERCHANT.telegram + ', receives the payment details there and makes the payment. ' +
+          'Once the receipt is sent, the plan is opened — usually within a few hours, ' +
+          'at most 1 business day.',
+        'Once an online payment system is connected, payment will also be accepted ' +
+          'through it, and this offer will be updated accordingly.',
         'The Provider may change prices. A new price applies only to the next payment ' +
           'period — a period already paid for is not affected.',
       ],
@@ -413,9 +414,10 @@ const REFUND_CYRL: LegalDoc = {
     {
       h: 'Ариза бериш тартиби',
       items: [
-        'Ариза ' + MERCHANT.email + ' манзилига, ҳисобга уланган электрон почтадан юборилади.',
+        'Ариза ' + MERCHANT.telegram + ' Телеграм канали орқали, ҳисобга уланган ' +
+          'электрон почта кўрсатилган ҳолда юборилади.',
         'Аризада кўрсатилади: ҳисоб электрон почтаси, тўлов санаси ва суммаси, қайтариш сабаби.',
-        'Ариза 3 иш куни ичида кўриб чиқилади ва натижа ўша почтага ёзилади.',
+        'Ариза 3 иш куни ичида кўриб чиқилади ва натижа ўша канал орқали билдирилади.',
         'Тасдиқланган сумма 10 иш куни ичида тўлов амалга оширилган ўша картага қайтарилади.',
         'Қайтариш учун қўшимча ҳақ олинмайди.',
       ],
@@ -458,9 +460,10 @@ const REFUND_RU: LegalDoc = {
     {
       h: 'Порядок подачи заявления',
       items: [
-        'Заявление направляется на ' + MERCHANT.email + ' с электронной почты, привязанной к учётной записи.',
+        'Заявление направляется через Телеграм-канал ' + MERCHANT.telegram +
+          ' с указанием почты учётной записи.',
         'В заявлении указываются: почта учётной записи, дата и сумма платежа, причина возврата.',
-        'Заявление рассматривается в течение 3 рабочих дней, ответ направляется на ту же почту.',
+        'Заявление рассматривается в течение 3 рабочих дней, ответ направляется в тот же канал.',
         'Подтверждённая сумма возвращается в течение 10 рабочих дней на ту же карту, ' +
           'с которой был совершён платёж.',
         'Дополнительная плата за возврат не взимается.',
@@ -505,9 +508,10 @@ const REFUND_EN: LegalDoc = {
     {
       h: 'How to request a refund',
       items: [
-        'Send a request to ' + MERCHANT.email + ' from the email address linked to the account.',
+        'Send a request via the Telegram channel ' + MERCHANT.telegram +
+          ', stating the email address linked to the account.',
         'State the account email, the payment date and amount, and the reason for the refund.',
-        'The request is reviewed within 3 business days and the outcome is sent to the same address.',
+        'The request is reviewed within 3 business days and the outcome is sent in the same channel.',
         'The approved amount is returned within 10 business days to the same card the ' +
           'payment was made from.',
         'No additional fee is charged for a refund.',

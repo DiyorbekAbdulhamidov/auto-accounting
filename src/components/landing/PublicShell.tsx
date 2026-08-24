@@ -28,6 +28,38 @@ const NAV: { key: "guide" | "pricing" | "features"; label: string }[] = [
   { key: "guide", label: "Қўлланма" },
 ];
 
+/**
+ * Шапка ҳаволаси.
+ *
+ * Актив саҳифа ОСТИГА чизилади — ранг билан эмас. Сабаб: ранг бу
+ * маҳсулотда маъно ташийди (пул, фактура, фарқ), навигация эса
+ * маълумот эмас. Чизиқ 2px: ўқилади, лекин рангни банд қилмайди.
+ */
+function NavLink({
+  href,
+  active,
+  label,
+}: {
+  href: string;
+  active: boolean;
+  label: string;
+}) {
+  return (
+    <NextLink
+      href={href}
+      aria-current={active ? "page" : undefined}
+      className={cx(
+        "shrink-0 whitespace-nowrap border-b-2 pb-1 text-body transition-colors",
+        active
+          ? "border-ink font-medium text-ink"
+          : "border-transparent text-ink-2 hover:text-ink"
+      )}
+    >
+      {label}
+    </NextLink>
+  );
+}
+
 export default function PublicShell({ children }: { children: React.ReactNode }) {
   const t = useT();
   const locale = useLocale();
@@ -37,39 +69,47 @@ export default function PublicShell({ children }: { children: React.ReactNode })
 
   return (
     <div className={layout.page}>
-      {/* Шапка «шиша» бўлди: остидан ўтган рангли блок хиралашади,
-          лекин РАНГИ сақланади (`saturate`). Пастки чегара —
-          бренд градиенти, 1px: у ерда чизиқ бор эканини айтади,
-          лекин диққатни олмайди. */}
-      <header className="glass sticky top-0 z-40 border-b border-line">
-        <div className="pointer-events-none absolute inset-x-0 bottom-0 h-px opacity-40 brand-gradient" />
-        <div className="mx-auto flex w-full max-w-7xl items-center justify-between gap-3 px-4 py-3 md:px-6">
-          <NextLink href={path("home", locale)} aria-label={t("Бош саҳифа")}>
+      {/* ============================================================
+          ШАПКА — қайта ёзилди (2026-08-23)
+          ------------------------------------------------------------
+          НИМА НОТЎҒРИ ЭДИ:
+
+          1. ТЕЛЕФОНДА ҲАВОЛА ЙЎҚ ЭДИ. `hidden md:flex` — яъни кичик
+             экранда «Нима бор», «Нарх», «Қўлланма» УМУМАН чиқмасди,
+             бургер тугма ҳам йўқ эди. Бош саҳифадан бошқа ҳеч қаёққа
+             ўтиб бўлмасди. Энг оғир нуқсон шу.
+          2. Ҳавола ТУГМА кўринишида эди (`ghost`): шапкада тўртта
+             тугма ёнма-ён турса, қайси бири асосий экани йўқолади.
+             Асосий ҳаракат биттагина — «Кириш».
+          3. «Шиша» (blur) ва градиент чизиқ — 2023 йил қолипи.
+             Ҳужжат билан ишлайдиган восита учун ортиқча.
+
+          ЭНДИ: тўлиқ сирт, битта чизиқ. Ҳавола — МАТН, актив саҳифа
+          остига чизилади (ҳужжатдаги каби). Телефонда ҳаволалар
+          иккинчи қаторда, доим кўринади — қўшимча БОСИШ йўқ.
+          ============================================================ */}
+      <header className="sticky top-0 z-40 border-b border-line bg-surface">
+        <div className="mx-auto flex w-full max-w-7xl items-center gap-7 px-4 py-2.5 md:px-6 md:py-3">
+          <NextLink
+            href={path("home", locale)}
+            aria-label={t("Бош саҳифа")}
+            className="shrink-0"
+          >
             <Logo size="sm" />
           </NextLink>
 
-          <nav className="hidden items-center gap-1 md:flex">
-            {NAV.map((item) => {
-              const href = path(item.key, locale);
-              // Turgan sahifa navda ham ko'rinib tursin
-              const active = pathname === href;
-              return (
-                <NextLink
-                  key={item.key}
-                  href={href}
-                  aria-current={active ? "page" : undefined}
-                  className={cx(
-                    buttonClasses("ghost", "sm"),
-                    active && "bg-surface-2 text-ink"
-                  )}
-                >
-                  {t(item.label)}
-                </NextLink>
-              );
-            })}
+          <nav className="hidden items-center gap-7 md:flex">
+            {NAV.map((item) => (
+              <NavLink
+                key={item.key}
+                href={path(item.key, locale)}
+                active={pathname === path(item.key, locale)}
+                label={t(item.label)}
+              />
+            ))}
           </nav>
 
-          <div className="flex items-center gap-2">
+          <div className="ml-auto flex shrink-0 items-center gap-2">
             <LanguageToggle />
             <ThemeToggle />
             <NextLink
@@ -80,6 +120,19 @@ export default function PublicShell({ children }: { children: React.ReactNode })
             </NextLink>
           </div>
         </div>
+
+        {/* ТЕЛЕФОН: учта ҳавола иккинчи қаторда. Кенглик етмаса
+            ён томонга сурилади — яширилмайди. */}
+        <nav className="flex items-center gap-6 overflow-x-auto border-t border-line px-4 pb-1.5 pt-1 md:hidden">
+          {NAV.map((item) => (
+            <NavLink
+              key={item.key}
+              href={path(item.key, locale)}
+              active={pathname === path(item.key, locale)}
+              label={t(item.label)}
+            />
+          ))}
+        </nav>
       </header>
 
       <main>{children}</main>

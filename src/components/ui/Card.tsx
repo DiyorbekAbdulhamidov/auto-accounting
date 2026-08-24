@@ -119,3 +119,80 @@ export function StatCard({
     </div>
   );
 }
+
+/* ============================================================
+   ЙИҒМА ҚАТОР — БИТТА ВАРАҚ, КАТАКЛАРГА БЎЛИНГАН
+   ------------------------------------------------------------
+   `StatCard` ҳар бири ЎЗ рамкаси ва сояси билан келади. Учта-
+   тўртта ёнма-ён турса, экраннинг тепаси «сузиб юрган қутилар»
+   тўпламига айланади ва жадвалгача бўлган жой узайиб кетади.
+
+   `SumStrip` эса БИТТА варақ: катаклар орасидаги 1px оралиқдан
+   чизиқ ранги кўринади (`gap-px` + остида `bg-line`). Рамка
+   битта, соя йўқ, баландлик кам — бухгалтер жадвални тезроқ
+   кўради. Шакл имкониятлар варағи (bento) билан бир хил, яъни
+   сайт бўйлаб битта тил.
+
+   `StatCard` ЎЧИРИЛМАДИ: у алоҳида турадиган битта кўрсаткич
+   учун ҳали ҳам тўғри шакл.
+   ============================================================ */
+
+const STRIP_COLS = {
+  2: "sm:grid-cols-2",
+  3: "sm:grid-cols-2 lg:grid-cols-3",
+  4: "sm:grid-cols-2 lg:grid-cols-4",
+} as const;
+
+export function SumStrip({
+  cols = 3,
+  className,
+  children,
+}: {
+  cols?: 2 | 3 | 4;
+  className?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div
+      className={cx(
+        "grid grid-cols-1 gap-px overflow-hidden rounded-lg border border-line bg-line",
+        STRIP_COLS[cols],
+        className
+      )}
+    >
+      {children}
+    </div>
+  );
+}
+
+/**
+ * Йиғма катак: ёрлиқ кичик, РАҚАМ катта, изоҳ пастда.
+ *
+ * @param count — берилса, янги натижа келганда рақам санаб чиқади
+ *   (`format` ҳам керак). Тайёр матн учун `value`.
+ */
+export function SumCell({
+  label,
+  value,
+  count,
+  format,
+  tone = "default",
+  hint,
+}: {
+  label: React.ReactNode;
+  value?: string;
+  count?: number;
+  format?: (n: number) => string;
+  tone?: Tone;
+  hint?: React.ReactNode;
+}) {
+  return (
+    <div className="bg-surface px-4 py-3.5">
+      <p className="truncate text-caption text-ink-3">{label}</p>
+      <p className={cx("tabular mt-1 text-num font-semibold", toneText[tone])}>
+        {count !== undefined && format ? <CountUp value={count} format={format} /> : value}
+      </p>
+      {hint && <p className="mt-1 text-caption text-ink-3">{hint}</p>}
+    </div>
+  );
+}

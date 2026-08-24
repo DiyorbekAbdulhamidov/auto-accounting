@@ -1,0 +1,123 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400;500;600&family=Literata:opsz,wght@7..72,400;7..72,600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+  <style>
+    body { margin: 0; }
+    a { color: #4338ca; text-decoration: none; }
+    a:hover { color: #312e9e; }
+  </style>
+</helmet>
+
+<div style="width: 1440px; height: 900px; overflow: hidden; background: #efece4; color: #17150f; font-family: 'Golos Text', -apple-system, 'Segoe UI', sans-serif; position: relative;">
+
+  <!-- shapka -->
+  <div style="display: flex; align-items: center; gap: 40px; padding: 22px 64px;">
+    <div style="display: flex; align-items: center; gap: 10px;">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke-width="2.4" stroke-linecap="round">
+        <path d="M4 9h16" stroke="#047857"></path>
+        <path d="M4 15h16" stroke="#4338ca"></path>
+      </svg>
+      <span style="font-family: 'Literata', Georgia, serif; font-size: 19px; font-weight: 600; letter-spacing: -0.01em;">Moslik</span>
+    </div>
+    <div style="display: flex; gap: 30px; font-size: 14px; color: #5f584b;">
+      <span>Нима бор</span><span>Нарх</span><span>Қўлланма</span>
+    </div>
+    <div style="margin-left: auto; display: flex; align-items: center; gap: 18px;">
+      <span style="font-size: 14px; color: #5f584b;">Кириш</span>
+      <span style="background: #17150f; color: #fffdfa; font-size: 14px; font-weight: 500; padding: 10px 18px; border-radius: 2px;">Бепул бошлаш</span>
+    </div>
+  </div>
+
+  <!-- katta sarlavha -->
+  <div style="padding: 40px 64px 0; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 380px); gap: 72px; align-items: end;">
+    <h1 style="margin: 0; font-family: 'Literata', Georgia, serif; font-size: 78px; line-height: 0.98; font-weight: 600; letter-spacing: -0.035em;">
+      Фарқни<br>биз топамиз.
+    </h1>
+    <div style="padding-bottom: 10px;">
+      <p style="margin: 0; font-size: 16px; line-height: 1.65; color: #4a453a;">
+        Банк кўчирмаси билан фактура рўйхатини юкланг — тизим ҳар бир контрагент бўйича рақамларни солиштиради ва фарқ борларини ажратиб беради.
+      </p>
+      <div style="display: flex; gap: 10px; margin-top: 22px;">
+        <span style="background: #17150f; color: #fffdfa; font-size: 15px; font-weight: 500; padding: 12px 20px; border-radius: 2px;">Бепул бошлаш</span>
+        <span style="border-bottom: 2px solid #17150f; font-size: 15px; padding: 12px 2px;">Қандай ишлайди</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- varaq: chiziqli daftar -->
+  <div style="margin: 44px 64px 0; background: #fffdfa; border: 1px solid #ddd8cd; box-shadow: 0 18px 44px rgba(23, 21, 15, 0.09); position: relative;">
+
+    <div style="display: flex; align-items: baseline; gap: 14px; padding: 20px 28px 16px; border-bottom: 1px solid #17150f;">
+      <span style="font-family: 'Literata', Georgia, serif; font-size: 20px; font-weight: 600;">Далолатнома (сверка)</span>
+      <span style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #6a6252;">01.01.2026 — 31.07.2026</span>
+      <span style="margin-left: auto; font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #6a6252;">35 контрагент · 152 ўтказма · 159 фактура</span>
+    </div>
+
+    <div style="display: grid; grid-template-columns: minmax(0, 2fr) repeat(3, minmax(0, 1fr)) minmax(0, 1.1fr); padding: 10px 28px; border-bottom: 1px solid #ddd8cd; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: #6a6252;">
+      <div>Фирма номи</div>
+      <div style="text-align: right;">Тўланган пул</div>
+      <div style="text-align: right;">Келган фактура</div>
+      <div style="text-align: right;">Фарқи</div>
+      <div style="text-align: right;">Ҳолат</div>
+    </div>
+
+    <div style="display: grid; grid-template-columns: minmax(0, 2fr) repeat(3, minmax(0, 1fr)) minmax(0, 1.1fr); padding: 15px 28px; border-bottom: 1px solid #efece4; font-family: 'IBM Plex Mono', monospace; font-size: 14px;">
+      <div style="font-family: 'Golos Text', sans-serif;">SAMO SAVDO</div>
+      <div style="text-align: right; color: #047857;">473 954 000</div>
+      <div style="text-align: right; color: #4338ca;">473 954 000</div>
+      <div style="text-align: right;">0</div>
+      <div style="text-align: right; font-family: 'Golos Text', sans-serif; font-size: 13px; color: #6a6252;">Тенг</div>
+    </div>
+
+    <div style="position: relative; display: grid; grid-template-columns: minmax(0, 2fr) repeat(3, minmax(0, 1fr)) minmax(0, 1.1fr); padding: 15px 28px; border-bottom: 1px solid #efece4; font-family: 'IBM Plex Mono', monospace; font-size: 14px;">
+      <div style="font-family: 'Golos Text', sans-serif; font-weight: 500;">ORIENT TEXNIKA</div>
+      <div style="text-align: right; color: #6a6252;">—</div>
+      <div style="text-align: right; color: #4338ca;">50 278 000</div>
+      <div style="text-align: right; color: #be123c; font-weight: 500;">−50 278 000</div>
+      <div style="text-align: right; font-family: 'Golos Text', sans-serif; font-size: 13px; color: #be123c;">Қарзмиз</div>
+      <!-- qizil qalam: farq shu yerda -->
+      <svg width="470" height="66" viewBox="0 0 470 66" fill="none" style="position: absolute; right: 12px; top: -8px; pointer-events: none;">
+        <rect x="2" y="6" width="330" height="46" rx="23" stroke="#c2183f" stroke-width="2.2" transform="rotate(-0.8 2 6)"></rect>
+        <path d="M336 30 C 372 30, 392 22, 420 20" stroke="#c2183f" stroke-width="2.2" stroke-linecap="round"></path>
+        <path d="M410 14 L 421 20 L 411 27" stroke="#c2183f" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"></path>
+      </svg>
+    </div>
+
+    <div style="display: grid; grid-template-columns: minmax(0, 2fr) repeat(3, minmax(0, 1fr)) minmax(0, 1.1fr); padding: 15px 28px; border-bottom: 1px solid #efece4; font-family: 'IBM Plex Mono', monospace; font-size: 14px;">
+      <div style="font-family: 'Golos Text', sans-serif;">BARKAMOL QURILISH</div>
+      <div style="text-align: right; color: #047857;">8 271 000</div>
+      <div style="text-align: right; color: #4338ca;">6 036 948</div>
+      <div style="text-align: right; color: #9a4708;">2 234 052</div>
+      <div style="text-align: right; font-family: 'Golos Text', sans-serif; font-size: 13px; color: #9a4708;">Фактура керак</div>
+    </div>
+
+    <div style="display: grid; grid-template-columns: minmax(0, 2fr) repeat(3, minmax(0, 1fr)) minmax(0, 1.1fr); padding: 15px 28px; border-top: 2px solid #17150f; font-family: 'IBM Plex Mono', monospace; font-size: 14px; font-weight: 500;">
+      <div style="font-family: 'Golos Text', sans-serif; font-weight: 600;">ЖАМИ</div>
+      <div style="text-align: right;">482 225 000</div>
+      <div style="text-align: right;">530 268 948</div>
+      <div style="text-align: right; color: #be123c;">−48 043 948</div>
+      <div></div>
+    </div>
+  </div>
+
+  <!-- qizil qalam izohi -->
+  <div style="position: absolute; right: 64px; bottom: 26px; display: flex; align-items: center; gap: 10px; font-family: 'Literata', Georgia, serif; font-style: italic; font-size: 15px; color: #c2183f;">
+    бухгалтер ўтказиб юборган фарқ — 50 278 000 сўм
+  </div>
+</div>
+</x-dc>
+
+<script data-dc-script data-props='{}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

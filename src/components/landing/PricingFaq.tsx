@@ -1,7 +1,7 @@
 "use client";
 
 import { useT } from "@/context/LanguageContext";
-import { Card, Reveal } from "@/components/ui";
+import { FaqItem, Reveal } from "@/components/ui";
 
 /**
  * НАРХГА ОИД САВОЛЛАР — фақат `/pricing` саҳифасида.
@@ -39,17 +39,18 @@ export function PricingFaq() {
   return (
     <section className="mx-auto w-full max-w-7xl px-4 pb-14 md:px-6">
       <Reveal>
-        <Card>
-          <h2 className="text-h2 font-semibold text-ink">{t("Нарх бўйича саволлар")}</h2>
-          <div className="mt-3">
-            {ITEMS.map((item) => (
-              <div key={item.q} className="border-b border-line py-3 last:border-0">
-                <p className="text-body font-medium text-ink">{t(item.q)}</p>
-                <p className="mt-1 text-body text-ink-2">{t(item.a)}</p>
-              </div>
-            ))}
-          </div>
-        </Card>
+        {/* Бош саҳифадаги ТСС билан БИР ХИЛ қатор (`FaqItem`):
+            иккита жойда икки хил бўлса, одам буни бошқа нарса деб
+            ўқирди. Карта ҳам олиб ташланди — бўлимнинг ўз чегараси
+            бор, ичига яна қути қўйиш қатлам қўшади. */}
+        <h2 className="text-h2 font-semibold text-ink">{t("Нарх бўйича саволлар")}</h2>
+        <div className="mt-3">
+          {ITEMS.map((item) => (
+            <FaqItem key={item.q} q={t(item.q)}>
+              {t(item.a)}
+            </FaqItem>
+          ))}
+        </div>
       </Reveal>
     </section>
   );

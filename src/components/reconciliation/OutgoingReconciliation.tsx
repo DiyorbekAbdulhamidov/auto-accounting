@@ -59,8 +59,10 @@ import {
   RowCheckbox,
   SearchInput,
   Select,
-  Spinner,
-  StatCard,
+  Skeleton,
+  SumStrip,
+  SumCell,
+  TableSkeleton,
   Modal,
   Table,
   TableFrame,
@@ -1176,11 +1178,23 @@ export default function OutgoingReconciliation({
   // эмас, таб ичидаги бўлак. `min-h-screen` спиннер сарлавҳа ва
   // табларни пастга суриб юборарди.
   if (isFetchingData) {
+    /* Айланма ЭМАС, ЖАДВАЛНИНГ ЎЗ ШАКЛИ. Бухгалтер нима
+       келаётганини кўриб туради ва маълумот келганда саҳифа
+       силжимайди — ўлчам аввалдан тўғри. */
     return (
-      <Card className="flex items-center justify-center gap-3 py-12">
-        <Spinner className="h-5 w-5 text-accent-ink" />
-        <span className="text-body text-ink-3">{t("Маълумотлар юкланмоқда...")}</span>
-      </Card>
+      <div className="space-y-4" aria-busy="true">
+        <span className="sr-only">{t("Маълумотлар юкланмоқда...")}</span>
+        <SumStrip cols={3}>
+          {[0, 1, 2].map((i) => (
+            <div key={i} className="bg-surface px-4 py-3.5">
+              <Skeleton className="h-3 w-28" />
+              <Skeleton className="mt-2 h-6 w-36" />
+              <Skeleton className="mt-2 h-3 w-44" />
+            </div>
+          ))}
+        </SumStrip>
+        <TableSkeleton cols={6} rows={7} />
+      </div>
     );
   }
 
@@ -1403,8 +1417,8 @@ export default function OutgoingReconciliation({
               Катта рақам ҳар доим ТЎЛИҚ: у файлнинг ўз «Итого» қаторига
               тенг бўлиши керак, шунинг учун ундан коммунал ҳам
               чиқарилмайди. Остидаги кичик қатор эса корхоналар кесими. */}
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-            <StatCard
+          <SumStrip cols={3}>
+            <SumCell
               label={`${t("Жами тўланган пул")} · ${t("ҳаммаси")}`}
               count={periodTotals.debit}
               format={formatNum}
@@ -1418,7 +1432,7 @@ export default function OutgoingReconciliation({
                 </>
               }
             />
-            <StatCard
+            <SumCell
               label={`${t("Жами келган фактура")} · ${t("ҳаммаси")}`}
               count={periodTotals.credit}
               format={formatNum}
@@ -1438,7 +1452,7 @@ export default function OutgoingReconciliation({
                 коммунал/бюджет асосий сверкага кирмайди ва жадвалда
                 ҳам кўринмайди. Илгари бу карта тўлиқ рақамни
                 кўрсатарди — экранда иккита ҳар хил «Фарқ» турарди. */}
-            <StatCard
+            <SumCell
               label={`${t("Фарқи")} · ${t("корхоналар")} (${periodTitle})`}
               count={companyDiff}
               format={formatNum}
@@ -1471,7 +1485,7 @@ export default function OutgoingReconciliation({
                 </>
               }
             />
-          </div>
+          </SumStrip>
 
           {periodTotals.hintCount > 0 && (
             <Alert tone="warn">

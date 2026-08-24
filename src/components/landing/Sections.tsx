@@ -17,29 +17,20 @@
 "use client";
 
 import NextLink from "next/link";
-import {
-  ArrowRight,
-  Boxes,
-  Brain,
-  Building2,
-  Check,
-  Clock,
-  Cpu,
-  FileSpreadsheet,
-  FileText,
-  Hourglass,
-  Lock,
-  Scale,
-  ShieldCheck,
-  SlidersHorizontal,
-} from "lucide-react";
+// IKONKA UCHTA QOLDI. Ilgari o'n to'rtta edi va ularning o'n bittasi
+// hech narsa demasdi: «Brain» — format xotirasi, «Boxes» — ombor,
+// «Cpu» — tahlil. Bir xil o'lchamdagi bezak ikonka qatori — «shablon»
+// hissining birinchi manbai. Qolgani ma'no tashiydi: yo'nalish
+// (ArrowRight), tasdiq (Check), tarozi (Scale — brend belgisi).
+import { ArrowRight, Check, Scale } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { useLocale, useT } from "@/context/LanguageContext";
 import { BRAND } from "@/lib/brand";
 import { path } from "@/lib/routes";
 import { PLANS } from "@/lib/plans";
 import { LogoMark } from "@/components/Brand";
-import ReconciliationAnimation, { ReconciliationAnimationText } from "@/components/guide/ReconciliationAnimation";
+import { ReconciliationAnimationText } from "@/components/guide/ReconciliationAnimation";
+import LedgerPanel from "./LedgerPanel";
 import { ColourKey } from "@/components/guide/Guide";
 import { Badge, Card, Num, Reveal, buttonClasses, cx } from "@/components/ui";
 
@@ -56,13 +47,6 @@ function useSignedIn(): boolean {
   return !loading && !!user;
 }
 
-/** Икки модуль рангининг юмшоқ нурланиши — hero ва CTA фони учун */
-const GLOW = {
-  background:
-    "radial-gradient(55% 55% at 8% 0%, color-mix(in srgb, var(--brand-out) 18%, transparent) 0%, transparent 70%), " +
-    "radial-gradient(55% 55% at 92% 100%, color-mix(in srgb, var(--brand-in) 18%, transparent) 0%, transparent 70%)",
-};
-
 /* ============================================================
    HERO
    ============================================================ */
@@ -72,12 +56,19 @@ export function Hero() {
   const locale = useLocale();
   const signedIn = useSignedIn();
   return (
-    <section className="relative overflow-hidden border-b border-line">
-      {/* Уч қатлам фон: тўр -> нурланиш -> мазмун. Учаласи ҳам
-          `pointer-events-none`, яъни бирортаси босишни тўсмайди. */}
-      <div className="pointer-events-none absolute inset-0 grid-bg opacity-60" />
-      <div className="pointer-events-none absolute inset-0" style={GLOW} />
-
+    /* ============================================================
+       ФОН — ТЎР ҳам, НУРЛАНИШ ҳам ЙЎҚ (2026-08-23)
+       ------------------------------------------------------------
+       Илгари бу ерда уч қатлам турарди: катакли тўр (`grid-bg`) ва
+       иккита рангли радиал нурланиш. Иккови ҳам ҲЕЧ НАРСА демасди —
+       соф безак, ва айнан ўша безак 2021–2024 йиллардаги ҳар
+       иккинчи бош саҳифада бор.
+       Ўрнига МАЪНО: hero — оқ ВАРАҚ (`--surface`), саҳифанинг
+       қолгани эса илиқ СТОЛ (`--page`). Чегара битта — варақнинг
+       қирраси. Бухгалтер кун бўйи қоғоз билан ишлайди; экран ҳам
+       шу тилда гапиради.
+       ============================================================ */
+    <section className="paper brand-field relative overflow-hidden border-b border-line bg-surface">
       <div className="relative mx-auto w-full max-w-7xl px-4 py-16 md:px-6 md:py-24">
         <div className="grid grid-cols-1 items-center gap-12 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,1fr)]">
           <div>
@@ -126,7 +117,7 @@ export function Hero() {
               РАСМ эмас, ЭКРАН деб ўқийди. Рамка — учта нуқта ва
               манзил қатори, бошқа безак йўқ. */}
           <AppFrame label={`${BRAND.domain} · ${t("сверка")}`}>
-            <ReconciliationAnimation />
+            <LedgerPanel />
           </AppFrame>
         </div>
 
@@ -135,7 +126,8 @@ export function Hero() {
           {/* Раqamning O'ZI ham tarjima qilinadi: «млрд» qisqartmasi
               har tilda boshqacha (mlrd / млрд / bn). */}
           <Fact value={t("1,37 млрд")} label={t("сўм айланмада синовдан ўтган")} />
-          <Fact value="58" label={t("та автомат текширув, ҳар ўзгаришдан кейин")} />
+          {/* Сон `scripts/verify-parsers.cjs` дан. Ўзгарса — шу ерда ҳам */}
+          <Fact value="142" label={t("та автомат текширув, ҳар ўзгаришдан кейин")} />
           <Fact value="6" label={t("та ҳақиқий банк файли — эталон тўплам")} />
         </div>
       </div>
@@ -161,9 +153,11 @@ function AppFrame({ label, children }: { label: string; children: React.ReactNod
         </span>
         <span className="ml-2 truncate text-caption text-ink-3">{label}</span>
       </div>
-      {/* Телефонда ички оралиқ КИЧИК: рамка ва анимациянинг ўз
-          ички оралиғи қўшилиб, кўрсаткич жадвали қисилиб қоларди. */}
-      <div className="p-2 md:p-5">{children}</div>
+      {/* ЖАДВАЛ РАМКАГА ТЕГИБ ТУРАДИ. Ички оралиқ ЙЎҚ: ҳисоб
+          варағининг чизиғи варақнинг қиррасигача боради, худди
+          қоғоздагидек. Оралиқ қўйилса, жадвал «расм» бўлиб
+          кўринарди. */}
+      <div>{children}</div>
     </div>
   );
 }
@@ -179,7 +173,11 @@ function AppFrame({ label, children }: { label: string; children: React.ReactNod
 function Fact({ value, label }: { value: string; label: string }) {
   return (
     <div>
-      <p className="brand-gradient-text text-title font-semibold tabular">{value}</p>
+      {/* `tabular` ЙЎҚ. У ФАҚАТ рақам устуни учун: ичида минглик
+          оралиғи қисқартирилган (`word-spacing`), бу ерда эса
+          қиймат сон БИЛАН СЎЗ («1,37 млрд») — оралиқ йўқолиб,
+          «1,37млрд» бўлиб қоларди (браузерда кўрилган). */}
+      <p className="brand-gradient-text text-title font-semibold">{value}</p>
       <p className="mt-1.5 text-caption text-ink-3">{label}</p>
     </div>
   );
@@ -194,17 +192,27 @@ function Fact({ value, label }: { value: string; label: string }) {
 
 export function Comparison() {
   const t = useT();
-  const qolda = [
-    "Иккита Excel'ни ёнма-ён очиб, кўз билан солиштириш",
-    "Битта контрагент бир нечта ном билан ёзилган — қўлда бирлаштириш",
-    "Коммунал ва бюджет тўловлари орасида адашиш",
-    "Хато топилса — ҳаммасини бошидан",
-  ];
-  const tizimda = [
-    "Файлларни ўз ҳолича юклаш — банк форматини ўзгартириш шарт эмас",
-    "Контрагент СТИР бўйича ўзи бирлаштирилади",
-    "Коммунал/бюджет алоҳида тоифага ажралади, ЖАМИ эса тўлиқ қолади",
-    "Фарқ бор қаторлар рангда ажралиб туради",
+  /* ЙИҒМА ЖУФТЛИК: чапда эски йўл, ўнгда шу ЎША ишнинг тизимдаги
+     кўриниши. Иккита алоҳида рўйхат эмас — БИТТА қаторнинг икки
+     учи. Одам «нима ўзгаради?» деб солиштириш учун кўзини у
+     ёқдан-бу ёққа юргизмайди: жавоб ёнида турибди. */
+  const pairs: { before: string; after: string }[] = [
+    {
+      before: "Иккита Excel'ни ёнма-ён очиб, кўз билан солиштириш",
+      after: "Файлларни ўз ҳолича юклаш — банк форматини ўзгартириш шарт эмас",
+    },
+    {
+      before: "Битта контрагент бир нечта ном билан ёзилган — қўлда бирлаштириш",
+      after: "Контрагент СТИР бўйича ўзи бирлаштирилади",
+    },
+    {
+      before: "Коммунал ва бюджет тўловлари орасида адашиш",
+      after: "Коммунал/бюджет алоҳида тоифага ажралади, ЖАМИ эса тўлиқ қолади",
+    },
+    {
+      before: "Хато топилса — ҳаммасини бошидан",
+      after: "Фарқ бор қаторлар рангда ажралиб туради",
+    },
   ];
 
   return (
@@ -215,169 +223,55 @@ export function Comparison() {
           {t("Ҳақиқий синовда: 1,37 млрд сўм айланма, 152 ўтказма, 159 фактура, 35 контрагент.")}
         </p>
 
-        <div className="mt-8 grid grid-cols-1 gap-5 md:grid-cols-2">
-          <Card lift className="flex flex-col">
-            <div className="flex items-center gap-2.5">
-              <Clock className="h-5 w-5 text-ink-3" />
+        {/* ЮЗМА-ЮЗ ЖАДВАЛ. Икки устун — иккита рўйхат ЭМАС, битта
+            қаторнинг икки учи: чапда бугунги иш, ўнгда ўшанинг
+            тизимдаги кўриниши. Ўртадаги чизиқ — чегара.
+            Телефонда устун битта бўлади ва жуфтлик устма-уст
+            тушади: «олдин / кейин» тартиби сақланади. */}
+        <div className="mt-8 overflow-hidden rounded-lg border border-line bg-surface">
+          {/* Шапка: икки томоннинг ВАҚТИ */}
+          <div className="grid grid-cols-1 border-b border-line md:grid-cols-2">
+            <div className="flex items-baseline gap-3 px-5 py-4">
               <h3 className="text-h3 font-semibold text-ink-2">{t("Қўлда")}</h3>
+              {/* СЎЗ — моношрифтда ЭМАС. `tabular` фақат рақам учун */}
+              <span className="text-body font-medium text-ink-3">
+                {t("бир неча кун")}
+              </span>
             </div>
-            <p className="mt-1 text-num font-semibold tabular text-ink-3">
-              {t("бир неча кун")}
-            </p>
-            <ul className="mt-4 space-y-2">
-              {qolda.map((s) => (
-                <li key={s} className="flex gap-2.5 text-body text-ink-2">
-                  <span className="mt-0.5 shrink-0 text-ink-3">·</span>
-                  {t(s)}
-                </li>
-              ))}
-            </ul>
-          </Card>
-
-          <Card lift className="relative flex flex-col overflow-hidden">
-            {/* Чап қиррадаги 4px модуль ранги ЎРНИГА бренд градиенти:
-                бу карта «биз» томони, яъни модуль эмас, БРЕНД. */}
-            <span className="brand-gradient absolute inset-y-0 left-0 w-1" />
-            <div className="flex items-center gap-2.5">
+            <div className="relative flex items-baseline gap-3 border-t border-line px-5 py-4 md:border-l md:border-t-0">
+              <span className="brand-gradient absolute inset-x-0 top-0 h-0.5 md:inset-y-0 md:left-0 md:right-auto md:h-auto md:w-0.5" />
               <LogoMark size="sm" />
               <h3 className="text-h3 font-semibold text-ink">{BRAND.name}</h3>
+              <span className="text-body font-medium text-ok">
+                {t("бир неча сония")}
+              </span>
             </div>
-            <p className="mt-1 text-num font-semibold tabular text-ok">
-              {t("бир неча сония")}
-            </p>
-            <ul className="mt-4 space-y-2">
-              {tizimda.map((s) => (
-                <li key={s} className="flex gap-2.5 text-body text-ink-2">
-                  <Check className="mt-0.5 h-4 w-4 shrink-0 text-ok" />
-                  {t(s)}
-                </li>
-              ))}
-            </ul>
-          </Card>
+          </div>
+
+          {pairs.map((p) => (
+            <div
+              key={p.before}
+              className="grid grid-cols-1 border-b border-line last:border-b-0 md:grid-cols-2"
+            >
+              <div className="flex gap-2.5 px-5 py-4 text-body text-ink-3">
+                <span className="mt-0.5 shrink-0">·</span>
+                {t(p.before)}
+              </div>
+              <div className="flex gap-2.5 border-t border-line px-5 py-4 text-body text-ink-2 md:border-l md:border-t-0">
+                <Check className="mt-0.5 h-4 w-4 shrink-0 text-ok" />
+                {t(p.after)}
+              </div>
+            </div>
+          ))}
         </div>
       </Reveal>
     </section>
   );
 }
 
-/* ============================================================
-   ИМКОНИЯТЛАР
-   ============================================================ */
-
-const FEATURES = [
-  {
-    icon: Scale,
-    title: "Қолдиқ тенгламаси",
-    text:
-      "Бошланғич қолдиқ + кирим − чиқим = охирги қолдиқ. Дебет билан кредит алмашиб кетса файлнинг «Итого» қатори буни СЕЗМАЙДИ — бу тенглама сезади ва айтади.",
-  },
-  {
-    icon: Brain,
-    title: "Формат хотираси",
-    text:
-      "Нотаниш банк шакли келса, тизим уни ўрганиб олади ва кейинги сафар ўзи танийди. Хотира умумий — ҳар янги фойдаланувчи ҳамма учун тизимни кучайтиради.",
-  },
-  {
-    icon: SlidersHorizontal,
-    title: "Коммунал ва бюджет ажралади",
-    text:
-      "Улар асосий жадвални чалғитмайди, лекин ҲЕЧ ҚАЧОН ўчирилмайди — тепадаги «ЖАМИ» ҳар доим тўлиқ сумма бўлиб қолади.",
-  },
-  {
-    icon: FileText,
-    title: "Акт сверки",
-    text:
-      "Битта контрагент учун расмий икки томонлама ҳужжат: Дата · Документ · Дебет · Кредит, Сальдо ва Обороты қаторлари билан. Excel'да, босишга тайёр.",
-  },
-  {
-    icon: Hourglass,
-    title: "Қарздорлик ёши",
-    text:
-      "Тўланмаган фактура қолдиғи 0–30 / 31–60 / 61–90 / 90+ кун бўйича ажратилади. Ҳисоб FIFO: келган пул энг эски фактурадан бошлаб ёпилади.",
-  },
-  {
-    icon: FileSpreadsheet,
-    title: "Беш варақли Excel ҳисобот",
-    text:
-      "Сверка · Йиллар · Ойма-ой · Тўловлар · Фактуралар. Экранда нима кўринса, файлда ҳам ўша.",
-  },
-  {
-    icon: ShieldCheck,
-    title: "Ўз иш майдонингиз",
-    text:
-      "Бошқа фойдаланувчи сизнинг корхоналарингизни ҳам, суммаларингизни ҳам кўрмайди. Ҳар ҳисоб ўз майдонида.",
-  },
-  {
-    icon: Lock,
-    title: "Рақам ўзгартирилмайди",
-    text:
-      "Тизим фақат файлда нима ёзилганини ўқийди ва фарқни кўрсатади. «Тўғрилаш» учун қўлда тузатма қўшилмайди — тўғрилаш сизнинг қарорингиз.",
-  },
-];
-
-/**
- * @param limit — nechta ko'rsatilsin. Bosh sahifada QISQARTIRILGAN
- *   ro'yxat turadi va «hammasi» havolasi `/features` ga olib boradi.
- *   Sabab: bir xil matnni ikkala sahifada to'liq takrorlash Google
- *   uchun dublikat bo'ladi va ikkalasining ham kuchini pasaytiradi.
- * @param heading — `false` bo'lsa sarlavha chizilmaydi (alohida
- *   sahifada u `<h1>` sifatida yuqorida turadi).
- */
-export function Features({
-  limit,
-  heading = true,
-}: {
-  limit?: number;
-  heading?: boolean;
-}) {
-  const t = useT();
-  const locale = useLocale();
-  const shown = limit ? FEATURES.slice(0, limit) : FEATURES;
-  const hidden = FEATURES.length - shown.length;
-
-  return (
-    <section className="border-y border-line bg-surface-2/40">
-      <div className="mx-auto w-full max-w-7xl px-4 py-16 md:px-6 md:py-20">
-        <Reveal>
-          {heading && (
-            <>
-              <h2 className="text-title font-semibold text-ink">{t("Нима бор")}</h2>
-              <p className="mt-3 max-w-2xl text-lead text-ink-2">
-                {t("Ҳар бири ҳақиқий файлда чиққан муаммодан келиб чиққан — рўйхат тўлдириш учун эмас.")}
-              </p>
-            </>
-          )}
-
-          <div
-            className={cx(
-              "grid grid-cols-1 gap-5 md:grid-cols-2 lg:grid-cols-4",
-              heading && "mt-8"
-            )}
-          >
-            {shown.map((f) => (
-              <Card key={f.title} lift className="flex h-full flex-col">
-                <span className="w-fit rounded-lg bg-accent-soft p-2.5 text-accent-ink">
-                  <f.icon className="h-5 w-5" />
-                </span>
-                <h3 className="mt-4 text-h3 font-semibold text-ink">{t(f.title)}</h3>
-                <p className="mt-2 text-body text-ink-2">{t(f.text)}</p>
-              </Card>
-            ))}
-          </div>
-
-          {hidden > 0 && (
-            <NextLink
-              href={path("features", locale)}
-              className={cx(buttonClasses("secondary", "md"), "mt-8")}
-            >
-              {t("Яна")} {hidden} {t("та имконият")} <ArrowRight className="h-4 w-4" />
-            </NextLink>
-          )}
-        </Reveal>
-      </div>
-    </section>
-  );
-}
+/* ИМКОНИЯТЛАР бўлими бу файлдан ЧИҚАРИЛДИ — `FeatureGrid.tsx`.
+   Сабаб: у энди оддий рўйхат эмас, ўз кўргазмалари бор алоҳида
+   тузилма; бу файлда турса, иккиси ҳам ўқилмас бўлиб қоларди. */
 
 /* ============================================================
    НАРХ
@@ -451,12 +345,15 @@ export function Pricing({ heading = true }: { heading?: boolean }) {
               </div>
               <p className="mt-1 text-caption text-ink-3">{t(it.forWhom)}</p>
 
-              <p className="mt-4 text-num font-semibold tabular text-ink">
+              {/* `tabular` ФАҚАТ рақамда. Илгари у бутун қаторда
+                  эди ва «Бепул» СЎЗИ моношрифтда чиқарди — сўз
+                  моношрифтда «код» бўлиб кўринади (ўлчанган). */}
+              <p className="mt-4 text-num font-semibold text-ink">
                 {it.plan.priceUzs === 0 ? (
                   t("Бепул")
                 ) : (
                   <>
-                    {money(it.plan.priceUzs)}
+                    <span className="tabular">{money(it.plan.priceUzs)}</span>
                     <span className="ml-1.5 text-caption font-medium text-ink-3">
                       {t("сўм/ой")}
                     </span>
@@ -464,10 +361,12 @@ export function Pricing({ heading = true }: { heading?: boolean }) {
                 )}
               </p>
 
-              <ul className="mt-4 flex-1 space-y-2">
+              {/* Uchta rejada 12 ta bir xil yashil «✓» turardi. Belgi
+                  hamma qatorda bir xil bo'lsa, u ma'lumot emas — bezak.
+                  Chiziq esa qatorni ajratadi va solishtirishni osonlashtiradi. */}
+              <ul className="mt-4 flex-1 divide-y divide-line border-t border-line">
                 {it.lines.map((l) => (
-                  <li key={l} className="flex gap-2.5 text-body text-ink-2">
-                    <Check className="mt-0.5 h-4 w-4 shrink-0 text-ok" />
+                  <li key={l} className="py-2 text-body text-ink-2">
                     {t(l)}
                   </li>
                 ))}
@@ -509,17 +408,14 @@ export function Roadmap() {
   const t = useT();
   const items = [
     {
-      icon: Boxes,
       title: "Виртуал Омбор (Астатка)",
       text: "МХИК (ИКПУ) кодлари бўйича товар қолдиқларини автоматик ҳисоблаш.",
     },
     {
-      icon: Cpu,
       title: "AI таҳлил ва прогноз",
       text: "Солиқ хавфларини олдиндан кўрсатиш ва автоматик баланс тузиш.",
     },
     {
-      icon: Building2,
       title: "Тўғридан-тўғри уланиш",
       text: "Excel ўрнига банк ва Э-фактура билан бевосита алоқа (1C «Клиент-Банк», camt.053).",
     },
@@ -528,30 +424,43 @@ export function Roadmap() {
     <section className="border-y border-line bg-surface-2/40">
       <div className="mx-auto w-full max-w-7xl px-4 py-16 md:px-6 md:py-20">
         <Reveal>
-          <h2 className="text-title font-semibold text-ink">{t("Кейин нима бўлади")}</h2>
+          {/* «ТЕЗ КУНДА» BIR MARTA AYTILADI. Ilgari uchta kartaning
+              har birida alohida qulf belgisi turardi — bir xil xabar
+              uch marta. Endi u sarlavha yonida bitta belgi, ro'yxat
+              esa qutisiz: bular hali YO'Q narsalar, ular sahifada
+              mavjud imkoniyatlar bilan teng joy egallamasligi kerak.
+
+              `opacity` ISHLATILMAYDI: o'lchangan — u matn kontrastini
+              5,43 dan 3,53 ga tushirardi (chegara 4,5). */}
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+            <h2 className="text-title font-semibold text-ink">{t("Кейин нима бўлади")}</h2>
+            <Badge tone="muted">{t("Тез кунда")}</Badge>
+          </div>
           <p className="mt-3 max-w-2xl text-lead text-ink-2">
             {t("Булар ҳали ЙЎҚ. Ваъда сифатида эмас, йўналиш сифатида ёзилган.")}
           </p>
-          <div className="mt-8 grid grid-cols-1 gap-5 md:grid-cols-3">
-            {/* `opacity-80` ЙЎҚ. Ўлчанган: у матн контрастини 5,43 дан
-                3,53 га туширарди (чегара 4,5). «Тез кунда» ҳолати
-                шаффофлик билан эмас, БЕЛГИ ва бетараф ранг билан
-                айтилади — иккиси ҳам контрастни бузмайди. */}
-            {items.map((r) => (
-              <Card key={r.title} className="flex h-full flex-col">
-                <div className="flex items-start justify-between gap-3">
-                  <span className="rounded-md bg-surface-2 p-2.5 text-ink-3">
-                    <r.icon className="h-5 w-5" />
+          {/* ВАҚТ ЧИЗИҒИ. Йўл харитаси — рўйхат эмас, ТАРТИБ:
+              нима олдин, нима кейин. Чизиқ шуни айтади, рўйхат
+              айтмасди. Ҳалқа ичи бўш — булар ҲАЛИ йўқ нарсалар;
+              тайёр бўлганда у тўлдирилади. */}
+          <ol className="mt-10 grid grid-cols-1 gap-x-8 gap-y-8 md:grid-cols-3">
+            {items.map((r, i) => (
+              <li key={r.title} className="relative">
+                <div className="flex items-center gap-3">
+                  <span className="relative z-10 h-3 w-3 shrink-0 rounded-full border-2 border-line-strong bg-surface" />
+                  {/* Чизиқ ҳалқадан кейин давом этади; охиргисида йўқ */}
+                  {i < items.length - 1 && (
+                    <span className="absolute left-3 right-[-2rem] top-1.5 hidden h-px bg-line md:block" />
+                  )}
+                  <span className="tabular text-caption text-ink-3">
+                    {String(i + 1).padStart(2, "0")}
                   </span>
-                  <Badge tone="muted" icon={<Lock className="h-3 w-3" />}>
-                    {t("Тез кунда")}
-                  </Badge>
                 </div>
-                <h3 className="mt-4 text-h3 font-semibold text-ink-2">{t(r.title)}</h3>
-                <p className="mt-2 text-body text-ink-3">{t(r.text)}</p>
-              </Card>
+                <h3 className="mt-3 text-h3 font-semibold text-ink-2">{t(r.title)}</h3>
+                <p className="mt-1.5 text-body text-ink-3">{t(r.text)}</p>
+              </li>
             ))}
-          </div>
+          </ol>
         </Reveal>
       </div>
     </section>
@@ -567,10 +476,10 @@ export function FinalCta() {
   const locale = useLocale();
   const signedIn = useSignedIn();
   return (
-    <section className="relative overflow-hidden">
-      <div className="pointer-events-none absolute inset-0 grid-bg opacity-50" />
-      <div className="pointer-events-none absolute inset-0" style={GLOW} />
-      <div className="relative mx-auto w-full max-w-7xl px-4 py-24 text-center md:px-6">
+    /* Hero билан БИР ХИЛ материал: саҳифа варақ билан бошланиб,
+       варақ билан тугайди. Ораси — стол. */
+    <section className="paper brand-field border-t border-line bg-surface">
+      <div className="mx-auto w-full max-w-7xl px-4 py-24 text-center md:px-6">
         <Reveal>
           <LogoMark size="lg" className="mx-auto" />
           <h2 className="mt-6 text-title font-semibold text-ink">

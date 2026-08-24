@@ -27,7 +27,7 @@ export function PaymentBox({ plan }: { plan: Exclude<Plan, "free"> }) {
   const t = useT();
   const locale = useLocale();
   const { user } = useAuth();
-  const [copied, setCopied] = useState<"card" | "note" | null>(null);
+  const [copied, setCopied] = useState(false);
   const limits = PLANS[plan];
   const price = limits.priceUzs.toLocaleString("ru-RU");
 
@@ -52,13 +52,11 @@ export function PaymentBox({ plan }: { plan: Exclude<Plan, "free"> }) {
 
   const note = `Moslik — «${t(limits.label)}» ${price} ${t("сўм")}\n${t("Ҳисоб")}: ${account}`;
 
-  const copy = async (what: "card" | "note") => {
+  const copy = async () => {
     try {
-      await navigator.clipboard.writeText(
-        what === "card" ? MANUAL_PAYMENT.cardPlain : note
-      );
-      setCopied(what);
-      setTimeout(() => setCopied(null), 2000);
+      await navigator.clipboard.writeText(note);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
     } catch {
       // Brauzer ruxsat bermasa — matn baribir ekranda turibdi
       notify.warn(t("Нусха олинмади — қўлда кўчиринг."));
@@ -84,10 +82,7 @@ export function PaymentBox({ plan }: { plan: Exclude<Plan, "free"> }) {
 
       <ol className="mt-3 space-y-2 text-body text-ink-2">
         <li>
-          <b>1.</b> {t("Қуйидаги картага")} <b>{price}</b> {t("сўм ўтказинг")}
-        </li>
-        <li>
-          <b>2.</b> {t("Чекни ВА қуйидаги маълумотни ботга ташланг:")}{" "}
+          <b>1.</b> {t("Ботга ёзинг:")}{" "}
           <a
             href={MANUAL_PAYMENT.botUrl}
             target="_blank"
@@ -98,26 +93,15 @@ export function PaymentBox({ plan }: { plan: Exclude<Plan, "free"> }) {
           </a>
         </li>
         <li>
+          {/* Rekvizitlar ekranga CHIQMAYDI — faqat botda beriladi */}
+          <b>2.</b> {t("Тўлов усули ва реквизитлар ботда юборилади.")}
+        </li>
+        <li>
           {/* Muddat ANIQ: pul to'lagan odam «qachon?» deb ikkilanmasligi kerak */}
           <b>3.</b>{" "}
           {t("Режа очилади — одатда бир неча соат ичида, кечи билан 1 иш куни.")}
         </li>
       </ol>
-
-      <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border border-line bg-surface-2 px-3 py-2.5">
-        <span className="font-mono text-body font-medium tracking-wide text-ink">
-          {MANUAL_PAYMENT.card}
-        </span>
-        <span className="text-caption text-ink-3">{MANUAL_PAYMENT.cardHolder}</span>
-        <Button
-          size="sm"
-          variant="ghost"
-          onClick={() => copy("card")}
-          icon={copied === "card" ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-        >
-          {copied === "card" ? t("Нусха олинди") : t("Нусха олиш")}
-        </Button>
-      </div>
 
       {/* HISOB — chek bilan birga yuboriladigan qator */}
       {account && (
@@ -130,10 +114,10 @@ export function PaymentBox({ plan }: { plan: Exclude<Plan, "free"> }) {
             className="mt-1.5"
             size="sm"
             variant="secondary"
-            onClick={() => copy("note")}
-            icon={copied === "note" ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+            onClick={copy}
+            icon={copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
           >
-            {copied === "note" ? t("Нусха олинди") : t("Хабарни нусхалаш")}
+            {copied ? t("Нусха олинди") : t("Хабарни нусхалаш")}
           </Button>
         </div>
       )}

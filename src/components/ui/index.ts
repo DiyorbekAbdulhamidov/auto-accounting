@@ -7,7 +7,7 @@
 // Sahifada `slate-*`, `emerald-*`, `indigo-*` yozilmaydi.
 
 export { default as Button } from "./Button";
-export { Card, CardHeader, StatCard } from "./Card";
+export { Card, CardHeader, StatCard, SumStrip, SumCell } from "./Card";
 export {
   TableFrame,
   Table,
@@ -25,7 +25,17 @@ export { default as Modal } from "./Modal";
 export { default as FileDrop } from "./FileDrop";
 export { Checkbox, RowCheckbox } from "./Checkbox";
 export { Field, Input, Select, SearchInput } from "./Form";
-export { Alert, Badge, EmptyState, Spinner, PageLoader } from "./Feedback";
+export {
+  Alert,
+  Badge,
+  EmptyState,
+  FaqItem,
+  Spinner,
+  PageLoader,
+  Skeleton,
+  StatRowSkeleton,
+  TableSkeleton,
+} from "./Feedback";
 export { Toaster, notify } from "./Toast";
 export { Reveal, CountUp, usePrefersReducedMotion } from "./Motion";
 export { default as PageHeader } from "./PageHeader";

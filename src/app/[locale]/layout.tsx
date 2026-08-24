@@ -11,7 +11,7 @@
 
 import type { Metadata } from "next";
 import { Toaster } from "@/components/ui";
-import { Inter } from "next/font/google";
+import { Golos_Text, IBM_Plex_Mono, Literata } from "next/font/google";
 import { notFound } from "next/navigation";
 import { AuthProvider } from "@/context/AuthContext";
 import { LanguageProvider } from "@/context/LanguageContext";
@@ -28,16 +28,52 @@ import { BRAND } from "@/lib/brand";
 import { SITE_URL } from "@/lib/seo";
 import "@/app/globals.css";
 
-// ШРИФТ — тўртала тил учун БИТТА оила.
+// ШРИФТ — ИККИТА оила, иккови ҳам тўртала тилни ўқийди.
+//
+// НЕГА Inter ЭМАС. Inter — 2020-йиллардаги ҳар иккинчи веб-хизмат
+// шрифти. У ёмон эмас, лекин ҲЕЧ НАРСА демайди: сайт «андоза»
+// бўлиб кўринишининг биринчи сабаби шу. Ўлчаб бўлмайдиган нарса
+// эмас — одам сайтга кирган заҳоти танийди.
+//
+// GOLOS TEXT — интерфейс ва жадвал матни. Кирилл учун АТАЙЛАБ
+// чизилган (Paratype), яъни ўзбек кирилли ва русча матн лотин
+// билан бир хил оғирликда туради. Рақамлари тор ва бир хил
+// кенгликда — ҳисоб-китоб устуни учун айнан шу керак.
+//
+// LITERATA — фақат КАТТА сарлавҳалар учун. Бу серифли, «ҳужжат»
+// шрифти: бухгалтерга таниш бўлган расмий қоғоз оҳангини беради
+// ва саҳифани дарҳол оддий SaaS қолипидан чиқаради. Матн ичида
+// ИШЛАТИЛМАЙДИ — фақат `.text-display` ва `.text-title`.
+//
 // `cyrillic` кичик тўплами МАЖБУРИЙ: усиз ўзбек кирилл ва рус
-// матни браузернинг захира шрифтига тушарди, яъни битта саҳифада
-// икки хил ҳарф шакли кўринарди.
-// `variable` — оғирлик CSS'дан олинади (400/500/600/700 учун
-// алоҳида файл юкланмайди).
+// матни браузернинг захира шрифтига тушарди.
 // `display: "swap"` — шрифт келгунча матн КЎРИНИБ туради.
-const inter = Inter({
+const golos = Golos_Text({
   subsets: ["latin", "latin-ext", "cyrillic", "cyrillic-ext"],
-  variable: "--font-inter",
+  variable: "--font-golos",
+  display: "swap",
+});
+
+const literata = Literata({
+  subsets: ["latin", "latin-ext", "cyrillic", "cyrillic-ext"],
+  variable: "--font-literata",
+  display: "swap",
+});
+
+// IBM PLEX MONO — фақат РАҚАМЛАР учун (`.tabular`).
+//
+// НЕГА. Бухгалтер экранда биринчи навбатда СОННИ ўқийди, ва уни
+// ёнидаги сон билан солиштиради. Пропорционал шрифтда «1» билан
+// «8» ҳар хил кенглик эгаллайди, яъни устундаги рақамлар кўз учун
+// текис турмайди — `tabular-nums` буни фақат ҚИСМАН тузатади.
+// Моношрифтда эса ҳар белги бир хил кенглик: устун ҳақиқий
+// ҳисоб варағига айланади ва хато рақам дарҳол кўзга ташланади.
+//
+// Плекснинг кирилли бор — СТИР ва ҳужжат рақами ҳам шу оилада.
+const plexMono = IBM_Plex_Mono({
+  weight: ["400", "500", "600"],
+  subsets: ["latin", "latin-ext", "cyrillic"],
+  variable: "--font-plex-mono",
   display: "swap",
 });
 
@@ -84,7 +120,7 @@ export default async function RootLayout({
           `<html>` га `dark` синфини гидратациядан ОЛДИН қўшади,
           иккита манба битта атрибутга ёзса React уни серверники
           билан алмаштириб, тунги режимни ўчириб юбориши мумкин. */}
-      <body className={inter.variable}>
+      <body className={`${golos.variable} ${literata.variable} ${plexMono.variable}`}>
         {/* Rang rejimi React ishga tushmasdan OLDIN qo'llanadi — aks
             holda sahifa bir lahza oq yonib, keyin qorayardi.
 
@@ -102,7 +138,7 @@ export default async function RootLayout({
             qilinadi: `src/context/LanguageContext.tsx`. */}
         <script
           dangerouslySetInnerHTML={{
-            __html: `try{var s=localStorage.getItem('theme');if(s==='dark'||(!s&&matchMedia('(prefers-color-scheme:dark)').matches))document.documentElement.classList.add('dark')}catch(e){}`,
+            __html: `try{var e=document.documentElement,s=localStorage.getItem('theme'),p=(s==='dark'||s==='light')?s:'system';e.setAttribute('data-theme-pref',p);if(p==='dark'||(p==='system'&&matchMedia('(prefers-color-scheme:dark)').matches))e.classList.add('dark')}catch(x){}`,
           }}
         />
         {/* Barcha sahifalar auth holatidan xabardor bo'lishi uchun provider ichiga olamiz */}

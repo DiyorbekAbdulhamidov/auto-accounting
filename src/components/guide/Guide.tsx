@@ -4,8 +4,7 @@ import { CloudUpload } from "lucide-react";
 import { useT } from "@/context/LanguageContext";
 import { FAQ } from "@/lib/faq";
 import {
-  Badge,
-  Card,
+  FaqItem,
   Code,
   NumTd,
   Num,
@@ -63,31 +62,90 @@ function MockUpload() {
 /** 2-qadam: «Ўқиш ҳисоботи» — tizim nimani o'qiganini aytadi */
 function MockReport() {
   const t = useT();
+  /* УСТУНЛАР ва ҚИЙМАТЛАР — жонли маҳсулотдан кўчирилган
+     (2026-08-24). Илгари бу ерда «белги» лар турарди (банк номи,
+     қатор сони) — ҳақиқий экранда эса ЖАДВАЛ бор ва бухгалтер
+     аввало «файл ўз якуни билан мос келдими?» деган устунга
+     қарайди. Намуна ҳақиқатдан фарқ қилса, қўлланма ёрдам
+     бермайди — одам бошқа экранни кутади. */
+  const rows = [
+    {
+      file: "bank ko'chirmasi.xlsx",
+      sheet: "01-06 январ-июн",
+      fmt: "BANK_TURNOVER",
+      n: "209",
+      sum: "650 043 832",
+      end: "650 074 152",
+      ok: true,
+    },
+    {
+      file: "bank ko'chirmasi.xlsx",
+      sheet: "07 июл",
+      fmt: "BANK_TURNOVER",
+      n: "48",
+      sum: "698 696 560",
+      end: "698 784 815",
+      ok: true,
+    },
+    {
+      file: "fakturalar.xlsx",
+      sheet: "",
+      fmt: "FAKTURA",
+      n: "128",
+      sum: "472 747 910",
+      end: "—",
+      ok: false,
+    },
+  ];
+
   return (
     <MockFrame title={t("✓ Ўқиш ҳисоботи")}>
-      <div className="space-y-2.5">
-        <div className="flex flex-wrap gap-1.5">
-          <Badge tone="ok">Hamkorbank</Badge>
-          <Badge tone="ok">{t("Счёт-фактура")}</Badge>
-          <Badge tone="muted">152 {t("қатор")}</Badge>
-        </div>
-        <Highlight n={2} label={t("файл ўзини текширди")}>
-          <div className="rounded-md bg-surface-2 p-2.5">
-            <p className="text-caption text-ink-3">
-              <span className="font-medium text-ink-2">{t("Қолдиқ тенгламаси")}</span>
-              {" — "}
-              {t("бошланғич қолдиқ + кирим − чиқим = охирги қолдиқ")}
-            </p>
-            <p className="mt-1 flex flex-wrap items-baseline gap-1.5 text-caption">
-              <span className="font-semibold text-ok">✓</span>
-              <span className="text-ink-2">IMANMAX.xls</span>
-              <span className="tabular text-ink-3">
-                3 038 511,11 + 722 034 354,04 − 699 298 176,27 = 25 774 688,88
-              </span>
-            </p>
-          </div>
-        </Highlight>
-      </div>
+      <Highlight n={2} label={t("файл ўзини текширди")}>
+        <TableFrame className="border-0">
+          <Table>
+            <Thead>
+              <tr>
+                {/* УСТУН ТЎРТТА. Ҳақиқий экранда бешта, лекин
+                    қўлланмадаги рамка ЯРИМ кенгликда: бешинчиси
+                    қўшилса рақамлар икки қаторга бўлиниб кетади ва
+                    жадвал ўқилмай қолади (браузерда кўрилган).
+                    Мазмун ўзгармади: «чиққан» ва «келган» битта
+                    «сумма» бўлди, чунки ҳар қаторда фақат биттаси
+                    тўлади. */}
+                <Th>{t("Файл / варақ")}</Th>
+                <Th align="right">{t("Қатор")}</Th>
+                <Th align="right">{t("Сумма")}</Th>
+                <Th align="right">{t("Файл якуни")}</Th>
+              </tr>
+            </Thead>
+            <Tbody>
+              {rows.map((r) => (
+                <Tr key={r.file + r.sheet}>
+                  <Td main>
+                    <div className="truncate font-medium">{r.file}</div>
+                    <div className="text-caption text-ink-3">
+                      {r.sheet ? `${r.sheet} · ` : ""}
+                      <Code>{r.fmt}</Code>
+                    </div>
+                  </Td>
+                  <NumTd>{r.n}</NumTd>
+                  <NumTd tone={r.ok ? "cash" : "invoice"}>{r.sum}</NumTd>
+                  <NumTd tone={r.ok ? "ok" : "muted"}>
+                    {r.ok ? `\u2713 ${r.end}` : r.end}
+                  </NumTd>
+                </Tr>
+              ))}
+            </Tbody>
+          </Table>
+        </TableFrame>
+      </Highlight>
+      {/* ҚОЛДИҚ ТЕНГЛАМАСИ — «Файл якуни» устуни аслида шу
+          текширувнинг натижаси. Формула остида ёзилади. */}
+      <p className="mt-2.5 text-caption text-ink-3">
+        <span className="font-medium text-ink-2">{t("Қолдиқ тенгламаси")}</span>
+        {" — "}
+        {t("бошланғич қолдиқ + кирим − чиқим = охирги қолдиқ")}
+      </p>
     </MockFrame>
   );
 }
@@ -96,9 +154,9 @@ function MockReport() {
 function MockTable() {
   const t = useT();
   const rows = [
-    { name: "YOSH ULGURJI SAVDO", inn: "301234567", d: "473 954 000,00", c: "473 954 000,00", diff: "0,00", tone: "muted" as const, note: "-" },
-    { name: "HUDUDGAZTA'MINOT", inn: "306605769", d: "0,00", c: "50 278 000,00", diff: "−50 278 000,00", tone: "bad" as const, note: "Қарзмиз" },
-    { name: "ANGREN ISSIQLIK", inn: "200112233", d: "8 271 000,00", c: "6 036 948,15", diff: "2 234 051,85", tone: "warn" as const, note: "Ҳисоб фактура олиш керак" },
+    { name: "SAMO SAVDO", inn: "300100100", d: "473 954 000", c: "473 954 000", diff: "0", tone: "muted" as const, note: "-" },
+    { name: "ORIENT TEXNIKA", inn: "300200200", d: "0", c: "50 278 000", diff: "−50 278 000", tone: "bad" as const, note: "Қарзмиз" },
+    { name: "BARKAMOL QURILISH", inn: "300300300", d: "8 271 000", c: "6 036 948", diff: "2 234 052", tone: "warn" as const, note: "Ҳисоб фактура олиш керак" },
   ];
 
   return (
@@ -112,6 +170,10 @@ function MockTable() {
                 <Th align="right">{t("Тўланган пул")}</Th>
                 <Th align="right">{t("Келган фактура")}</Th>
                 <Th align="right">{t("Фарқи")}</Th>
+                {/* «ИЗОҲ» устуни бу ерда ЙЎҚ — ҳақиқий экранда бор,
+                    лекин қўлланмадаги рамка ярим кенгликда ва бешинчи
+                    устун қўшилса рақамлар уч қаторга бўлиниб кетади
+                    (браузерда кўрилган). У ҳақда ёнидаги матн айтади. */}
               </tr>
             </Thead>
             <Tbody>
@@ -132,9 +194,9 @@ function MockTable() {
             <Tfoot>
               <tr>
                 <Td className="text-caption text-ink-3">{t("ЖАМИ")}</Td>
-                <NumTd>482 225 000,00</NumTd>
-                <NumTd>530 268 948,15</NumTd>
-                <NumTd tone="bad">−48 043 948,15</NumTd>
+                <NumTd>482 225 000</NumTd>
+                <NumTd>530 268 948</NumTd>
+                <NumTd tone="bad">−48 043 948</NumTd>
               </tr>
             </Tfoot>
           </Table>
@@ -153,27 +215,22 @@ export function ColourKey() {
     { tone: "warn", label: t("Фарқ бор — иш қилиш керак"), meaning: t("фактура сўраш ёки ёзиш") },
     { tone: "bad", label: t("Қарз"), meaning: t("пул ёки фактура етишмайди") },
   ];
+  /* ИККИ УСТУН ЭМАС, БИТТА УСТУН. Ўлчанган (браузерда): тор
+     устунда «Фарқ бор — иш қилиш керак» сарлавҳаси ҳам, изоҳи
+     ҳам иккига бўлиниб, тўртта қатор бир-бирига кириб кетарди.
+     Энди ҳар банд битта қатор: белги, ном, изоҳ. */
   return (
-    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+    <ul className="space-y-1.5">
       {items.map((i) => (
-        <div key={i.label} className="flex items-baseline gap-2 text-body">
+        <li key={i.label} className="flex items-baseline gap-2 text-body">
           <Num tone={i.tone} strong>
             ●
           </Num>
-          <span className="text-ink">{i.label}</span>
-          <span className="text-caption text-ink-3">— {i.meaning}</span>
-        </div>
+          <span className="shrink-0 text-ink">{i.label}</span>
+          <span className="truncate text-caption text-ink-3">— {i.meaning}</span>
+        </li>
       ))}
-    </div>
-  );
-}
-
-function Faq({ q, children }: { q: string; children: React.ReactNode }) {
-  return (
-    <div className="border-b border-line py-3 last:border-0">
-      <p className="text-body font-medium text-ink">{q}</p>
-      <p className="mt-1 text-body text-ink-2">{children}</p>
-    </div>
+    </ul>
   );
 }
 
@@ -188,7 +245,7 @@ function Faq({ q, children }: { q: string; children: React.ReactNode }) {
 export function GuideHero() {
   const t = useT();
   return (
-    <Card>
+    <div className="border-b border-line pb-10">
       <div className="grid grid-cols-1 items-center gap-6 lg:grid-cols-2">
         <div>
           <h2 className="text-h1 font-semibold tracking-tight text-ink">
@@ -204,7 +261,7 @@ export function GuideHero() {
         </div>
         <ReconciliationAnimation />
       </div>
-    </Card>
+    </div>
   );
 }
 
@@ -214,8 +271,8 @@ export function GuideSteps() {
     <>
       {/* --- Уч қадам. Ҳар қадам экранга кирганда очилади: пастга
               сурган одам «яна бор экан» деб тушунади. --- */}
-      <Card>
-        <h2 className="text-h2 font-semibold text-ink">{t("Уч қадамда")}</h2>
+      <div className="border-b border-line pb-10">
+        <h2 className="text-title font-semibold text-ink">{t("Уч қадамда")}</h2>
         <div className="mt-5 space-y-8">
           <Reveal>
             <Step n={1} title={t("Файлларни юкланг")} mock={<MockUpload />}>
@@ -250,7 +307,7 @@ export function GuideSteps() {
             </Step>
           </Reveal>
         </div>
-      </Card>
+      </div>
 
     </>
   );
@@ -261,13 +318,17 @@ export function GuideDirections() {
   return (
       /* --- Иккита йўналиш --- */
       <Reveal>
-      <Card>
-        <h2 className="text-h2 font-semibold text-ink">{t("Иккита сверка — иккита савол")}</h2>
+      <div className="border-b border-line pb-10">
+        <h2 className="text-title font-semibold text-ink">{t("Иккита сверка — иккита савол")}</h2>
         <p className="mt-2 text-body text-ink-2">
           {t("Иккаласи ҳам битта корхона учун, лекин пулнинг йўналиши бошқа. Аралаштириб юбормаслик учун ҳар бирининг ўз ранги бор.")}
         </p>
         <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
-          <div data-module="out" className="rounded-md border border-line border-l-4 border-l-accent p-4">
+          {/* Қути ЭМАС: юқорида 2px модуль чизиғи. Чап қиррали
+              юмалоқ қути — андоза шакли; чизиқ эса АЙНАН шу
+              йўналишнинг рангини айтади ва матнни қутига
+              қамамайди. */}
+          <div data-module="out" className="border-t-2 border-t-accent pt-4">
             <p className="text-h3 font-semibold text-ink">{t("Чиқим сверкаси")}</p>
             <p className="mt-1 text-body font-medium text-accent-ink">
               {t("Тўланган пул ↔ Келган фактура")}
@@ -276,7 +337,7 @@ export function GuideDirections() {
               {t("Сиз пул тўладингиз. Етказиб берувчи фактура ёзиб бердими? Ким фактура бермаган — шу ерда кўринади.")}
             </p>
           </div>
-          <div data-module="in" className="rounded-md border border-line border-l-4 border-l-accent p-4">
+          <div data-module="in" className="border-t-2 border-t-accent pt-4">
             <p className="text-h3 font-semibold text-ink">{t("Кирим сверкаси")}</p>
             <p className="mt-1 text-body font-medium text-accent-ink">
               {t("Тушган пул ↔ Ёзилган фактура")}
@@ -286,7 +347,7 @@ export function GuideDirections() {
             </p>
           </div>
         </div>
-      </Card>
+      </div>
       </Reveal>
   );
 }
@@ -296,16 +357,16 @@ export function GuideFindings() {
   return (
       /* --- Синовда нима топилган --- */
       <Reveal>
-      <Card>
-        <h2 className="text-h2 font-semibold text-ink">{t("Синовда нима топилди")}</h2>
+      <div className="border-b border-line pb-10">
+        <h2 className="text-title font-semibold text-ink">{t("Синовда нима топилди")}</h2>
         <p className="mt-2 text-body text-ink-2">
           {t("Ҳақиқий 7 ойлик маълумотда — 1,37 млрд сўм айланма, 152 ўтказма, 159 фактура, 35 контрагент. Тизим бухгалтер ЎТКАЗИБ ЮБОРГАН фарқларни топди:")}
         </p>
         <ul className="mt-3 space-y-2">
           {[
-            { name: "HUDUDGAZTA'MINOT", sum: "50 278 000", note: t("фактура бор, тўлов йўқ") },
-            { name: t("Ўзбекистон почтаси"), sum: "227 503", note: t("фактура бор, тўлов йўқ") },
-            { name: "Zero Waste", sum: "1 366 176", note: t("фарқ 28%") },
+            { name: "ORIENT TEXNIKA", sum: "50 278 000", note: t("фактура бор, тўлов йўқ") },
+            { name: "ZAMIN LOGISTIKA", sum: "227 503", note: t("фактура бор, тўлов йўқ") },
+            { name: "NUR PLASTIK", sum: "1 366 176", note: t("фарқ 28%") },
           ].map((r) => (
             <li key={r.name} className="flex flex-wrap items-baseline gap-x-2 text-body">
               <span className="font-medium text-ink">{r.name}</span>
@@ -316,7 +377,13 @@ export function GuideFindings() {
             </li>
           ))}
         </ul>
-      </Card>
+        {/* Nomlar shartli: raqamlar haqiqiy sinovdan, firma nomlari esa
+            almashtirilgan — mijozning kontragentlari ochiq sahifada
+            turmasligi kerak. */}
+        <p className="mt-3 text-caption text-ink-3">
+          {t("Фирма номлари шартли — рақамлар ҳақиқий синовдан.")}
+        </p>
+      </div>
       </Reveal>
   );
 }
@@ -330,16 +397,16 @@ export function GuideFaq() {
          саҳифадаги КЎРИНАДИГАН матнга айнан мос келишини талаб
          қилади, шунинг учун иккита нусха бўлмаслиги шарт. */
       <Reveal>
-      <Card>
-        <h2 className="text-h2 font-semibold text-ink">{t("Тез-тез сўраладиган саволлар")}</h2>
+      <div className="pb-2">
+        <h2 className="text-title font-semibold text-ink">{t("Тез-тез сўраладиган саволлар")}</h2>
         <div className="mt-3">
           {FAQ.map((item) => (
-            <Faq key={item.q} q={t(item.q)}>
+            <FaqItem key={item.q} q={t(item.q)}>
               {t(item.a)}
-            </Faq>
+            </FaqItem>
           ))}
         </div>
-      </Card>
+      </div>
       </Reveal>
   );
 }
@@ -347,7 +414,7 @@ export function GuideFaq() {
 /** To'liq qo'llanma — `/qollanma` sahifasi shuni ko'rsatadi. */
 export default function Guide() {
   return (
-    <div className="space-y-6">
+    <div className="space-y-10">
       <GuideHero />
       <GuideSteps />
       <GuideDirections />

@@ -20,7 +20,7 @@
 
 import { NextResponse } from 'next/server';
 import { requireUser } from '@/lib/apiAuth';
-import { SVERKA_REPORTS } from '@/lib/workspace';
+import { INCOME_REPORTS, SVERKA_REPORTS } from '@/lib/workspace';
 
 export const runtime = 'nodejs';
 
@@ -31,19 +31,46 @@ export async function GET(req: Request) {
   if (!auth.ok) return auth.response;
 
   try {
-    const snap = await auth.admin.db
-      .collection(SVERKA_REPORTS)
-      .where('workspaceId', '==', auth.user.workspaceId)
-      .select('companyId', 'savedAt', 'totals', 'diffCount')
-      .get();
+    /* IKKALA YO'NALISH BIRGA.
+       Ilgari bu yerda faqat CHIQIM sverkasi o'qilardi — ya'ni
+       ro'yxat «biz to'ladikmi, faktura keldimi» degan savolga
+       javob berardi, «bizga to'lashdimi» degan savol esa ro'yxatda
+       UMUMAN yo'q edi va faqat korxona ichida ko'rinardi.
+       Ikkita so'rov parallel ketadi: ketma-ket qo'yilsa sahifa
+       ochilishi ikki baravar kutardi. */
+    const [outSnap, inSnap] = await Promise.all([
+      auth.admin.db
+        .collection(SVERKA_REPORTS)
+        .where('workspaceId', '==', auth.user.workspaceId)
+        .select('companyId', 'savedAt', 'totals', 'diffCount')
+        .get(),
+      auth.admin.db
+        .collection(INCOME_REPORTS)
+        .where('workspaceId', '==', auth.user.workspaceId)
+        .select('companyId', 'savedAt', 'totals', 'diffCount')
+        .get(),
+    ]);
 
-    const reports = snap.docs.map((d) => {
-      const data = d.data() as {
-        companyId?: string;
-        savedAt?: { toMillis?: () => number };
-        totals?: { debit?: number; credit?: number };
-        diffCount?: number;
+    type Doc = {
+      companyId?: string;
+      savedAt?: { toMillis?: () => number };
+      totals?: {
+        debit?: number;
+        credit?: number;
+        /* KIRIM hisoboti BOSHQA nom bilan saqlanadi (`reportHistory.ts`):
+           yozilgan faktura — `facturaSent`, tushgan pul — `bankCredit`.
+           Bu yerda ikkalasi ham bitta shaklga keltiriladi:
+           debet = biz yozgan faktura, kredit = bizga tushgan pul. */
+        facturaSent?: number;
+        bankCredit?: number;
       };
+      diffCount?: number;
+    };
+
+    const lite = (d: FirebaseFirestore.QueryDocumentSnapshot, kind: 'in' | 'out') => {
+      const data = d.data() as Doc;
+      const debit = kind === 'out' ? num(data.totals?.debit) : num(data.totals?.facturaSent);
+      const credit = kind === 'out' ? num(data.totals?.credit) : num(data.totals?.bankCredit);
       return {
         id: d.id,
         companyId: String(data.companyId ?? ''),
@@ -54,13 +81,16 @@ export async function GET(req: Request) {
         // `totals` YO'Q hujjat «saqlangan» deb sanalmasligi kerak —
         // ilgari klient shu maydonning borligiga qarardi.
         hasTotals: data.totals != null,
-        debit: num(data.totals?.debit),
-        credit: num(data.totals?.credit),
+        debit,
+        credit,
         diffCount: typeof data.diffCount === 'number' ? data.diffCount : null,
       };
-    });
+    };
 
-    return NextResponse.json({ reports });
+    const reports = outSnap.docs.map((d) => lite(d, 'out'));
+    const income = inSnap.docs.map((d) => lite(d, 'in'));
+
+    return NextResponse.json({ reports, income });
   } catch (err) {
     console.error('reports/summary:', err);
     return NextResponse.json({ error: 'Ҳисоботлар рўйхатини ўқиб бўлмади.' }, { status: 500 });

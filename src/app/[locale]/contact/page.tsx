@@ -38,7 +38,7 @@ export default async function ContactPage({
       <PublicShell>
         <PublicHeading
           title="Алоқа ва реквизитлар"
-          lead="Савол, таклиф ёки тўлов бўйича мурожаат — қуйидаги манзилларга ёзинг."
+          lead="Савол, таклиф ёки тўлов бўйича мурожаат — Телеграм орқали ёзинг."
         />
         <ContactBody />
       </PublicShell>

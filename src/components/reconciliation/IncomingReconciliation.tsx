@@ -72,7 +72,8 @@ import {
   RowCheckbox,
   SearchInput,
   Select,
-  StatCard,
+  SumStrip,
+  SumCell,
   Table,
   TableFrame,
   Tabs,
@@ -897,20 +898,20 @@ export default function IncomingReconciliation({
       {report && (
         <>
           {/* УМУМИЙ ЯКУН — чиқим сверкасидаги билан айнан бир хил уч карта */}
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-            <StatCard
+          <SumStrip cols={3}>
+            <SumCell
               label={t("Жами тушган пул")}
               count={allTotals.credit}
               format={fmt}
               tone="cash"
             />
-            <StatCard
+            <SumCell
               label={t("Жами ёзилган фактура")}
               count={allTotals.factura}
               format={fmt}
               tone="invoice"
             />
-            <StatCard
+            <SumCell
               label={t("Фарқи")}
               count={allTotals.diff}
               format={fmt}
@@ -922,7 +923,7 @@ export default function IncomingReconciliation({
                 </>
               }
             />
-          </div>
+          </SumStrip>
 
           {/* Ҳисобга олинмаган фактуралар */}
           {report.meta.skippedInvoices.length > 0 && (

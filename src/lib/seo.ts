@@ -104,8 +104,7 @@ const UZ: Record<PathKey, SeoCopy> = {
   contact: {
     title: "Aloqa va rekvizitlar",
     description:
-      "Moslik xizmati rekvizitlari: ijrochi, ro'yxatdan o'tish ma'lumotnomasi, faoliyat manzili, " +
-      "telefon va elektron pochta.",
+      "Moslik xizmati bilan bog'lanish: Telegram kanali, ish vaqti va xizmat rekvizitlari.",
     keywords: ["aloqa", "rekvizitlar", "qo'llab-quvvatlash"],
   },
   clients: { title: "Mijozlar", description: "", keywords: [] },
@@ -174,8 +173,7 @@ const UZ_CYRL: Record<PathKey, SeoCopy> = {
   contact: {
     title: "Алоқа ва реквизитлар",
     description:
-      "Moslik хизмати реквизитлари: ижрочи, рўйхатдан ўтиш маълумотномаси, фаолият манзили, " +
-      "телефон ва электрон почта.",
+      "Moslik хизмати билан боғланиш: Телеграм канали, иш вақти ва хизмат реквизитлари.",
     keywords: ["алоқа", "реквизитлар", "қўллаб-қувватлаш"],
   },
   clients: { title: "Мижозлар", description: "", keywords: [] },
@@ -261,8 +259,7 @@ const RU: Record<PathKey, SeoCopy> = {
   contact: {
     title: "Контакты и реквизиты",
     description:
-      "Реквизиты сервиса Moslik: исполнитель, справка о регистрации, адрес деятельности, " +
-      "телефон и электронная почта.",
+      "Связь с сервисом Moslik: Телеграм-канал, часы работы и реквизиты сервиса.",
     keywords: ["контакты", "реквизиты", "поддержка"],
   },
   clients: { title: "Клиенты", description: "", keywords: [] },
@@ -328,8 +325,7 @@ const EN: Record<PathKey, SeoCopy> = {
   contact: {
     title: "Contacts and details",
     description:
-      "Moslik service details: provider, registration certificate, place of activity, " +
-      "phone and email.",
+      "Contact the Moslik service: Telegram channel, working hours and service details.",
     keywords: ["contacts", "company details", "support"],
   },
   clients: { title: "Clients", description: "", keywords: [] },

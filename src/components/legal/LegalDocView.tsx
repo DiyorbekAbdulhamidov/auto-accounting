@@ -81,26 +81,21 @@ export function LegalDocView({
 /**
  * REKVIZITLAR — bitta manba (`MERCHANT`).
  *
- * JShShIR bu yerda ATAYLAB yo'q: u shaxsni tasdiqlovchi raqam va
- * ochiq turishi kerak emas. To'lov tizimi uni arizada oladi.
+ * SHAXSIY MA'LUMOT YO'Q: F.I.Sh., ma'lumotnoma raqami, shaxsiy
+ * telefon va pochta olib tashlangan. To'lov tizimi ulanganda
+ * qaytariladi — pastdagi izoh aynan shuni aytadi.
  */
 export function MerchantDetails() {
   const t = useT();
   const rows: { k: string; v: string; href?: string }[] = [
-    { k: "Ижрочи", v: MERCHANT.fullName },
-    { k: "Мақоми", v: t("Ўзини ўзи банд қилган шахс") },
-    {
-      k: "Маълумотнома",
-      v: `№ ${MERCHANT.certificateNo} · ${MERCHANT.certificateDate}`,
-    },
-    { k: "Берган орган", v: t("Ўзбекистон Республикаси Солиқ қўмитаси") },
+    { k: "Веб-хизмат", v: MERCHANT.brand },
+    { k: "Веб-сайт", v: MERCHANT.site, href: `https://${MERCHANT.site}` },
     { k: "Фаолият тури", v: t("Дастурий таъминот ишлаб чиқиш") },
-    { k: "Фаолият манзили", v: t("Тошкент вилояти, Ангрен шаҳар") },
-    { k: "Телефон", v: MERCHANT.phone, href: `tel:${MERCHANT.phoneHref}` },
-    { k: "Электрон почта", v: MERCHANT.email, href: `mailto:${MERCHANT.email}` },
+    { k: "Алоқа", v: MERCHANT.telegram, href: MERCHANT.telegramUrl },
   ];
 
   return (
+    <>
     <dl className="space-y-2.5">
       {rows.map((r) => (
         <div key={r.k} className="flex flex-wrap gap-x-3 gap-y-0.5">
@@ -117,5 +112,9 @@ export function MerchantDetails() {
         </div>
       ))}
     </dl>
+    <p className="mt-3 text-caption text-ink-3">
+      {t("Тўлиқ реквизитлар тўлов тизими уланганда эълон қилинади.")}
+    </p>
+    </>
   );
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import NextLink from "next/link";
-import { Mail, Phone, Clock } from "lucide-react";
+import { Send, Clock } from "lucide-react";
 import { useLocale, useT } from "@/context/LanguageContext";
 import { path } from "@/lib/routes";
 import { MERCHANT } from "@/lib/legal";
@@ -21,29 +21,21 @@ export function ContactBody() {
 
   return (
     <div className="mx-auto w-full max-w-3xl px-4 pb-16 pt-8 md:px-6">
-      <div className="grid gap-4 sm:grid-cols-2">
-        <a
-          href={`tel:${MERCHANT.phoneHref}`}
-          className="flex items-start gap-3 rounded-lg border border-line bg-surface p-4 transition-colors hover:border-accent"
-        >
-          <Phone className="mt-0.5 h-5 w-5 shrink-0 text-ink-3" />
-          <span>
-            <span className="block text-caption text-ink-3">{t("Телефон")}</span>
-            <span className="block text-body font-medium text-ink">{MERCHANT.phone}</span>
+      {/* Yagona kanal: shaxsiy telefon va pochta saytdan olib tashlangan */}
+      <a
+        href={MERCHANT.telegramUrl}
+        target="_blank"
+        rel="noreferrer"
+        className="flex items-start gap-3 rounded-lg border border-line bg-surface p-4 transition-colors hover:border-accent"
+      >
+        <Send className="mt-0.5 h-5 w-5 shrink-0 text-ink-3" />
+        <span className="min-w-0">
+          <span className="block text-caption text-ink-3">{t("Телеграм")}</span>
+          <span className="block truncate text-body font-medium text-ink">
+            {MERCHANT.telegram}
           </span>
-        </a>
-
-        <a
-          href={`mailto:${MERCHANT.email}`}
-          className="flex items-start gap-3 rounded-lg border border-line bg-surface p-4 transition-colors hover:border-accent"
-        >
-          <Mail className="mt-0.5 h-5 w-5 shrink-0 text-ink-3" />
-          <span className="min-w-0">
-            <span className="block text-caption text-ink-3">{t("Электрон почта")}</span>
-            <span className="block truncate text-body font-medium text-ink">{MERCHANT.email}</span>
-          </span>
-        </a>
-      </div>
+        </span>
+      </a>
 
       <div className="mt-4 flex items-start gap-3 rounded-lg border border-line bg-surface-2 p-4">
         <Clock className="mt-0.5 h-5 w-5 shrink-0 text-ink-3" />
@@ -53,7 +45,7 @@ export function ContactBody() {
           </p>
           <p className="mt-1 text-caption text-ink-3">
             {t(
-              "Хатларга бир иш куни ичида жавоб берилади. Тўловни қайтариш аризаси 3 иш кунида кўрилади."
+              "Хабарларга бир иш куни ичида жавоб берилади. Тўловни қайтариш аризаси 3 иш кунида кўрилади."
             )}
           </p>
         </div>

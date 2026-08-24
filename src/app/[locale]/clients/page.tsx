@@ -25,6 +25,7 @@ import { useLocale, useT } from "@/context/LanguageContext";
 import { clientPath } from "@/lib/routes";
 import {
   Alert,
+  Badge,
   Button,
   Card,
   Code,
@@ -38,7 +39,8 @@ import {
   PageLoader,
   SearchInput,
   Select,
-  StatCard,
+  SumStrip,
+  SumCell,
   Table,
   TableFrame,
   Tbody,
@@ -47,6 +49,7 @@ import {
   Thead,
   Tr,
   buttonClasses,
+  cx,
   layout,
 } from "@/components/ui";
 
@@ -95,9 +98,40 @@ interface Totals {
   tolov: number;
   faktura: number;
   farq: number;
+  /* KIRIM yo'nalishi (2026-08-24 da qo'shildi).
+     `tushgan`  — bizga tushgan pul (kredit)
+     `yozilgan` — biz yozgan faktura (debet)
+     `kirimFarq` = yozilgan − tushgan, ya'ni AYNAN o'sha qoida:
+     farq = debet − kredit. > 0 bo'lsa BIZGA qarzdor. */
+  tushgan: number;
+  yozilgan: number;
+  kirimFarq: number;
 }
 
-type SortKey = "name" | "inn" | "tolov" | "faktura" | "farq";
+type SortKey = "name" | "inn" | "tolov" | "faktura" | "farq" | "kirimFarq";
+
+/**
+ * ҲОЛАТ — рақамдан СЎЗга.
+ *
+ * Бухгалтер рўйхатни «ким билан иш бор?» деб очади. Рақамнинг ўзи
+ * бу саволга жавоб бермайди: ҳар сафар ишорасини ва қайси
+ * йўналиш эканини эслаш керак бўлади. Шунинг учун жавоб СЎЗ билан
+ * ёзилади, ранг эса маълумот токенидан олинади.
+ *
+ * Бир вақтда ИККАЛА томонда ҳам иш бўлиши мумкин — шунинг учун
+ * рўйхат қайтарилади, битта белги эмас.
+ */
+function verdicts(farq: number, kirimFarq: number, saved: boolean, kirimSaved: boolean) {
+  const out: { text: string; tone: "bad" | "warn" | "info" | "ok" }[] = [];
+  // Тийиндаги фарқ фарқ эмас: 1 сўмдан кичиги юмалоқлаш хатоси
+  const EPS = 1;
+  if (saved && farq < -EPS) out.push({ text: "Биз қарздормиз", tone: "bad" });
+  if (saved && farq > EPS) out.push({ text: "Фактура олиш керак", tone: "warn" });
+  if (kirimSaved && kirimFarq > EPS) out.push({ text: "Бизга қарздор", tone: "warn" });
+  if (kirimSaved && kirimFarq < -EPS) out.push({ text: "Аванс тушган", tone: "info" });
+  if (!out.length && (saved || kirimSaved)) out.push({ text: "Ҳаммаси мос", tone: "ok" });
+  return out;
+}
 type SortDir = "asc" | "desc";
 
 export default function ClientsPage() {
@@ -110,6 +144,16 @@ export default function ClientsPage() {
   const workspaceId: string | undefined = user?.workspaceId;
   const [companies, setCompanies] = useState<Company[]>([]);
   const [reports, setReports] = useState<ReportLite[]>([]);
+  /** KIRIM сверкалари — ро'йхат учун худди чиқим каби енгил ёзув */
+  const [income, setIncome] = useState<ReportLite[]>([]);
+  /* ЙИҒМА ҚАТОР ҚАЙСИ ЙЎНАЛИШНИ КЎРСАТАДИ.
+     Илгари тепада ҳар икки йўналишнинг сони АРАЛАШ турарди:
+     «биз қарздормиз» чиқимдан, «бизга қарздор» киримдан, айланма
+     эса иккаласидан. Бухгалтер бир қарашда қайси сон қаердан
+     келганини айта олмасди. Энди йўналиш ТАНЛАНАДИ ва учала сон
+     ҳам ЎША йўналишдан бўлади. Жадвал эса иккаласини ҳам
+     кўрсатаверади — у ерда устун номи ёзилган. */
+  const [sumDir, setSumDir] = useState<"out" | "in">("out");
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
   const [loading, setLoading] = useState(true);
@@ -127,7 +171,14 @@ export default function ClientsPage() {
   const [limitHit, setLimitHit] = useState<{ plan: string; limit: number; current: number } | null>(null);
   const [interestSent, setInterestSent] = useState(false);
 
-  const [totals, setTotals] = useState<Totals>({ tolov: 0, faktura: 0, farq: 0 });
+  const [totals, setTotals] = useState<Totals>({
+    tolov: 0,
+    faktura: 0,
+    farq: 0,
+    tushgan: 0,
+    yozilgan: 0,
+    kirimFarq: 0,
+  });
 
   const formatMoney = (amount: number) => {
     // ИККИ хона ҲАР ДОИМ. Илгари `minimumFractionDigits: 0` эди ва
@@ -145,21 +196,39 @@ export default function ClientsPage() {
   // hisoboti qolib ketgan bo'lsa ("yetim" hisobot), u umumiy summaga kirmasligi kerak —
   // aks holda ro'yxat bo'sh bo'lsa ham yuqorida raqam turaveradi.
   const calculateTotals = useCallback(
-    (reportsList: ReportLite[], year: number, companiesList: Company[]) => {
+    (
+      reportsList: ReportLite[],
+      incomeList: ReportLite[],
+      year: number,
+      companiesList: Company[]
+    ) => {
       const liveCompanyIds = new Set(companiesList.map((c) => c.id));
-      let tolov = 0;
-      let faktura = 0;
-      reportsList.forEach((report) => {
-        if (!liveCompanyIds.has(report.companyId)) return;
-        const reportYear = report.savedAtMs
-          ? new Date(report.savedAtMs).getFullYear()
-          : new Date().getFullYear();
-        if (reportYear === year && report.hasTotals) {
-          tolov += report.debit;
-          faktura += report.credit;
-        }
+      const sum = (list: ReportLite[]) => {
+        let debit = 0;
+        let credit = 0;
+        list.forEach((report) => {
+          if (!liveCompanyIds.has(report.companyId)) return;
+          const reportYear = report.savedAtMs
+            ? new Date(report.savedAtMs).getFullYear()
+            : new Date().getFullYear();
+          if (reportYear === year && report.hasTotals) {
+            debit += report.debit;
+            credit += report.credit;
+          }
+        });
+        return { debit, credit };
+      };
+
+      const out = sum(reportsList);
+      const inc = sum(incomeList);
+      setTotals({
+        tolov: out.debit,
+        faktura: out.credit,
+        farq: out.debit - out.credit,
+        yozilgan: inc.debit,
+        tushgan: inc.credit,
+        kirimFarq: inc.debit - inc.credit,
       });
-      setTotals({ tolov, faktura, farq: tolov - faktura });
     },
     []
   );
@@ -195,13 +264,16 @@ export default function ClientsPage() {
       const res = await authFetch("/api/reports/summary");
       const payload = (await res.json().catch(() => ({}))) as {
         reports?: ReportLite[];
+        income?: ReportLite[];
         error?: string;
       };
       if (!res.ok) throw new Error(payload.error || "Ҳисоботларни ўқиб бўлмади.");
       const reportsList = Array.isArray(payload.reports) ? payload.reports : [];
+      const incomeList = Array.isArray(payload.income) ? payload.income : [];
       setReports(reportsList);
+      setIncome(incomeList);
 
-      calculateTotals(reportsList, selectedYear, companiesList);
+      calculateTotals(reportsList, incomeList, selectedYear, companiesList);
     } catch (err) {
       console.error("Xatolik:", err);
     } finally {
@@ -247,9 +319,43 @@ export default function ClientsPage() {
         }
       });
 
-      return { tolov, faktura, farq: tolov - faktura, saved, lastAt, withDiff };
+      /* KIRIM yo'nalishi — AYNAN shu mantiq, boshqa ro'yxatdan.
+         Alohida `kirimSaved`: bitta korxonada chiqim sverkasi
+         saqlangan-u kirim yo'q bo'lishi ODATIY hol, va o'shanda
+         kirim ustuni «0» emas, «—» ko'rsatishi kerak. */
+      let yozilgan = 0;
+      let tushgan = 0;
+      let kirimSaved = false;
+      income.forEach((report) => {
+        const at = report.savedAtMs ? new Date(report.savedAtMs) : null;
+        const reportYear = at ? at.getFullYear() : new Date().getFullYear();
+        if (report.companyId !== companyId || reportYear !== selectedYear) return;
+        if (report.hasTotals) {
+          yozilgan += report.debit;
+          tushgan += report.credit;
+          kirimSaved = true;
+        }
+        const ms = at ? at.getTime() : 0;
+        if (ms > lastMs) {
+          lastMs = ms;
+          lastAt = at;
+        }
+      });
+
+      return {
+        tolov,
+        faktura,
+        farq: tolov - faktura,
+        saved,
+        lastAt,
+        withDiff,
+        yozilgan,
+        tushgan,
+        kirimFarq: yozilgan - tushgan,
+        kirimSaved,
+      };
     },
-    [reports, selectedYear]
+    [reports, income, selectedYear]
   );
 
   // ➕ Yangi firma qo'shish
@@ -375,6 +481,23 @@ export default function ClientsPage() {
     }
   };
 
+  /** Нечта корхонада иш бор — йиғма қатордаги «N корхонада» шундан.
+   *  Тийиндаги фарқ фарқ эмас: 1 сўмдан кичиги юмалоқлаш хатоси. */
+  const attention = useMemo(() => {
+    let weOwe = 0;
+    let needInvoice = 0;
+    let theyOwe = 0;
+    let advance = 0;
+    companies.forEach((c) => {
+      const st = getCompanyBriefStats(c.id);
+      if (st.saved && st.farq < -1) weOwe += 1;
+      if (st.saved && st.farq > 1) needInvoice += 1;
+      if (st.kirimSaved && st.kirimFarq > 1) theyOwe += 1;
+      if (st.kirimSaved && st.kirimFarq < -1) advance += 1;
+    });
+    return { weOwe, needInvoice, theyOwe, advance };
+  }, [companies, getCompanyBriefStats]);
+
   // 🔍 Qidiruv + statistika + sort - bitta zanjirda, xatosiz
   const tableRows = useMemo(() => {
     const q = searchQuery.toLowerCase().trim();
@@ -395,6 +518,8 @@ export default function ClientsPage() {
           return dir * (a.faktura - b.faktura);
         case "farq":
           return dir * (a.farq - b.farq);
+        case "kirimFarq":
+          return dir * (a.kirimFarq - b.kirimFarq);
         default:
           return 0;
       }
@@ -413,7 +538,8 @@ export default function ClientsPage() {
   };
 
   if (loading) {
-    return <PageLoader text={t("Корхоналар юкланмоқда...")} />;
+    // Jadval SHAKLI bilan: kelayotgan narsaning o'lchami darhol ko'rinadi
+    return <PageLoader shape="table" cols={6} text={t("Корхоналар юкланмоқда...")} />;
   }
 
   return (
@@ -460,28 +586,94 @@ export default function ClientsPage() {
         }
       />
 
-      {/* Yig'ma ko'rsatkichlar — SAQLANGAN chiqim sverkalari bo'yicha */}
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-        <StatCard
-          label={t("Тўланган пул")}
-          value={formatMoney(totals.tolov)}
-          unit="UZS"
+      {/* ============================================================
+          ЙИҒМА — ЙЎНАЛИШ ТАНЛАНАДИ
+          ------------------------------------------------------------
+          Иккита ёндашув синаб кўрилди ва иккови ҳам ярамади:
+            1. ҳар йўналиш учун учтадан карта (жами олтита) —
+               саҳифа узайиб кетди, жадвалгача суриш керак бўлди;
+            2. тўртта аралаш катак — қисқа бўлди, лекин қайси сон
+               қайси йўналишдан экани кўринмасди.
+
+          Энди ЙЎНАЛИШ ТАНЛАНАДИ: учала сон ҳам биттa манбадан,
+          устидаги тугма қайси манба эканини айтиб туради. Ранг ҳам
+          ўша йўналишники (`data-module`), яъни бухгалтер сайтнинг
+          қолган жойидаги билан бир хил рангни кўради.
+          ============================================================ */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex rounded-md border border-line bg-surface p-0.5">
+          {(["out", "in"] as const).map((k) => (
+            <button
+              key={k}
+              type="button"
+              data-module={k}
+              aria-pressed={sumDir === k}
+              onClick={() => setSumDir(k)}
+              className={cx(
+                "rounded px-3.5 py-1.5 text-body transition-colors",
+                sumDir === k
+                  ? "bg-accent-soft font-medium text-accent-ink"
+                  : "text-ink-2 hover:text-ink"
+              )}
+            >
+              {t(k === "out" ? "Чиқим сверкаси" : "Кирим сверкаси")}
+            </button>
+          ))}
+        </div>
+        <p className="text-caption text-ink-3">
+          {sumDir === "out"
+            ? t("биз тўладикми, фактура келдими")
+            : t("бизга тўлашдими, фактура ёздикми")}
+        </p>
+      </div>
+
+      <SumStrip cols={3}>
+        <SumCell
+          label={sumDir === "out" ? t("Тўланган пул") : t("Тушган пул")}
+          value={formatMoney(sumDir === "out" ? totals.tolov : totals.tushgan)}
           tone="cash"
         />
-        <StatCard
-          label={t("Келган фактура")}
-          value={formatMoney(totals.faktura)}
-          unit="UZS"
+        <SumCell
+          label={sumDir === "out" ? t("Келган фактура") : t("Ёзилган фактура")}
+          value={formatMoney(sumDir === "out" ? totals.faktura : totals.yozilgan)}
           tone="invoice"
         />
-        <StatCard
+        <SumCell
           label={t("Фарқ")}
-          value={formatMoney(totals.farq)}
-          unit="UZS"
-          tone={totals.farq === 0 ? "ok" : totals.farq > 0 ? "warn" : "bad"}
-          hint={t("тўланган пул − келган фактура")}
+          value={formatMoney(sumDir === "out" ? totals.farq : totals.kirimFarq)}
+          tone={
+            sumDir === "out"
+              ? totals.farq === 0
+                ? "ok"
+                : totals.farq > 0
+                  ? "warn"
+                  : "bad"
+              : totals.kirimFarq === 0
+                ? "ok"
+                : totals.kirimFarq > 0
+                  ? "warn"
+                  : "info"
+          }
+          /* ИЗОҲ ФАРҚНИНГ ИШОРАСИГА ҚАРАЙДИ.
+             Илгари у фақат МАНФИЙ фарқни санарди: жонли синовда
+             фарқ +242 млн бўлса ҳам «тўлов бўйича иш йўқ» деб
+             турарди, ҳолбуки бу «фактура олиш керак» дегани.
+             Энди иккала ишора ҳам ўз номи билан аталади. */
+          hint={
+            sumDir === "out"
+              ? totals.farq < -1
+                ? `${t("биз қарздормиз")} · ${attention.weOwe} ${t("корхонада")}`
+                : totals.farq > 1
+                  ? `${t("фактура олиш керак")} · ${attention.needInvoice} ${t("корхонада")}`
+                  : t("тўлов бўйича иш йўқ")
+              : totals.kirimFarq > 1
+                ? `${t("бизга қарздор")} · ${attention.theyOwe} ${t("корхонада")}`
+                : totals.kirimFarq < -1
+                  ? `${t("аванс тушган")} · ${attention.advance} ${t("корхонада")}`
+                  : t("тушум бўйича иш йўқ")
+          }
         />
-      </div>
+      </SumStrip>
 
       <Card padded={false}>
         <div className="flex flex-col gap-3 border-b border-line p-4 sm:flex-row sm:items-center sm:justify-between">
@@ -492,7 +684,7 @@ export default function ClientsPage() {
             wrapClassName="w-full sm:w-96"
           />
           <p className="text-caption text-ink-3">
-            {t("Рақамлар САҚЛАНГАН чиқим сверкаларидан олинган.")}
+            {t("Рақамлар САҚЛАНГАН сверкалардан олинган.")}
           </p>
         </div>
 
@@ -513,7 +705,10 @@ export default function ClientsPage() {
                   <SortHeader label={t("Келган фактура")} k="faktura" align="right" activeKey={sortKey} dir={sortDir} onToggle={toggleSort} />
                 </Th>
                 <Th align="right" width="w-44">
-                  <SortHeader label={t("Фарқ")} k="farq" align="right" activeKey={sortKey} dir={sortDir} onToggle={toggleSort} />
+                  <SortHeader label={t("Чиқим фарқи")} k="farq" align="right" activeKey={sortKey} dir={sortDir} onToggle={toggleSort} />
+                </Th>
+                <Th align="right" width="w-44">
+                  <SortHeader label={t("Кирим фарқи")} k="kirimFarq" align="right" activeKey={sortKey} dir={sortDir} onToggle={toggleSort} />
                 </Th>
                 <Th align="center" width="w-44">
                   {t("Ҳолат")}
@@ -526,7 +721,7 @@ export default function ClientsPage() {
             <Tbody>
               {tableRows.length === 0 ? (
                 <tr>
-                  <td colSpan={7}>
+                  <td colSpan={8}>
                     <EmptyState
                       icon={<FolderOpen className="h-8 w-8" />}
                       title={t("Фирма топилмади")}
@@ -577,20 +772,52 @@ export default function ClientsPage() {
                         {t("бу йил учун сақланган сверка йўқ")}
                       </Td>
                     )}
+                    {/* КИРИМ фарқи АЛОҲИДА: чиқим сверкаси сақланган-у
+                        кирим сақланмаган бўлиши одатий ҳол, ва ўшанда
+                        бу катакда «0» эмас, «—» туриши керак. */}
+                    {company.kirimSaved ? (
+                      <NumTd
+                        strong
+                        tone={
+                          company.kirimFarq === 0
+                            ? "muted"
+                            : company.kirimFarq > 0
+                              ? "warn"
+                              : "info"
+                        }
+                      >
+                        {formatMoney(company.kirimFarq)}
+                      </NumTd>
+                    ) : (
+                      <Td align="center" className="text-caption text-ink-3">
+                        —
+                      </Td>
+                    )}
                     {/* ҲОЛАТ — «шу мижозга қараш керакми». Бухгалтер
                         рўйхатни очганда биринчи кўрадиган нарса шу
                         бўлиши керак, ҳар бирига кириб чиқиш эмас. */}
                     <Td align="center" className="whitespace-nowrap">
-                      {company.saved ? (
-                        <div className="flex flex-col items-center gap-0.5">
-                          {company.withDiff === null ? (
-                            <span className="text-caption text-ink-3">—</span>
-                          ) : company.withDiff === 0 ? (
-                            <span className="text-caption font-medium text-ok">
-                              ✓ {t("ҳаммаси мос")}
-                            </span>
-                          ) : (
-                            <span className="text-caption font-medium text-warn">
+                      {company.saved || company.kirimSaved ? (
+                        <div className="flex flex-col items-center gap-1">
+                          {/* НИМА ҚИЛИШ КЕРАК — сўз билан. Иккала
+                              йўналишда ҳам иш бўлиши мумкин, шунинг
+                              учун белги биттадан ортиқ бўлиши мумкин. */}
+                          <div className="flex flex-wrap justify-center gap-1">
+                            {verdicts(
+                              company.farq,
+                              company.kirimFarq,
+                              company.saved,
+                              company.kirimSaved
+                            ).map((v) => (
+                              <Badge key={v.text} tone={v.tone}>
+                                {t(v.text)}
+                              </Badge>
+                            ))}
+                          </div>
+                          {/* Нечта контрагентда фарқ борлиги — қўшимча
+                              тафсилот, шунинг учун пастда ва кичик */}
+                          {company.withDiff !== null && company.withDiff > 0 && (
+                            <span className="text-caption text-ink-3">
                               {company.withDiff} {t("тасида фарқ")}
                             </span>
                           )}
