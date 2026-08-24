@@ -39,3 +39,13 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Dizayn kanvasining EKSPORTI — 2,2 MB, ichida tahrirlagich kodi ham
+# bor. Manba `design/*.dc.html` va `design/canvas.json` da (ular
+# kichik va kuzatiladi), bu fayl esa ulardan QAYTA yasaladi.
+design/moslik-bosh-sahifa-yonalishlari.html
+design/*-yonalishlari.html
+
+# Ildizdagi vaqtinchalik chiqish fayllari (skript natijasini konsol
+# kirillni chiqara olmagani uchun faylga yozadi)
+/*.txt

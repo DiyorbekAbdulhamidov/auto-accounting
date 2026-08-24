@@ -14,7 +14,6 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { db } from "@/lib/firebase";
 import { authFetch } from "@/lib/authFetch";
-import { PaymentBox } from "@/components/PaymentBox";
 import { useAuth } from "@/context/AuthContext";
 import { addDoc, collection, getDocs, query, serverTimestamp, where } from "firebase/firestore";
 import NextLink from "next/link";
@@ -27,6 +26,7 @@ import {
   Alert,
   Badge,
   Button,
+  ConfirmDialog,
   Card,
   Code,
   EmptyState,
@@ -163,13 +163,13 @@ export default function ClientsPage() {
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [teamOpen, setTeamOpen] = useState(false);
+  /** O'chirish tasdig'ini kutayotgan korxona. `null` — oyna yopiq. */
+  const [pendingDelete, setPendingDelete] = useState<{ id: string; name: string } | null>(null);
   const [newCompanyName, setNewCompanyName] = useState("");
   const [newCompanyInn, setNewCompanyInn] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [addError, setAddError] = useState("");
   /** Reja chekloviga yetildi — xato matni o'rniga YO'L ko'rsatiladi */
-  const [limitHit, setLimitHit] = useState<{ plan: string; limit: number; current: number } | null>(null);
-  const [interestSent, setInterestSent] = useState(false);
 
   const [totals, setTotals] = useState<Totals>({
     tolov: 0,
@@ -366,27 +366,14 @@ export default function ClientsPage() {
     try {
       setSubmitting(true);
       setAddError("");
-      setLimitHit(null);
-      // Korxona SERVER orqali qo'shiladi: reja cheklovi hujjat sanog'iga
-      // bog'liq va uni Firestore qoidalarida yozib bo'lmaydi.
+      // Korxona SERVER orqali qo'shiladi: STIR va ish maydoni
+      // tekshiruvi klientga ishonib topshirilmaydi.
       const res = await authFetch("/api/companies", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: newCompanyName.trim(), inn: newCompanyInn.trim() }),
       });
       const data = await res.json();
-
-      if (!res.ok && data?.limitReached) {
-        // Cheklov — bu XATO emas, HOLAT. Shuning uchun qizil xato
-        // matni emas, tushuntirish va tugma ko'rsatiladi.
-        setLimitHit({
-          plan: String(data.plan || "free"),
-          limit: Number(data.limit) || 0,
-          current: Number(data.current) || 0,
-        });
-        setAddError("");
-        return;
-      }
 
       if (!res.ok) {
         // Хато ойнанинг ИЧИДА кўрсатилади. `alert()` ойнани ёпмасди ва
@@ -429,25 +416,6 @@ export default function ClientsPage() {
     }
   };
 
-  const handleNeedMore = async () => {
-    if (!workspaceId || !limitHit) return;
-    try {
-      await addDoc(collection(db, "plan_interest"), {
-        workspaceId,
-        email: user?.email || null,
-        plan: limitHit.plan,
-        companiesAtRequest: limitHit.current,
-        createdAt: serverTimestamp(),
-      });
-      setInterestSent(true);
-      notify.ok(t("Раҳмат! Тариф тайёр бўлганда хабар берамиз."));
-    } catch (err) {
-      console.error("Talabni yozishda xatolik:", err);
-      // Foydalanuvchi uchun bu ish TO'XTAMAYDI — u baribir bog'lana oladi
-      setInterestSent(true);
-      notify.warn(t("Хабарингиз юборилмади, лекин биз билан боғланишингиз мумкин."));
-    }
-  };
 
   // 🗑️ Firmani va unga tegishli HAMMA narsani o'chirish.
   //
@@ -457,10 +425,8 @@ export default function ClientsPage() {
   // `companies/{id}` ostidagi subkolleksiyalar (birlashtirish, toifa)
   // uchun qoida umuman yo'q, `opening_balances` ni esa faqat admin
   // o'chira olardi. Sabablar to'liq route ichida yozilgan.
-  const handleDeleteCompany = async (companyId: string, companyName: string) => {
-    if (!confirm(`"${companyName}" — ${t("корхонасини ва унинг барча сверка ҳисоботларини бутунлай ўчириб ташламоқчимисиз?")}`)) {
-      return;
-    }
+  const handleDeleteCompany = async (companyId: string) => {
+    setPendingDelete(null);
 
     try {
       setLoading(true);
@@ -744,11 +710,12 @@ export default function ClientsPage() {
               ) : (
                 tableRows.map((company) => (
                   <Tr key={company.id}>
+                    {/* BELGISIZ. Har qatorda BIR XIL bino belgisi turardi —
+                        ya'ni hech qanday ma'lumot bermasdi, lekin har bir
+                        nomni 26px o'ngga surib, ustunni O'Z SHAPKASIGA
+                        nisbatan qiyshiq qilib qo'yardi (o'lchangan). */}
                     <Td main>
-                      <div className="flex items-center gap-2.5">
-                        <Building2 className="h-4 w-4 shrink-0 text-ink-3" />
-                        <span className="font-medium">{company.name}</span>
-                      </div>
+                      <span className="font-medium">{company.name}</span>
                     </Td>
                     <Td>
                       <Code>{company.inn}</Code>
@@ -789,7 +756,10 @@ export default function ClientsPage() {
                         {formatMoney(company.kirimFarq)}
                       </NumTd>
                     ) : (
-                      <Td align="center" className="text-caption text-ink-3">
+                      // Ustun O'NGGA tekislangan — bo'sh belgisi ham
+                      // o'sha yerda turishi kerak, aks holda shapka
+                      // bilan katak ikki xil joyda ko'rinadi.
+                      <Td align="right" className="text-caption text-ink-3">
                         —
                       </Td>
                     )}
@@ -843,11 +813,10 @@ export default function ClientsPage() {
                           variant="danger"
                           size="sm"
                           iconOnly
-                          onClick={() => handleDeleteCompany(company.id, company.name)}
+                          onClick={() => setPendingDelete({ id: company.id, name: company.name })}
                           title={t("Корхонани ўчириш")}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
+                          icon={<Trash2 className="h-4 w-4" />}
+                        />
                       </div>
                     </Td>
                   </Tr>
@@ -892,40 +861,6 @@ export default function ClientsPage() {
 
           {addError && <Alert tone="bad">{addError}</Alert>}
 
-          {/* ЧЕКЛОВГА ЕТИЛДИ — хато эмас, ҲОЛАТ */}
-          {limitHit && (
-            <Alert tone="info" title={t("Режа чекловига етдингиз")}>
-              <p>
-                {t("Ҳозирги режада")} <b>{limitHit.limit}</b> {t("тагача корхона қўшиш мумкин.")}{" "}
-                {t("Сизда")} <b>{limitHit.current}</b> {t("та бор.")}
-              </p>
-              <p className="mt-1.5">
-                {t("Корхона сонини чеклашсиз қилиш учун режани очинг:")}
-              </p>
-              <div className="mt-2.5">
-                <PaymentBox plan="buxgalter" />
-              </div>
-              {/* ТЎЛАМАЙДИГАН ОДАМ ҲАМ ЙЎҚОТИЛМАЙДИ. Кимлар деворга
-                  урилиб, лекин тўламагани — энг қимматли рақам: у
-                  нарх юқорилигини ёки вақт эмаслигини кўрсатади. */}
-              <div className="mt-2.5">
-                {interestSent ? (
-                  <span className="text-caption font-medium text-ok">
-                    ✓ {t("Сўровингиз қайд этилди")}
-                  </span>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={handleNeedMore}
-                    className="text-caption text-ink-3 underline hover:text-ink-2"
-                  >
-                    {t("Ҳозир тўлай олмайман — кейинроқ хабар беринг")}
-                  </button>
-                )}
-              </div>
-            </Alert>
-          )}
-
           <div className="flex justify-end gap-2 pt-1">
             <Button type="button" variant="secondary" onClick={() => setIsModalOpen(false)}>
               {t("Бекор қилиш")}
@@ -936,6 +871,21 @@ export default function ClientsPage() {
           </div>
         </form>
       </Modal>
+
+      {/* КОРХОНАНИ ЎЧИРИШ — қайтариб бўлмайди */}
+      <ConfirmDialog
+        open={pendingDelete !== null}
+        onClose={() => setPendingDelete(null)}
+        onConfirm={() => pendingDelete && void handleDeleteCompany(pendingDelete.id)}
+        title={t("Корхонани ўчириш")}
+        message={
+          <>
+            <strong className="text-ink">{pendingDelete?.name}</strong> —{" "}
+            {t("корхонасини ва унинг барча сверка ҳисоботларини бутунлай ўчириб ташламоқчимисиз?")}
+          </>
+        }
+        confirmLabel={t("Ўчириш")}
+      />
 
       {/* ИШ МАЙДОНИ АЪЗОЛАРИ */}
       <TeamModal

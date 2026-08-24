@@ -56,7 +56,9 @@ const { buildIncomeWorkbook } = jiti(path.join(PROJ, 'src/lib/incomeExcel.ts'));
 const { buildAging } = jiti(path.join(PROJ, 'src/lib/aging.ts'));
 const { readWorkbookSmart } = jiti(path.join(PROJ, 'src/lib/excelWorkbook.ts'));
 const plans = jiti(path.join(PROJ, 'src/lib/plans.ts'));
-const { limitsOf, companyLimitReached } = plans;
+const { limitsOf } = plans;
+const quota = jiti(path.join(PROJ, 'src/lib/sverkaQuota.ts'));
+const { sverkaKey, usageMonth } = quota;
 const { buildFailureRecord } = jiti(path.join(PROJ, 'src/lib/parseFailureLog.ts'));
 const { toE164, formatPhone } = jiti(path.join(PROJ, 'src/lib/phone.ts'));
 const { accountKeyOf, inviteKeyOf } = jiti(path.join(PROJ, 'src/lib/workspace.ts'));
@@ -826,29 +828,82 @@ function runInviteKeyTest() {
 
 function runPlanLimitTest() {
   console.log(`\n============================================================`);
-  console.log('BEPUL REJA: cheklov va vaqtga bog\'liq emasligi');
+  console.log("REJA: oylik sverka cheklovi va uning KALITI");
 
   const free = limitsOf('free');
-  ok(free.companies === 3, `bepul reja: ${free.companies} korxona`);
-  ok(free.members === 1, 'bepul reja: 1 foydalanuvchi');
-  ok(free.priceUzs === 0, 'bepul reja: narx 0');
+  ok(free.sverkaPerMonth === 3, `bepul reja: oyiga ${free.sverkaPerMonth} ta sverka`);
+  ok(free.members === 1, "bepul reja: 1 foydalanuvchi");
+  ok(free.priceUzs === 0, "bepul reja: narx 0");
 
-  ok(limitsOf('buxgalter').companies === Infinity, 'Бухгалтер: korxona cheksiz');
-  ok(limitsOf('buxgalter').members === 1, 'Бухгалтер: 1 foydalanuvchi');
-  ok(limitsOf('byuro').companies === Infinity, 'Бюро: korxona cheksiz');
-  ok(limitsOf('byuro').members === 5, 'Бюро: 5 foydalanuvchi');
-  ok(limitsOf(undefined).companies === 3, 'noma\'lum reja bepulga tushadi');
+  ok(limitsOf('buxgalter').sverkaPerMonth === Infinity, "Бухгалтер: sverka cheksiz");
+  ok(limitsOf('buxgalter').members === 1, "Бухгалтер: 1 foydalanuvchi");
+  ok(limitsOf('byuro').sverkaPerMonth === Infinity, "Бюро: sverka cheksiz");
+  ok(limitsOf('byuro').members === 5, "Бюро: 5 foydalanuvchi");
+  ok(limitsOf(undefined).sverkaPerMonth === 3, "noma'lum reja bepulga tushadi");
+
+  // KORXONA endi CHEKLANMAYDI — eski cheklovning qoldig'i qolmasin.
+  ok(free.companies === undefined, "korxona cheklovi kodda YO'Q");
+  ok(plans.companyLimitReached === undefined, "korxona cheklovi funksiyasi ham yo'q");
 
   // VAQT: ikkinchi argument berilsa ham e'tiborga OLINMAYDI.
   ok(
-    limitsOf('free', new Date('2026-10-01T00:00:00+05:00')).companies === 3,
-    'sana berilsa ham cheklov o\'zgarmadi (yashirin «cheksiz oyna» yo\'q)'
+    limitsOf('free', new Date('2026-10-01T00:00:00+05:00')).sverkaPerMonth === 3,
+    "sana berilsa ham cheklov o'zgarmadi (yashirin «cheksiz oyna» yo'q)"
   );
-  ok(plans.promoActive === undefined, 'vaqtinchalik cheksiz davr KODDA YO\'Q');
-  ok(plans.PROMO_UNTIL === undefined, 'davr sanasi ham qolmadi');
+  ok(plans.promoActive === undefined, "vaqtinchalik cheksiz davr KODDA YO'Q");
+  ok(plans.PROMO_UNTIL === undefined, "davr sanasi ham qolmadi");
 
-  ok(companyLimitReached('free', 3), '3 ta korxonada yopiladi');
-  ok(!companyLimitReached('free', 2), '2 tada hali ochiq');
+  /* ----------------------------------------------------------
+     KALIT — cheklovning butun ma'nosi shunda.
+     ---------------------------------------------------------- */
+  const A = { inn: '305159937', account: '20208000700000000001' };
+  const B = { inn: '311731421', account: '20208000700000000002' };
+
+  // 1) QAYTA YUKLASH BEPUL: buxgalter fakturani to'g'rilab qayta
+  //    yuklaydi — ko'chirma o'sha, davr o'sha, demak kalit o'sha.
+  ok(
+    sverkaKey(A, '2026-08-01', 'korxona1') === sverkaKey(A, '2026-08-14', 'korxona1'),
+    "ayni oyning boshqa kuni — AYNI kalit (qayta yuklash bepul)"
+  );
+
+  // 2) CHIQIM va KIRIM bitta hisoblanadi: kirim tomonida faqat STIR
+  //    bo'ladi, chiqimda hisob raqami ham bor — kalit bir xil chiqsin.
+  ok(
+    sverkaKey({ inn: A.inn }, '2026-08-01', 'korxona1') === sverkaKey(A, '2026-08-31', 'korxona1'),
+    "kirim va chiqim bitta sverka (STIR ustun)"
+  );
+
+  // 3) BOSHQA MIJOZ — boshqa kalit.
+  ok(
+    sverkaKey(A, '2026-08-01', 'korxona1') !== sverkaKey(B, '2026-08-01', 'korxona1'),
+    "bitta korxonaga yig'ilgan ikki mijoz — IKKI sverka"
+  );
+
+  // 4) BOSHQA DAVR — boshqa sverka.
+  ok(
+    sverkaKey(A, '2026-08-01', 'korxona1') !== sverkaKey(A, '2026-09-01', 'korxona1'),
+    "keyingi oy — yangi sverka"
+  );
+
+  // 5) EGASI TOPILMASA korxonaga qaytadi (eski xulq).
+  ok(
+    sverkaKey({}, '2026-08-01', 'korxona1') !== sverkaKey({}, '2026-08-01', 'korxona2'),
+    "egasi topilmasa korxona bo'yicha ajraladi"
+  );
+  ok(
+    sverkaKey({ inn: '-' }, null, 'korxona1') === sverkaKey({}, null, 'korxona1'),
+    "«-» STIR bo'sh bilan bir xil (parser shunday qaytaradi)"
+  );
+
+  // XABAR va CHEKLOV bir xil sonni aytsin: matn qo'lda yozilgan,
+  // ya'ni reja o'zgarganda u eskirib qolishi mumkin edi.
+  ok(
+    quota.QUOTA_MESSAGE.includes(String(free.sverkaPerMonth)),
+    "cheklov xabari rejadagi son bilan bir xil"
+  );
+
+  ok(usageMonth(new Date('2026-08-25T10:00:00')) === '2026-08', "sanoq oynasi: 2026-08");
+  ok(usageMonth(new Date('2026-01-03T10:00:00')) === '2026-01', "yanvar nol bilan yoziladi");
 }
 
 

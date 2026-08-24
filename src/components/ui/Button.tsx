@@ -54,7 +54,12 @@ export default function Button({
       {loading ? (
         <Loader2 className={size === "sm" ? "h-3.5 w-3.5 animate-spin" : "h-4 w-4 animate-spin"} />
       ) : (
-        icon
+        /* BELGI `icon` PROPIDAN keladi. Lekin uni bolasi (children)
+           sifatida yozish ham TABIIY ko'rinadi va aynan shunday
+           yozilgan joy bor edi: `iconOnly` tugma ichida hech narsa
+           chizilmay, jadvalda BO'SH kvadrat bo'lib turardi. Shuning
+           uchun `icon` bo'lmasa bolasi belgi deb qabul qilinadi. */
+        (icon ?? (iconOnly ? children : null))
       )}
       {!iconOnly && children}
     </button>

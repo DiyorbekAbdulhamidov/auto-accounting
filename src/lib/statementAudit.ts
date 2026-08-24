@@ -133,6 +133,15 @@ export interface AuditResult {
   /** Ikkala tomonning topilgan davri. Ekranda foydalanuvchiga
    *  KO'RSATILADI — «tizim nima topdi» degan savolga javob. */
   periods: { bank: PeriodRange; faktura: PeriodRange };
+  /** KO'CHIRMA EGASI — ya'ni sverka KIMNING hisobi bo'yicha ketyapti.
+   *  Bu qiymat ichkarida allaqachon aniqlanardi (egasining o'z
+   *  qatorlarini sverkadan chiqarib tashlash uchun), endi u tashqariga
+   *  ham qaytariladi. Hech qanday hisob-kitob o'zgarmagan.
+   *  Chaqiruvchi bundan bepul rejadagi oylik sverka sanog'ining
+   *  KALITINI yasaydi: sanoq korxona yozuvidan emas, ko'chirmaning
+   *  o'zidan olinsa — hammani bitta korxonaga yig'ib aylanib
+   *  o'tib bo'lmaydi. */
+  own: { inn: string; name: string; account: string };
   /** Raqamini TASDIQLAB bo'lmaydigan fayllar: na «Итого» qatori, na
    *  qoldiq tenglamasi. Ya'ni fayl to'liq o'qilganini isbotlaydigan
    *  hech narsa yo'q — foydalanuvchi qo'lda solishtirishi kerak. */
@@ -670,6 +679,9 @@ export function auditFiles(files: InputFile[], options: AuditOptions = {}): Audi
     return { rows, debit, credit, ownSkipped, ownDebit, ownCredit };
   }
 
+  // Hamma fayl bo'yicha bitta egasi: birinchi topilgani qoladi.
+  const own = { inn: '', name: '', account: '' };
+
   for (const file of files) {
     // Aynan bir xil fayl ikki marta yuklansa - ikkinchisi hisoblanmaydi
     const hash = `${file.name}|${file.buffer.length}`;
@@ -807,6 +819,9 @@ export function auditFiles(files: InputFile[], options: AuditOptions = {}): Audi
         if (!fileOwn.inn && st.ownInn) fileOwn.inn = st.ownInn;
         if (!fileOwn.name && st.ownName) fileOwn.name = st.ownName;
         if (!fileOwn.account && st.ownAccount) fileOwn.account = st.ownAccount;
+        if (!own.inn && fileOwn.inn) own.inn = fileOwn.inn;
+        if (!own.name && fileOwn.name) own.name = fileOwn.name;
+        if (!own.account && fileOwn.account) own.account = fileOwn.account;
 
         // Qoldiq tenglamasi uchun: sverkaga kirgan qatorlar emas, varaqdagi
         // BARCHA o'tkazmalar. O'z hisobvaraqlari orasidagi harakat ham
@@ -1134,6 +1149,7 @@ export function auditFiles(files: InputFile[], options: AuditOptions = {}): Audi
     sheets,
     balanceChecks,
     periods: { bank: bankRange, faktura: facturaRange },
+    own,
     unverifiedFiles,
     learnedFormats: [...learned.values()],
     skippedInvoices: [...skippedInvoices].map(([status, v]) => ({ status, ...v })),

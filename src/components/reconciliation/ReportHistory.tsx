@@ -33,6 +33,7 @@ import {
   Alert,
   Badge,
   Button,
+  ConfirmDialog,
   NumTd,
   Table,
   TableFrame,
@@ -64,14 +65,13 @@ export default function ReportHistory({
   const t = useT();
   const [open, setOpen] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
+  /** Tasdiq kutayotgan hisobot. `null` — oyna yopiq. */
+  const [pending, setPending] = useState<ReportSummary | null>(null);
 
   if (items.length === 0) return null;
 
   const handleDelete = async (item: ReportSummary) => {
-    const when = formatStamp(item.savedAt);
-    if (!confirm(`${when} — ${t("сақланган ҳисоботни ўчирасизми? Бу амални қайтариб бўлмайди.")}`)) {
-      return;
-    }
+    setPending(null);
     setBusyId(item.id);
     try {
       await deleteReport(kind, item.id);
@@ -170,7 +170,7 @@ export default function ReportHistory({
                             iconOnly
                             title={t("Ўчириш")}
                             loading={busyId === it.id}
-                            onClick={() => handleDelete(it)}
+                            onClick={() => setPending(it)}
                             icon={<Trash2 className="h-3.5 w-3.5" />}
                           />
                         </div>
@@ -183,6 +183,20 @@ export default function ReportHistory({
           </TableFrame>
         </div>
       )}
+
+      <ConfirmDialog
+        open={pending !== null}
+        onClose={() => setPending(null)}
+        onConfirm={() => pending && void handleDelete(pending)}
+        title={t("Ўчириш")}
+        message={
+          <>
+            <strong className="text-ink">{pending && formatStamp(pending.savedAt)}</strong> —{" "}
+            {t("сақланган ҳисоботни ўчирасизми? Бу амални қайтариб бўлмайди.")}
+          </>
+        }
+        confirmLabel={t("Ўчириш")}
+      />
     </div>
   );
 }

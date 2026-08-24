@@ -12,8 +12,7 @@
 
 import { NextResponse } from 'next/server';
 import { assertCompanyAccess, requireUser } from '@/lib/apiAuth';
-import { limitsOf, planOf } from '@/lib/plans';
-import { INCOME_REPORTS, SVERKA_REPORTS, WORKSPACES } from '@/lib/workspace';
+import { INCOME_REPORTS, SVERKA_REPORTS } from '@/lib/workspace';
 import { OPENING_BALANCES } from '@/lib/openingBalance';
 import { MERGES_COLLECTION } from '@/lib/counterpartyMerge';
 import {
@@ -42,35 +41,13 @@ export async function POST(req: Request) {
     const { db } = auth.admin;
     const workspaceId = auth.user.workspaceId;
 
-    const wsSnap = await db.collection(WORKSPACES).doc(workspaceId).get();
-    const plan = planOf(wsSnap.data()?.plan);
-    const limits = limitsOf(plan);
-
-    const existing = await db
-      .collection('companies')
-      .where('workspaceId', '==', workspaceId)
-      .count()
-      .get();
-    const current = existing.data().count;
-
-    if (current >= limits.companies) {
-      // Cheksiz rejada bu yerga umuman kelinmaydi, lekin xabar «Infinity»
-      // bo'lib chiqmasligi uchun himoya qoldirilgan.
-      const shown = Number.isFinite(limits.companies) ? String(limits.companies) : '—';
-      return NextResponse.json(
-        {
-          error:
-            `«${limits.label}» режасида ${shown} тагача корхона қўшиш мумкин. ` +
-            `Ҳозир ${current} та бор.`,
-          limitReached: true,
-          plan,
-          limit: limits.companies,
-          current,
-        },
-        { status: 403 }
-      );
-    }
-
+    // KORXONA SONI CHEKLANMAYDI (qaror: 2026-08-25).
+    //
+    // Ilgari bepul rejada 3 ta edi. U cheklov ushlamasdi: sverka
+    // yuklangan FAYLDAN ishlaydi, ya'ni hamma mijozni bitta korxona
+    // yozuviga yig'ib, bepul ishlayverish mumkin edi. Endi sanoq
+    // sverkaning O'ZIGA qo'yilgan (`sverkaQuota.ts`), korxona esa
+    // shunchaki papka — uni cheklashning ma'nosi yo'q.
     const { FieldValue } = await import('firebase-admin/firestore');
     const ref = await db.collection('companies').add({
       name,
@@ -79,11 +56,7 @@ export async function POST(req: Request) {
       createdAt: FieldValue.serverTimestamp(),
     });
 
-    return NextResponse.json({
-      success: true,
-      id: ref.id,
-      remaining: limits.companies === Infinity ? null : limits.companies - current - 1,
-    });
+    return NextResponse.json({ success: true, id: ref.id });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     console.error('COMPANY CREATE ERROR:', message);

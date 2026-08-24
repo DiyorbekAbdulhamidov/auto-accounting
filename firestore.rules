@@ -173,6 +173,12 @@ service cloud.firestore {
       allow read, update, delete: if false;
     }
 
+    // OYLIK SVERKA SANOG'I (`sverka_usage`) bu yerda ATAYLAB
+    // ko'rsatilmagan — quyidagi umumiy qoida uni klient uchun
+    // butunlay yopadi. Unga faqat server (admin SDK) yozadi, ya'ni
+    // cheklovni brauzerdan o'zgartirib bo'lmaydi. Sanoq holati
+    // foydalanuvchiga tahlil javobidagi `quota` orqali yetadi.
+
     // Qolgan hamma narsa yopiq
     match /{document=**} {
       allow read, write: if false;

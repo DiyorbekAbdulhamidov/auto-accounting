@@ -1,7 +1,7 @@
 "use client";
 
 import { Search } from "lucide-react";
-import { cx, fieldClasses, labelClasses } from "./styles";
+import { cx, fieldClasses, fieldWidth, labelClasses } from "./styles";
 
 /** Yorliq + maydon + izoh. Yorliq HAR DOIM maydon ustida bo'ladi. */
 export function Field({
@@ -33,7 +33,12 @@ export function Input({
   mono = false,
   ...rest
 }: React.InputHTMLAttributes<HTMLInputElement> & { mono?: boolean }) {
-  return <input {...rest} className={cx(fieldClasses, mono && "font-mono", className)} />;
+  return (
+    <input
+      {...rest}
+      className={cx(fieldClasses, fieldWidth(className), mono && "font-mono", className)}
+    />
+  );
 }
 
 export function Select({
@@ -42,7 +47,10 @@ export function Select({
   ...rest
 }: React.SelectHTMLAttributes<HTMLSelectElement>) {
   return (
-    <select {...rest} className={cx(fieldClasses, "cursor-pointer pr-8", className)}>
+    <select
+      {...rest}
+      className={cx(fieldClasses, fieldWidth(className), "cursor-pointer pr-8", className)}
+    >
       {children}
     </select>
   );
@@ -57,7 +65,11 @@ export function SearchInput({
   return (
     <div className={cx("relative", wrapClassName)}>
       <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-3" />
-      <input {...rest} type="search" className={cx(fieldClasses, "pl-9", className)} />
+      <input
+        {...rest}
+        type="search"
+        className={cx(fieldClasses, fieldWidth(className), "pl-9", className)}
+      />
     </div>
   );
 }

@@ -46,9 +46,9 @@ Brauzerda tekshirilgan: 10 ta manzil, `/xyz/pricing` → 404.
 | **Logotip** | Ikkita teng chiziq = «мос келди». Yuqorigi `--cash`, pastkisi `--invoice`. `src/components/Brand.tsx`, `src/app/icon.svg` |
 | **Tillar** | 4 ta, **URL'da**: `uz` (lotin) · `uz-cyrl` · `ru` · `en`. Lug'at qamrovi **92,4%** (qolgani tarjima qilinmaydigan narsalar) |
 | **Kirish** | O'zi ro'yxatdan o'tadi, darhol ishlaydi |
-| **Rejalar** | Bepul 3 korxona · Buxgalter 9 999 so'm · Byuro 39 999 so'm |
-| **Tekshiruv** | `node scripts/verify-parsers.cjs` — **58 ta, hammasi o'tadi** |
-| **Commit** | `b4ab63c "big changes"` (2026-08-16) — shu sessiyaning katta qismi kiritilgan. Undan keyingi tuzatmalar hali commit qilinmagan |
+| **Rejalar** | Bepul **oyiga 3 sverka** (korxona cheksiz) · Buxgalter 9 999 so'm · Byuro 39 999 so'm. Sanoq birligi: ko'chirma egasi × davr oyi — `src/lib/sverkaQuota.ts` |
+| **Tekshiruv** | `verify-parsers` **151 ta** · `check-contrast` · `tsc` · `eslint` · `next build` — hammasi o'tadi |
+| **Oxirgi holat** | Joriy holat va navbatdagi ish uchun **`docs/KEYINGI-CHAT-PROMPT.md`** ni o'qing — u har sessiya oxirida yangilanadi. Quyidagi bo'limlar TEXNIK ma'lumotnoma (parserlar, formatlar, deploy tartibi) va ular eskirmaydi |
 
 ## Ikki asosiy hujjat
 
@@ -343,8 +343,11 @@ O'zi ro'yxatdan o'tadi, tasdiqlash kutilmaydi. Yangi fayllar:
 `src/lib/plans.ts`, `src/app/api/signup/route.ts`,
 `src/app/api/companies/route.ts`.
 
-**Cheklov korxona soniga** (bepul 3 / Buxgalter 20 / Byuro cheksiz),
-**sverka har doim cheksiz**. Sabab `MAHSULOT-QARORLARI.md` da.
+⚠️ **ESKIRGAN (2026-08-25 da o'zgardi).** Bu yerda ilgari «cheklov
+korxona soniga» deb yozilgan edi. Endi **cheklov oylik SVERKA soniga**:
+bepul rejada oyiga 3 ta, korxona soni cheklanmaydi. Sababi va sanoq
+birligi — `MAHSULOT-QARORLARI.md` dagi «Narx va cheklov (2026-08-25 da
+QAYTA KO'RILDI)» bo'limida. Kod: `src/lib/sverkaQuota.ts`.
 
 Ikki tuzoq va ular qanday yopilgani:
 - `/api/signup` `requireUser()` ni ISHLATMAYDI — u `allowed_users` ni
@@ -356,7 +359,8 @@ Ikki tuzoq va ular qanday yopilgani:
 Login sahifasidan tayyor email/parol olib tashlandi.
 
 **Hali yo'q:** to'lov qabul qilish (yuridik shaxs va Payme/Click shartnomasi
-kerak), «Ko'proq kerak» tugmasi, email tasdiqlash.
+kerak), email tasdiqlash. «Hozir to'lay olmayman, lekin kerak» tugmasi
+qo'shildi — `QuotaWall.tsx`, `plan_interest` kolleksiyasiga yozadi.
 
 ---
 
@@ -1254,10 +1258,10 @@ Vaqt mintaqasi ataylab yozilgan: server UTC, Toshkent +05:00 —
 ko'rsatilmasa davr besh soat oldin tugardi. Harness shu chegarani
 tekshiradi.
 
-**Narx sahifasiga ta'sir qilmadi:** `limitsOf()` faqat cheklovni
-qo'llash uchun, marketing sahifalari `PLANS` ni to'g'ridan-to'g'ri
-o'qiydi. ⚠️ Ya'ni narx sahifasida hali «3 та корхона» turadi —
-e'londa «cheksiz» deyilsa, sahifa matnini ham yangilash kerak.
+**Narx sahifasi `PLANS` ni to'g'ridan-to'g'ri o'qiydi**, `limitsOf()`
+esa faqat cheklovni qo'llash uchun. ✅ 2026-08-25: matnlar to'rt tilda
+yangilandi (narx bo'limi, FAQ, bosh sahifa, `seo.ts`, `legal.ts`) —
+qurilgan sahifalarda eski «3 ta korxona» va'dasi qolmagani tekshirildi.
 
 ### 18b. Yiqilgan fayl jurnali (`parse_failures`)
 

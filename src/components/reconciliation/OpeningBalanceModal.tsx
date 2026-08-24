@@ -167,7 +167,7 @@ export default function OpeningBalanceModal({
           onChange={(e) => setSearch(e.target.value)}
         />
 
-        <div className="max-h-80 overflow-y-auto rounded-lg border border-line custom-scrollbar">
+        <div className="rounded-lg border border-line">
           {shown.length === 0 ? (
             <p className="p-6 text-center text-caption text-ink-3">
               {t("Маълумот топилмади... 🕵️‍♂️")}

@@ -52,6 +52,22 @@ export const DICTIONARY: Record<string, Entry> = {
   'Тунги/Кундузги режим': { ru: 'Ночной/Дневной режим', en: 'Dark / light mode' },
   'Тилни танлаш': { ru: 'Выбор языка', en: 'Choose language' },
 
+  // ---------- Oylik sverka cheklovi ----------
+  'Бу ойдаги сверка сафингиз тугади': { ru: 'Лимит сверок на этот месяц исчерпан', en: 'You have used this month’s reconciliations' },
+  'Бепул режада ойига 3 та сверка. Бир мижознинг айни ўша даврини қайта юклаш янги сверка ҳисобланмайди — фактурани тўғрилаб қайта юкласангиз, саноқ ўзгармайди.': { ru: 'На бесплатном тарифе — 3 сверки в месяц. Повторная загрузка того же клиента за тот же период новой сверкой не считается: исправили счёт-фактуру и загрузили заново — счётчик не меняется.', en: 'The free plan includes 3 reconciliations a month. Re-uploading the same client for the same period does not count as a new one: fix the invoice, upload again, and the counter stays put.' },
+  'Бепул режада ойига 3 та сверка. Бу ойдаги сафингиз тугади. Бир мижознинг айни ўша даврини қайта юклаш янги сверка ҳисобланмайди.': { ru: 'На бесплатном тарифе — 3 сверки в месяц, на этот месяц лимит исчерпан. Повторная загрузка того же клиента за тот же период новой сверкой не считается.', en: 'The free plan includes 3 reconciliations a month and this month is used up. Re-uploading the same client for the same period does not count as a new one.' },
+  'Чекловсиз ишлаш учун режани очинг:': { ru: 'Откройте тариф, чтобы работать без ограничений:', en: 'Open a plan to work without limits:' },
+  'Ҳозир тўлай олмайман, лекин керак': { ru: 'Сейчас не могу оплатить, но тариф нужен', en: 'Cannot pay now, but I need it' },
+  'Карта сўралмайди. Бепул режада ойига 3 та сверка, корхона сони чекланмайди.': { ru: 'Карта не нужна. На бесплатном тарифе — 3 сверки в месяц, количество организаций не ограничено.', en: 'No card required. The free plan includes 3 reconciliations a month and an unlimited number of companies.' },
+
+  // ---------- 404 va kutilmagan xatolik ----------
+  'Саҳифа топилмади': { ru: 'Страница не найдена', en: 'Page not found' },
+  'Бундай манзил йўқ. Ҳавола эскирган ёки манзилда хато бўлиши мумкин.': { ru: 'Такого адреса нет. Возможно, ссылка устарела или в адресе опечатка.', en: 'No such address. The link may be outdated, or the address has a typo.' },
+  'Кутилмаган хатолик': { ru: 'Непредвиденная ошибка', en: 'Unexpected error' },
+  'Саҳифани чизишда хато чиқди. Сақланган ҳисоботларингиз ва рақамларингиз жойида — хато ҳисобга тегмайди.': { ru: 'При отрисовке страницы произошла ошибка. Сохранённые отчёты и суммы на месте — ошибка не затрагивает расчёт.', en: 'Something went wrong while rendering the page. Your saved reports and figures are intact — the error does not touch the calculation.' },
+  'Қайта уриниш': { ru: 'Повторить', en: 'Try again' },
+  'Хато рақами': { ru: 'Код ошибки', en: 'Error code' },
+
   // ---------- Kontragent va jadval ----------
   'Фирма номлари': { ru: 'Наименование фирмы', en: 'Company name' },
   'Корхона Номи': { ru: 'Наименование предприятия', en: 'Company name' },
@@ -451,6 +467,8 @@ export const DICTIONARY: Record<string, Entry> = {
 
   // ---------- Нарх ----------
   'Чеклов сверка сонига эмас, КОРХОНА сонига. Сверкани қанча хоҳласангиз шунча марта қайта юкласангиз бўлади.': { ru: 'Ограничение не на количество сверок, а на количество ОРГАНИЗАЦИЙ. Сверку можно перезапускать сколько угодно раз.', en: 'The limit is on COMPANIES, not on reconciliations. You can re-run a reconciliation as many times as you like.' },
+  'Ойига 3 та сверка': { ru: '3 сверки в месяц', en: '3 reconciliations per month' },
+  'Корхона сони чекланмайди. Бепул режада ойига 3 та сверка — бир мижознинг айни ўша даврини қайта юклаш янги сверка ҳисобланмайди.': { ru: 'Количество организаций не ограничено. На бесплатном тарифе — 3 сверки в месяц; повторная загрузка того же клиента за тот же период новой сверкой не считается.', en: 'No limit on the number of companies. The free plan includes 3 reconciliations a month; re-uploading the same client for the same period does not count as a new one.' },
   'Бепул': { ru: 'Бесплатно', en: 'Free' },
   'Бухгалтер': { ru: 'Бухгалтер', en: 'Accountant' },
   'Бюро': { ru: 'Бюро', en: 'Bureau' },

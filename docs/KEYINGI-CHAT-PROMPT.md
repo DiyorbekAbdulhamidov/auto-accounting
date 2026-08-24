@@ -7,105 +7,113 @@ Men o'zbekcha (lotin) yozaman. UI matnlari va `t()` kalitlari — kirill o'zbekc
 ## 0. BOSHLASH
 
 ```
-node scripts/verify-parsers.cjs   →  142/142
-node scripts/check-contrast.cjs   →  70/70
+node scripts/verify-parsers.cjs   →  151/151
+node scripts/check-contrast.cjs   →  70/70 (35 yorug' + 35 tungi)
 npx tsc --noEmit                  →  toza
 npx eslint src --max-warnings=0   →  toza
 npx next build                    →  xatosiz
 ```
 
 Bittasi yiqilsa — **MENGA AYT**, o'zing "tuzatib" ketma.
-Chuqurroq: `HANDOFF.md`, `MAHSULOT-QARORLARI.md`, `AGENTS.md`.
+Chuqurroq: `HANDOFF.md` (texnik ma'lumotnoma), `MAHSULOT-QARORLARI.md`
+(nima uchun shunday qilingan), `AGENTS.md`.
 
 ---
 
-## 1. HOLAT (2026-08-24)
+## 1. HOLAT (2026-08-25)
 
-**33 ta fayl o'zgargan, HECH BIRI kommit qilinmagan.** `origin/master` = `8b50b8f`.
-Jonli `moslik.uz` da hali ESKI versiya turibdi — butun dizayn ishi faqat mahalliy.
+Oxirgi kommit `dad6cf8`, `origin/master` bilan teng — jonli `moslik.uz`
+da o'sha versiya turibdi. **Undan keyin 35 ta fayl o'zgargan
+(28 tuzatilgan + 7 yangi), kommit qilinmagan.**
 
-Ikki sessiya davomida qilingan ish:
+### Kommit qilingani (jonli)
 
-**Shaxsiy ma'lumot saytdan olib tashlangan** — karta raqami, F.I.Sh., ma'lumotnoma
-№, shaxsiy telefon/pochta, faoliyat manzili. Ochiq turgani: `Moslik`, `moslik.uz`,
-`@webleaderscontactbot`. To'lov endi bot orqali (karta ekranga chiqmaydi).
-`public/presentation.html` → `docs/presentation-2025.html` ko'chirilgan (ichida
-uch kishining ismi bor edi, ochiq URL'da turardi).
+Dizayn tizimi «hisob qog'ozi» (Golos Text + Literata + IBM Plex Mono,
+iliq palitra, radius 2–8px), shaxsiy ma'lumot saytdan olib tashlangan,
+`/clients` ish stoli ikkala yo'nalishni ko'rsatadi, marshrutlar
+birlashtirilgan, sitemap Search Console'ga yuborilgan (32 URL, «Успешно»).
 
-**Namuna firma nomlari shartli:** SAMO SAVDO · NAVRO'Z MEBEL · ORIENT TEXNIKA ·
-BARKAMOL QURILISH · ZAMIN LOGISTIKA · NUR PLASTIK · `ZIYO SAVDO.xls`.
-Kommunal ohangdagi nom ISHLATILMAYDI (egasi rad etdi).
+### Kommit qilinmagani (mahalliy)
 
-**Dizayn tizimi — «hisob qog'ozi»:**
-* Shrift: Inter → **Golos Text** (interfeys) + **Literata** (`.text-display`,
-  `.text-title`) + **IBM Plex Mono** (faqat `.tabular` — RAQAM).
-* Palitra: sovuq slate → iliq qog'oz (`--page #f4f2ed`, `--surface #fffdfa`,
-  `--ink #17150f`); tunda iliq qora.
-* Radius 6–24px → **2–8px**. Soya 1-pog'onada deyarli yo'q.
-* Fon — SHAKL emas, MATERIAL: `.paper` (qog'oz donadorligi + yorug'lik) +
-  `.brand-field`. To'r, varaq chiziqlari va ulkan brend belgisi SINALDI va
-  RAD ETILDI («fonga narsa qo'yilgan» — egasi uchalasini ham rad etdi).
-* `SumStrip`/`SumCell` — uch-to'rt ko'rsatkich uchun `StatCard` EMAS.
-* Yuklanish — aylanma emas, `Skeleton`/`TableSkeleton`/`progress-track`.
-* Tema — uch holat (qurilma/yorug'/tungi), ro'yxatdan tanlanadi, jonli kuzatiladi.
-* ТСС — `<details>`, 200ms pastga tushib ochiladi. `FaqItem` uchta joyda bitta.
-* Imkoniyatlar — **bento varaq** (`gap-px` + `bg-line`), ikkita katakda jonli
-  ko'rgazma. Rо'yxat ham, ikonkali karta ham RAD ETILGAN.
-* «Qo'lda / Moslik» — qator bo'yicha yuzma-yuz jadval. Yo'l xaritasi — vaqt chizig'i.
-* Navbar qayta yozilgan; **telefonda havolalar umuman yo'q edi** — tuzatilgan.
-* Kirish sahifasi — bitta markazlashgan forma (ikkiga bo'lingan ekran RAD ETILGAN).
+**Tarif modeli almashtirildi.** Bepul reja endi **oyiga 3 ta sverka**,
+korxona soni cheklanmaydi. Sanoq birligi — **ko'chirma egasi (STIR yoki
+hisob raqami) × davr oyi**. Sabab: eski «3 ta korxona» cheklovi
+ushlamasdi (hammasini bitta korxonaga yig'ib bepul ishlash mumkin edi),
+«saqlangan hisobot» ham ushlamasdi (Excel yuklab olib ketiladi).
+Kod: `src/lib/plans.ts`, `src/lib/sverkaQuota.ts`, ikkala tahlil
+marshruti, `QuotaWall.tsx`. To'liq sabab —
+`MAHSULOT-QARORLARI.md` → «Narx va cheklov (2026-08-25 da QAYTA KO'RILDI)».
 
-**Ish stoli (`/clients`):** `/api/reports/summary` endi IKKALA kolleksiyani
-(`SVERKA_REPORTS` + `INCOME_REPORTS`) parallel o'qiydi. Tepada yo'nalish
-tugmasi (Чиқим/Кирим) — uchala son ham bitta manbadan. Jadvalda «Кирим фарқи»
-ustuni va so'z bilan HOLAT (`Биз қарздормиз` / `Фактура олиш керак` /
-`Бизга қарздор` / `Аванс тушган` / `Ҳаммаси мос`). Jadvalning o'ziga TEGILMAGAN.
+**404 va xato sahifasi qo'shildi:** `[locale]/not-found.tsx`,
+`[locale]/error.tsx`, `global-error.tsx` va `[locale]/[...rest]/page.tsx`.
+Oxirgisi shart: mos kelmagan manzil ILDIZDAGI `not-found` ni qidiradi,
+ildiz maket esa `[locale]/layout.tsx`.
 
-**Qo'llanma:** namuna ekranlar jonli mahsulotdan ko'chirilgan (o'qish hisoboti
-endi JADVAL, natija jadvali haqiqiy ustunlar bilan), qizil belgilar joyida.
+**Dizayn tizimidagi UCH ta jimgina xato tuzatildi** (hammasi bir oila —
+umumiy sinf qatoriga qattiq yozilgan qiymatni chaqiruvchi bekor qila
+olmasdi):
+- `fieldClasses` dagi `w-full` → `<Select className="w-auto">` va
+  `<Input className="w-44">` to'liq kenglikda chiqardi;
+- `tableCls.th` dagi `text-left` → `<Th align="center">` ishlamasdi;
+- `Button` `iconOnly` da bolasini tashlardi → o'chirish tugmasi jadvalda
+  BO'SH kvadrat bo'lib turardi.
+
+**Brauzer dialoglari ketdi:** uchta `confirm()` o'rniga `ConfirmDialog`.
+`Modal` ga fokus qulfi, ichki aylanish va **stek** qo'shildi (modal
+ustiga modal ochilganda Escape faqat tepadagisini yopadi).
+`FileDrop` endi haqiqatan fayl tashlashni qabul qiladi.
 
 ---
 
-## 2. XAVFSIZLIK — SESSIYADA YUZ BERGAN HODISA
+## 2. XAVFSIZLIK
 
-Egasi qo'llanmaga **haqiqiy ekran suratlarini** so'radi. Brauzer asbobi rasmni
-faylga saqlab bera olmaydi, shuning uchun ekranni Windows orqali olishga
-urinildi — va **surat Chrome emas, Telegram oynasini oldi**: begona odamlarning
-ismi va telefon raqamlari tushdi. Rasm darhol o'chirildi, skriptlar ham
-o'chirildi.
+**Ish stolini/ekranni suratga OLISH TAQIQLANADI.** Bir marta urinilganda
+surat Chrome emas, Telegram oynasini olgan va begona odamlarning ismi
+bilan telefon raqami tushgan. Rasm darhol o'chirilgan.
 
-**QOIDA: ish stoli/ekranni suratga olish TAQIQLANADI.** Chrome fokusda ekani
-kafolatlanmaydi. Rasm kerak bo'lsa — egasi o'zi olib beradi.
+Ko'rish uchun **Claude-in-Chrome** ishlatiladi — u sahifaning o'zini
+oladi, ish stolini emas. Diqqat: uning `save_to_disk` parametri **fayl
+yo'lini qaytarmaydi**, ya'ni surat diskka tushmaydi (sinalgan).
+
+**Jonli ekranlarda haqiqiy mijoz nomlari va STIRlari turadi.** Ular
+ochiq sahifaga (qo'llanma, prezentatsiya) QO'YILMAYDI.
 
 ---
 
 ## 3. NAVBATDAGI ISH
 
-1. **Kommit + deploy** — 33 fayl. Kommitdan oldin `git status` ni QAYTA o'qi
-   (egasi parallel kommit qilgan bo'lishi mumkin).
-2. **Vercel'dan `NEXT_PUBLIC_DEMO_EMAIL` / `NEXT_PUBLIC_DEMO_PASSWORD` ni
-   o'chirish + parolni almashtirish.** Login prefill ATAYLAB qoldirilgan —
-   hakamlar tekshirishi uchun. Egasi qachon olib tashlashni o'zi biladi.
-3. **test-project.webleaders.uz ni yopish.**
-4. **Firebase Blaze**: $9,09 qarz → Reopen → telefon bilan kirish o'zi ishlaydi.
-   Hozir SMS UMUMAN ishlamaydi.
-5. Search Console: sitemap + indekslash so'rovi.
-6. UI'da qolgani: ish ekranlarining ICHKI qismlari (modallar, hisobot tarixi,
-   `OpenInvoices`, filtr paneli) — yangi shrift/rang/burchakni olgan, lekin
-   tuzilishi ko'rilmagan. Admin sahifasi ataylab tegilmagan.
+1. **Kommit + deploy** — 35 fayl. Kommitdan oldin `git status` ni QAYTA
+   o'qi (egasi parallel kommit qilgan bo'lishi mumkin).
+   Firestore qoidalarini deploy qilish **shart emas**: yangi
+   `sverka_usage` kolleksiyasini umumiy «qolgani yopiq» qoidasi shundoq
+   ham klientdan yopadi, serverda esa admin SDK ishlaydi.
+2. **Kirim sverkasining ichki qismlari** — tuzilishi hali ko'rilmagan
+   (chiqim tomoni 2026-08-25 da ko'rildi). `OpenInvoices`, filtr
+   qatorining o'ralishi ham shu yerda.
+3. **To'lov yo'li** — 1-noyabrgacha kerak. Hozir hamma hisob bepul
+   rejada, saytning o'z matni ham shuni aytadi.
+4. **Firebase Blaze** ($9,09 qarz) — SMS bilan kirish umuman ishlamaydi.
+5. Search Console: bosh sahifa uchun «Запросить индексирование».
 
-**Egasi «tursin» degan uchta narsa (tegilmaydi):** `Hamkorbank` belgisi,
-`counterpartyCategory.ts` dagi STIR→nom jadvali, `docs/pitch-deck.html`.
+**Egasi «tursin» degani (tegilmaydi):** `Hamkorbank` belgisi,
+`counterpartyCategory.ts` dagi STIR→nom jadvali, `docs/pitch-deck.html`,
+kirish sahifasidagi demo email/parol (hakamlar tekshirishi uchun),
+`test-project.webleaders.uz`, qo'llanmadagi namuna ekranlar
+(hozirgisi yetadi — ular jonli komponentlardan yasalgan, PNG emas).
 
 ---
 
 ## 4. BUZILMAYDIGAN QOIDALAR
 
-* Bu **Next.js 16** — kod yozishdan OLDIN `node_modules/next/dist/docs/` ni o'qi.
+* Bu **Next.js 16** — kod yozishdan OLDIN `node_modules/next/dist/docs/`
+  ni o'qi. (`error.tsx` da `reset` emas, **`unstable_retry`**.)
 * **Workflow / subagent — MEN so'ramagunimcha ISHLATMA.**
 * **Ekran/ish stolini suratga OLMA** (2-bo'limga qara).
-* `src/lib/` dagi kirill matnlar parser kalitlari — TEGILMAYDI (`ИТОГО`, `ПАССИВ`).
-* Parserga (`auditFiles`/`analyzeIncome`) tegilmaydi.
+* `src/lib/` dagi kirill matnlar parser kalitlari — TEGILMAYDI
+  (`ИТОГО`, `ПАССИВ`).
+* Parserga (`auditFiles`/`analyzeIncome`) **hisob-kitob o'zgaradigan**
+  tarzda tegilmaydi. Sof qo'shimcha maydon (2026-08-25 da `own`
+  qo'shilgan) mumkin, lekin `verify-parsers` bilan ISBOTLANADI.
 * «Акт сверки» — ekran va Excel bir xil raqam bersin.
 * «Фарқ» = debet − kredit, ikkala sverkada.
 * Birlashtirish PUL YO'QOTMAYDI.
@@ -113,11 +121,13 @@ kafolatlanmaydi. Rasm kerak bo'lsa — egasi o'zi olib beradi.
 * **HISOB KALITI** uch joyda AYNAN bir xil: `firestore.rules` `authKey()`,
   server (`apiAuth.ts`, `signup/route.ts`), klient (`AuthContext.tsx`).
 * `t()` kaliti = KIRILL matnning O'ZI. Dublikat kalit `tsc` ni yiqitadi.
-* Huquqiy matnlar (`legal.ts`) va SEO (`seo.ts`) `t()` dan O'TMAYDI.
+  Kalit ichiga SON qo'yilmaydi — u lug'atdan o'tmay qoladi
+  (`sverkaQuota.ts` dagi `QUOTA_MESSAGE` shuning uchun statik).
+* Huquqiy matnlar (`legal.ts`) va SEO (`seo.ts`) `t()` dan O'TMAYDI —
+  ular to'rt tilda QO'LDA yoziladi.
 * Havola qo'lda yozilmaydi: `path(...)` / `clientPath(...)`.
-* **`.tabular` FAQAT RAQAM uchun.** Ichida `word-spacing: -0.22em` bor — so'z
-  qo'yilsa oralig'i yo'qoladi («1,37 mlrd» → «1,37mlrd» bo'lgan).
-* Yangi UI qadam QO'SHMASIN; mavjud jadval bekitilmaydi.
+* **`.tabular` FAQAT RAQAM uchun** (`word-spacing: -0.22em` bor).
+* Yangi UI qadam QO'SHILMASIN; mavjud jadval bekitilmaydi.
 * Rang tokeni o'zgarsa — `node scripts/check-contrast.cjs`.
 * Har o'zgarishdan keyin: `verify-parsers` → `check-contrast` → `tsc` →
   `eslint` → `build`.
@@ -126,47 +136,49 @@ kafolatlanmaydi. Rasm kerak bo'lsa — egasi o'zi olib beradi.
 
 ## 5. TUZOQLAR
 
+**Tailwind sinf to'qnashuvi — eng qimmat tuzoq:**
+* Umumiy sinf qatoriga (`fieldClasses`, `tableCls.th`) kenglik yoki
+  tekislash **qattiq yozilmasin**. Chaqiruvchi `className` bilan uni
+  bekor qila olmaydi: ikkala sinf ham beriladi, g'olibni CSS dagi
+  tartib hal qiladi. Uch marta jimgina buzgan. Qoida: **kenglik/
+  tekislash sinfi BITTA bo'lsin** (`fieldWidth()` naqshi).
+
 **Next / Vercel:**
 * `next build` ni dev-server ishlab turganda ISHLATMA — `.next` umumiy.
-  Davosi: dev'ni to'xtat → `.next` ni o'chir → qayta qur → dev'ni qayta yur.
-* **Turbopack keshi buziladi.** Dev-server `Internal Server Error` +
-  `JSON.parse` xatosi bersa, kodda ayb yo'q: `.next` VA
-  `node_modules/.cache` ni o'chirib qayta yur (2026-08-24 da yuz bergan,
-  o'sha payt `next build` bemalol o'tayotgan edi).
+  **`rm -rf .next` boshqa sessiyaning dev-serverini 500 ga tushiradi**
+  (2026-08-25 da yuz bergan). Avval to'xtat, keyin qur.
+* Turbopack keshi buziladi: `Internal Server Error` + `JSON.parse`
+  xatosi kelsa `.next` VA `node_modules/.cache` ni o'chirib qayta yur.
 * `NEXT_PUBLIC_*` qurishda singdiriladi → qo'shgach QAYTA DEPLOY.
-* `@theme inline` dagi o'zgaruvchi `:root` ga CHIQMAYDI — CSS qoidasida
-  `var(--font-serif)` bo'sh bo'lib qoladi. To'g'ridan-to'g'ri
-  `var(--font-literata)` yozilgan.
-* CSS o'zgarishi dev-serverda ba'zan yetib bormaydi — `globals.css` ga bo'sh
-  qator qo'shib "turtki" berilади, keyin sahifa yangilanadi.
+  Shu sababli demo email/parol jonli to'plamdan **o'qib olinadi**.
+* `@theme inline` dagi o'zgaruvchi `:root` ga CHIQMAYDI.
+* CSS o'zgarishi dev-serverda ba'zan yetib bormaydi — `globals.css` ga
+  bo'sh qator qo'shib "turtki" beriladi.
+* `moslik.uz` → `www.moslik.uz` ga 308 bilan yo'naltiriladi; canonical
+  va sitemap `www` ni ko'rsatadi (`seo.ts` dagi `SITE_URL`).
 
 **Firestore / skript:**
-* `.env` qiymatlari QO'SHTIRNOQ ichida — skript o'qiganda ularni olib tashla,
-  aks holda admin SDK boshqa loyihaga ulanadi va **jimgina** «topilmadi» deydi.
+* `.env` qiymatlari QO'SHTIRNOQ ichida — skript o'qiganda olib tashla,
+  aks holda admin SDK boshqa loyihaga ulanadi va **jimgina** «topilmadi»
+  deydi.
 * `FIREBASE_PRIVATE_KEY` da `\n` haqiqiy qatorga aylantiriladi.
 * `firebase-admin` v14: modulli kirish (`lib/app`, `lib/firestore`, `lib/auth`).
+* Firestore qoidalari hujjat **SANAY OLMAYDI** — sanoqqa bog'liq cheklov
+  faqat serverda (admin SDK) qo'llanadi.
 
 **Sinov (login ortidagi ekran):**
-* Sinov hisobi yaratiladi va oxirida bazadan O'CHIRILADI (superadmin paroli
-  bilan KIRILMAYDI). Tozalash skripti: auth user + `allowed_users` +
-  `workspaces` + `workspaceId` bo'yicha hujjatlar.
-* Ro'yxatdan o'tish ~10 soniya oladi — darhol tekshirsang «bo'lmadi» deb
-  ko'rinadi, aslida bo'lgan bo'ladi.
-* Fayl yuklash: `fetch` bilan blob olib, `DataTransfer` orqali
-  `input.files` ga qo'yiladi. Vaqtinchalik fayl `public/` ga qo'yilib, oxirida
-  O'CHIRILADI.
-* **Sinov faylidagi haqiqiy nomlar anonimlashtiriladi** — nom va STIR IKKALA
-  faylda bir xil qoida bilan almashtirilsa, sverka baribir mos keladi.
+* Sinov hisobi yaratiladi va oxirida bazadan O'CHIRILADI.
+* Ro'yxatdan o'tish ~10 soniya oladi.
 * Element qidirganda `id` ishlat (`#company-name`, `#company-inn`).
-  `confirm()` ishlamaydi → `window.confirm=()=>true`.
-* Brauzer paneli yopiq bo'lsa **ekran surati olinmaydi** va mavjud bo'lmagan
-  nuqson «topiladi». Claude-in-Chrome kengaytmasi orqali ko'rish ishlaydi.
+* Brauzer paneli yopiq bo'lsa **ekran surati olinmaydi** va mavjud
+  bo'lmagan nuqson «topiladi». `get_page_text` / `read_page` ishlaydi.
 
 **Qobiq:**
 * Konsol kirillni chiqara olmaydi → faylga yoz, `cat` bilan o'qi.
 * Katta heredoc `\\` ni buzadi — python skriptini `Write` bilan faylga yoz.
-* `openpyxl` bu bank fayllarini odatiy rejimda ocha olmaydi
-  (`ColumnDimension ... 'level'`) — `read_only=True` bilan faqat QIYMAT o'qiladi.
+* Python skriptida **absolyut yo'l** ishlat: `cd` qilinsa nisbiy yo'l sinadi.
+* `openpyxl` bu bank fayllarini odatiy rejimda ocha olmaydi —
+  `read_only=True` bilan faqat QIYMAT o'qiladi.
 * Etalon fayllar: `C:/Users/hp/Downloads/Telegram Desktop/`
 
 ---
@@ -174,12 +186,11 @@ kafolatlanmaydi. Rasm kerak bo'lsa — egasi o'zi olib beradi.
 ## 6. ISH USLUBI
 
 * **Ishonch bildirma — O'LCHA.** «Ishlashi kerak» qabul qilinmaydi.
-* Xato topsang yashirma va jimgina tuzatib ham qo'yma — ochiq ayt, sababini
-  ko'rsat, qaror mendan.
-* Bajarib bo'lmaydigan narsa chiqsa — sababi bilan ayt, qolganini oxirigacha qil.
+  Joylashuv muammosini ko'z bilan emas, `getBoundingClientRect` bilan o'lch.
+* Xato topsang yashirma va jimgina tuzatib ham qo'yma — ochiq ayt,
+  sababini ko'rsat, qaror mendan.
+* O'zing buzgan narsani ham ayt (dev-server yiqilgani kabi).
+* Bajarib bo'lmaydigan narsa chiqsa — sababi bilan ayt, qolganini
+  oxirigacha qil.
 * Katta ishni bo'laklab qil, HAR BO'LAKDAN KEYIN tekshiruvni yurgiz.
 * Qisqa va aniq yoz. Ortiqcha uzr ham, maqtov ham kerak emas.
-
----
-
-**BUGUNGI VAZIFA:**

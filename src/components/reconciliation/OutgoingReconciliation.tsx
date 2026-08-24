@@ -21,6 +21,7 @@ import { saveAs } from "file-saver";
 import { CalendarClock, ChevronDown, Download, FileText, Merge, Save } from "lucide-react";
 import SortHeader from "@/components/SortHeader";
 import { useT } from "@/context/LanguageContext";
+import QuotaWall, { type QuotaState } from "./QuotaWall";
 import { CATEGORY_LABELS, type Category } from "@/lib/counterpartyCategory";
 import {
   EMPTY_BALANCES,
@@ -299,6 +300,8 @@ export default function OutgoingReconciliation({
 
   const [files, setFiles] = useState<File[]>([]);
   const [loading, setLoading] = useState(false);
+  /** Oylik sverka safi tugagani. `null` — devor yo'q. */
+  const [quotaWall, setQuotaWall] = useState<QuotaState | null>(null);
   const [isFetchingData, setIsFetchingData] = useState(true);
   // Saqlangan hisobotlar TARIXI. Ro'yxat tiklash so'rovi allaqachon
   // yuklab olgan snapshot'dan tuziladi — qo'shimcha o'qish YO'Q.
@@ -535,6 +538,7 @@ export default function OutgoingReconciliation({
     formData.append("includePending", includePending ? "true" : "false");
 
     try {
+      setQuotaWall(null);
       const res = await authFetch("/api/upload-preview", {
         method: "POST",
         body: formData,
@@ -574,6 +578,14 @@ export default function OutgoingReconciliation({
             .filter((d: AggregatedTx) => catOf(d) === "korxona")
             .map((d: AggregatedTx) => rowKey(d))
         );
+      } else if (res.status === 402 && data.quotaReached) {
+        // 402 — xato emas, HOLAT: oylik saf tugadi. Qizil xabar
+        // chiqarilmaydi, devor ekranda tushuntirish bilan turadi.
+        setQuotaWall({
+          used: Number(data.used) || 0,
+          limit: data.limit ?? null,
+          plan: String(data.plan || "free"),
+        });
       } else {
         setWarnings(data.warnings || []);
         setSheetReports(data.sheets || []);
@@ -1223,6 +1235,10 @@ export default function OutgoingReconciliation({
             label={t("Имзо кутилаётган фактураларни ҳам ҳисоблаш")}
             hint={t("— одатда ҳисобланмайди (имзоланмаган фактура кучга кирмаган)")}
           />
+
+          {/* OYLIK SAF TUGADI — yuklash maydonining O'ZIDA, chunki
+              odam aynan shu yerda «nega bo'lmadi?» deb turadi. */}
+          {quotaWall && <QuotaWall quota={quotaWall} />}
 
           {/* Aniqlangan formatlar */}
           {(detectedFormats.length > 0 || sheetReports.length > 0) && (

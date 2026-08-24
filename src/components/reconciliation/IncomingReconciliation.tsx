@@ -57,6 +57,7 @@ import {
 } from "lucide-react";
 import SortHeader from "@/components/SortHeader";
 import { useT } from "@/context/LanguageContext";
+import QuotaWall, { type QuotaState } from "./QuotaWall";
 import { buildAging, BUCKET_KEYS, type BucketKey } from "@/lib/aging";
 import {
   Alert,
@@ -262,6 +263,8 @@ export default function IncomingReconciliation({
   const [loading, setLoading] = useState(false);
   const [report, setReport] = useState<IncomeResponse | null>(null);
   const [error, setError] = useState("");
+  /** Oylik sverka safi tugagani. `null` — devor yo'q. */
+  const [quotaWall, setQuotaWall] = useState<QuotaState | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   /** Ekrandagi natija saqlangan hisobotdan tiklanganmi */
   const [restoredAt, setRestoredAt] = useState<string | null>(null);
@@ -534,6 +537,14 @@ export default function IncomingReconciliation({
     try {
       const res = await authFetch("/api/income-audit", { method: "POST", body: formData });
       const data = await res.json();
+      // 402 — xato emas, HOLAT: oylik saf tugadi.
+      if (res.status === 402 && data.quotaReached) {
+        setReport(null);
+        setError("");
+        setQuotaWall({ used: Number(data.used) || 0, limit: data.limit ?? null, plan: String(data.plan || "free") });
+        return;
+      }
+      setQuotaWall(null);
       if (data.success) {
         const parsed = data as IncomeResponse;
         setReport(parsed);
@@ -837,6 +848,7 @@ export default function IncomingReconciliation({
             hint={t("— одатда ҳисобланмайди (имзоланмаган фактура кучга кирмаган)")}
           />
 
+          {quotaWall && <QuotaWall quota={quotaWall} />}
           {error && <Alert tone="bad">{error}</Alert>}
 
           {report && (

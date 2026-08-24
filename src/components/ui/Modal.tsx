@@ -19,12 +19,19 @@ import { useT } from "@/context/LanguageContext";
  *     deb izlamasligi kerak.
  *  3. Ochiq turganda sahifa aylanmaydi, aks holda modal ostidagi
  *     jadval qimirlab, qaysi qatorda ekani yo'qoladi.
- *  4. FOKUS ichkarida qulflanadi va oyna balandligi ekrandan
+ *  4. MODALLAR STEKI. Modal ustiga modal ochilishi mumkin (jamoa
+ *     oynasidagi «chiqarilsinmi?»). Escape va Tab faqat ENG
+ *     TEPADAGISIGA tegishli: aks holda bitta Escape ikkalasini
+ *     birdan yopardi.
+ *  5. FOKUS ichkarida qulflanadi va oyna balandligi ekrandan
  *     oshmaydi. Ikkalasi ham O'LCHANGAN nuqson edi: sahifa
  *     aylanishi (3-band) o'chirilgani uchun uzun modalning
  *     PASTKI TUGMALARIGA umuman yetib bo'lmasdi, Tab esa
  *     modaldan chiqib, orqadagi ko'rinmas tugmalarga o'tardi.
  */
+/** Ochiq modallar — oxirgisi eng tepada turgani. */
+const openStack: string[] = [];
+
 export default function Modal({
   open,
   onClose,
@@ -65,6 +72,8 @@ export default function Modal({
 
     // Qaytariladigan joy: modal yopilgach fokus O'SHA tugmaga qaytadi.
     const returnTo = document.activeElement as HTMLElement | null;
+    openStack.push(titleId);
+    const onTop = () => openStack[openStack.length - 1] === titleId;
 
     const focusable = () => {
       const root = boxRef.current;
@@ -77,6 +86,7 @@ export default function Modal({
     };
 
     const onKey = (e: KeyboardEvent) => {
+      if (!onTop()) return;
       if (e.key === "Escape") {
         onClose();
         return;
@@ -112,10 +122,15 @@ export default function Modal({
 
     return () => {
       document.removeEventListener("keydown", onKey);
+      const at = openStack.lastIndexOf(titleId);
+      if (at >= 0) openStack.splice(at, 1);
+      // `prev` shu modal ochilgandagi qiymat: ustma-ust modalda u
+      // «hidden» bo'ladi, ya'ni ichkarisi yopilganda sahifa yana
+      // aylanib ketmaydi.
       document.body.style.overflow = prev;
       returnTo?.focus?.({ preventScroll: true });
     };
-  }, [open, onClose]);
+  }, [open, onClose, titleId]);
 
   // `document` tekshiruvi server tomonda render bo'lganda kerak.
   // `mounted` bayrog'i ATAYLAB yo'q: u effekt ichida setState talab

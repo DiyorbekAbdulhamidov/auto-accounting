@@ -28,6 +28,7 @@ import {
   Alert,
   Badge,
   Button,
+  ConfirmDialog,
   Input,
   Modal,
   Spinner,
@@ -73,6 +74,8 @@ export default function TeamModal({
   const [loading, setLoading] = useState(true);
   const [email, setEmail] = useState("");
   const [busy, setBusy] = useState(false);
+  /** Chiqarish tasdig'ini kutayotgan a'zo. `null` — oyna yopiq. */
+  const [pending, setPending] = useState<Member | null>(null);
   const [error, setError] = useState("");
 
   const load = useCallback(async () => {
@@ -149,7 +152,7 @@ export default function TeamModal({
   };
 
   const handleRemove = async (member: Member) => {
-    if (!confirm(`${showKey(member.key)} — ${t("иш майдонидан чиқарилсинми?")}`)) return;
+    setPending(null);
     const res = await send({ action: "remove", key: member.key });
     if (!res?.success) return;
     notify.ok(t("Чиқарилди"), t("Бу одам энди сизнинг маълумотингизни кўрмайди."));
@@ -227,7 +230,7 @@ export default function TeamModal({
                     iconOnly
                     title={t("Чиқариш")}
                     loading={busy}
-                    onClick={() => handleRemove(m)}
+                    onClick={() => setPending(m)}
                     icon={<X className="h-4 w-4" />}
                   />
                 )}
@@ -310,6 +313,23 @@ export default function TeamModal({
           )}
         </div>
       )}
+
+      {/* A'zoni chiqarish QAYTARIB BO'LMAYDI. Bu oyna JAMOA
+          oynasining USTIGA ochiladi — Escape faqat tepadagisini
+          yopishi uchun `Modal` da stek bor. */}
+      <ConfirmDialog
+        open={pending !== null}
+        onClose={() => setPending(null)}
+        onConfirm={() => pending && void handleRemove(pending)}
+        title={t("Чиқариш")}
+        message={
+          <>
+            <strong className="text-ink">{pending && showKey(pending.key)}</strong> —{" "}
+            {t("иш майдонидан чиқарилсинми?")}
+          </>
+        }
+        confirmLabel={t("Чиқариш")}
+      />
     </Modal>
   );
 }

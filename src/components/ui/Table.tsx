@@ -57,6 +57,7 @@ export function Th({
       {...rest}
       className={cx(
         tableCls.th,
+        align === "left" && "text-left",
         align === "right" && "text-right",
         align === "center" && "text-center",
         sticky && tableCls.thSticky,

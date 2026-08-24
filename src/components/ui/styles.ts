@@ -70,10 +70,29 @@ export function buttonClasses(
    MAYDON (input, select)
    ============================================================ */
 
+/* KENGLIK BU YERDA YO'Q — `fieldWidth()` beradi.
+   ------------------------------------------------------------
+   Ilgari bu qatorda `w-full` turardi va u chaqiruvchining
+   kengligini JIMGINA bosib ketardi: `<Select className="w-auto">`
+   ham, `<Input className="w-44">` ham ekranda TO'LIQ KENGLIKDA
+   chiqardi. Sababi sinf tartibida emas — ikkala sinf ham berilar,
+   g'olibni CSS dagi tartib hal qilardi.
+   Oqibati o'lchangan: korxonalar sahifasida yil ro'yxati butun
+   qatorni egallab, tugmalarni pastga tushirib yuborgan; filtr
+   panelidagi uchta ro'yxat ustma-ust tushib qolgan; boshlang'ich
+   qoldiq oynasida esa summa maydoni firma nomini deyarli nolga
+   siqib qo'ygan.
+   Endi kenglik sinfi BITTA bo'ladi — to'qnashuvning o'zi yo'q. */
 export const fieldClasses =
-  "w-full h-10 px-3 rounded-md border border-line bg-surface text-body text-ink " +
+  "h-10 px-3 rounded-md border border-line bg-surface text-body text-ink " +
   "placeholder:text-ink-3 outline-none transition-colors " +
   "focus:border-accent disabled:opacity-60";
+
+/** Chaqiruvchi kenglik bermagan bo'lsa — to'liq kenglik (eski xulq). */
+export function fieldWidth(className?: string): string | false {
+  const given = /(?:^|\s)(?:[a-z0-9-]+:)*(?:w|min-w|max-w|basis|flex|size)-/.test(className ?? "");
+  return given ? false : "w-full";
+}
 
 export const labelClasses = "block mb-1.5 text-caption font-medium text-ink-2";
 
@@ -93,7 +112,11 @@ export const tableCls = {
   table: "w-full border-collapse text-body",
   thead: "bg-surface-2",
   /** Shapka katagi. Sticky kerak bo'lsa: cx(tableCls.th, tableCls.thSticky) */
-  th: "px-4 py-2.5 text-caption font-medium text-ink-3 text-left whitespace-nowrap border-b border-line",
+  /* DIQQAT: bu yerda `text-left` YOZILMAYDI. U qattiq turganda
+     `Th align="center"` ishlamay qolardi: ikkala sinf ham berilar,
+     g'olibni esa CSS dagi tartib hal qilardi va `text-left` keyin
+     turardi. Yo'nalish `Th` da, faqat BITTA sinf bilan beriladi. */
+  th: "px-4 py-2.5 text-caption font-medium text-ink-3 whitespace-nowrap border-b border-line",
   thSticky: "sticky top-0 z-10 bg-surface-2",
   tbody: "divide-y divide-line",
   tr: "transition-colors hover:bg-surface-2",

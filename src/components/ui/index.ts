@@ -22,6 +22,7 @@ export {
   Code,
 } from "./Table";
 export { default as Modal } from "./Modal";
+export { default as ConfirmDialog } from "./ConfirmDialog";
 export { default as FileDrop } from "./FileDrop";
 export { Checkbox, RowCheckbox } from "./Checkbox";
 export { Field, Input, Select, SearchInput } from "./Form";
@@ -45,6 +46,7 @@ export {
   cx,
   buttonClasses,
   fieldClasses,
+  fieldWidth,
   labelClasses,
   tableCls,
   toneText,

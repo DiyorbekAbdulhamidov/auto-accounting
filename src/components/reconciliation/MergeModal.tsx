@@ -271,7 +271,7 @@ export default function MergeModal({
             onChange={(e) => setSearch(e.target.value)}
             placeholder={t("Контрагент номи ёки СТИР бўйича қидирув...")}
           />
-          <div className="custom-scrollbar max-h-72 overflow-y-auto rounded-lg border border-line">
+          <div className="rounded-lg border border-line">
             <ul className="divide-y divide-line">
               {visible.map((r) => {
                 const isPicked = picked.includes(r.key);

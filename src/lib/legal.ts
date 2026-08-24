@@ -89,7 +89,7 @@ const OFFER_CYRL: LegalDoc = {
     {
       h: '4. Хизмат нархи ва тўлов тартиби',
       items: [
-        'Бепул режа: 3 та корхона ва 1 та фойдаланувчи. Тўлов талаб қилинмайди, ' +
+        'Бепул режа: ойига 3 та сверка ва 1 та фойдаланувчи, корхона сони чекланмайди. Тўлов талаб қилинмайди, ' +
           'карта сўралмайди.',
         '«Бухгалтер» режаси: ойига 9 999 сўм. Корхона сони чекланмайди, 1 та фойдаланувчи.',
         '«Бюро» режаси: ойига 39 999 сўм. Корхона сони чекланмайди, 5 тагача фойдаланувчи.',
@@ -202,7 +202,7 @@ const OFFER_RU: LegalDoc = {
     {
       h: '4. Стоимость и порядок оплаты',
       items: [
-        'Бесплатный тариф: 3 организации и 1 пользователь. Оплата не требуется, ' +
+        'Бесплатный тариф: 3 сверки в месяц и 1 пользователь, количество организаций не ограничено. Оплата не требуется, ' +
           'карта не запрашивается.',
         'Тариф «Бухгалтер»: 9 999 сум в месяц. Число организаций не ограничено, 1 пользователь.',
         'Тариф «Бюро»: 39 999 сум в месяц. Число организаций не ограничено, до 5 пользователей.',
@@ -313,7 +313,7 @@ const OFFER_EN: LegalDoc = {
     {
       h: '4. Price and payment',
       items: [
-        'Free plan: 3 companies and 1 user. No payment is required and no card is requested.',
+        'Free plan: 3 reconciliations a month and 1 user, with no limit on companies. No payment is required and no card is requested.',
         'Buxgalter plan: 9,999 UZS per month. Unlimited companies, 1 user.',
         'Byuro plan: 39,999 UZS per month. Unlimited companies, up to 5 users.',
         'The number of reconciliations is unlimited on every plan.',

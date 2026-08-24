@@ -1,36 +1,56 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Moslik
 
-## Getting Started
+Buxgalter uchun **bank ko'chirmasi ↔ faktura** sverkasi.
 
-First, run the development server:
+Excel/CSV fayllarni yuklaysiz — tizim har bir kontragent bo'yicha
+raqamlarni solishtiradi va farqi borlarini ajratib beradi. Akt sverki,
+qarzdorlik yoshi (FIFO), Excel hisobot.
+
+Jonli: [www.moslik.uz](https://www.moslik.uz)
+
+## Ishga tushirish
 
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+`.env` kerak (Firebase klient + admin kalitlari). U repozitoriyda yo'q.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Tekshiruv — har o'zgarishdan keyin shu tartibda
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```bash
+node scripts/verify-parsers.cjs
+node scripts/check-contrast.cjs
+npx tsc --noEmit
+npx eslint src --max-warnings=0
+npx next build
+```
 
-## Learn More
+`verify-parsers` — parserlarni **haqiqiy bank fayllariga** qarshi
+tekshiradi (Итого qatori, qoldiq tenglamasi, toifalar yig'indisi,
+reja cheklovining kaliti). U yiqilsa, o'zgarish qabul qilinmaydi.
 
-To learn more about Next.js, take a look at the following resources:
+`next build` ni dev-server ishlab turganda yurgizmang — `.next` umumiy.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Tuzilishi
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+| Yo'l | Nima |
+|---|---|
+| `src/lib/statementAudit.ts` | Chiqim sverkasi parseri (bank ko'chirmasi ↔ olingan faktura) |
+| `src/lib/incomeParser.ts` | Kirim sverkasi parseri (bank kirimi ↔ yuborilgan faktura) |
+| `src/lib/bankStatements.ts` | Bank shakllari — ustun shapka bo'yicha topiladi, indeks bo'yicha emas |
+| `src/lib/plans.ts`, `sverkaQuota.ts` | Rejalar va oylik sverka cheklovi |
+| `src/components/ui/` | Dizayn tizimi (sinflar `styles.ts` da, ranglar `globals.css` da) |
+| `src/lib/i18n/dictionary.ts` | To'rt til. Kalit — kirill matnning O'ZI |
+| `scripts/` | Tekshiruv harnesslari |
 
-## Deploy on Vercel
+## Hujjatlar
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- **`docs/KEYINGI-CHAT-PROMPT.md`** — joriy holat, navbatdagi ish,
+  qoidalar va tuzoqlar. **Ishni shundan boshlang.**
+- `HANDOFF.md` — texnik ma'lumotnoma: parserlar, bank formatlari,
+  deploy tartibi.
+- `MAHSULOT-QARORLARI.md` — nima uchun shunday qilingan: nom, atamalar,
+  narx, bozor.
+- `docs/TAHLIL-2026-08-18.md` — o'sha kungi holat surati (tarixiy).

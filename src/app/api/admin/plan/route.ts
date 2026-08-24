@@ -105,7 +105,7 @@ function describe(state: { plan: Plan; companies: number; members: number; works
     members: state.members,
     // Rejaning cheklovi. Vaqtinchalik «cheksiz davr» YO'Q — reja nima
     // desa, hozir ham shu amal qiladi (src/lib/plans.ts).
-    planLimits: { companies: num(base.companies), members: num(base.members) },
+    planLimits: { sverkaPerMonth: num(base.sverkaPerMonth), members: num(base.members) },
   };
 }
 

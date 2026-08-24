@@ -8,6 +8,7 @@ import { auditFiles, type InputFile } from '@/lib/statementAudit';
 import type { LearnedFormat } from '@/lib/formatMemory';
 import { MIN_COMPANIES_FOR_HINT, type Category, type GlobalHint } from '@/lib/counterpartyCategory';
 import { assertCompanyAccess, requireUser } from '@/lib/apiAuth';
+import { claimSverka, quotaMessage, sverkaKey } from '@/lib/sverkaQuota';
 import {
   MERGES_COLLECTION,
   mergeOutgoingRows,
@@ -266,8 +267,27 @@ export async function POST(req: Request) {
       }, { status: 400 });
     }
 
+    // OYLIK SVERKA SANOG'I. Tahlil MUVAFFAQIYATLI tugagandan keyin
+    // band qilinadi — yiqilgan urinish joy yemaydi. Kalit
+    // ko'chirmaning EGASI va DAVRIDAN yasaladi, korxona yozuvidan
+    // emas: shu sababli hammani bitta korxonaga yig'ib aylanib
+    // o'tib bo'lmaydi, ayni mijozning ayni davrini qayta yuklash
+    // esa BEPUL (kalit o'zgarmaydi). Sabablar `plans.ts` da.
+    const quota = await claimSverka(
+      auth.admin.db,
+      auth.user.workspaceId,
+      sverkaKey(result.own, result.periods.bank.from, companyId)
+    );
+    if (!quota.allowed) {
+      return NextResponse.json(
+        { error: quotaMessage(), quotaReached: true, plan: quota.plan, used: quota.used, limit: quota.limit },
+        { status: 402 }
+      );
+    }
+
     return NextResponse.json({
       success: true,
+      quota: { used: quota.used, limit: quota.limit },
       data: mergedData,
       // Қўлда бирлаштирилган гуруҳлар — экранда «ажратиш» тугмаси учун
       merges: mergeGroups.filter((g) => g.side === 'out'),

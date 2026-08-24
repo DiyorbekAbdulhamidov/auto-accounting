@@ -387,18 +387,71 @@ qilingan, YATT va o'zini o'zi band qilganlar uchun 1% aylanma solig'i
 kiritilgan, 100 mln so'mgacha ozod. Ya'ni **hisob yuritishi kerak bo'lgan
 odamlar soni keskin ko'paydi, ularning aksariyatida buxgalter yo'q.**
 
-### Narx va cheklov (2026-08-14 da qabul qilingan)
+### Narx va cheklov (2026-08-25 da QAYTA KO'RILDI)
 
-**Cheklov SVERKA soniga emas, KORXONA soniga qo'yiladi. Sverka har doim
-cheksiz.**
+**Cheklov oylik SVERKA soniga qo'yiladi. Korxona soni cheklanmaydi.**
 
-| Reja | Narx | Korxona | Foydalanuvchi |
-|---|---|---|---|
-| **Bepul** | 0 | **3 ta** | 1 |
-| **Buxgalter** | **9 999 so'm/oy** | Cheksiz | 1 |
-| **Byuro** | **39 999 so'm/oy** | Cheksiz | 5 |
+| Reja | Narx | Sverka | Korxona | Foydalanuvchi |
+|---|---|---|---|---|
+| **Bepul** | 0 | **oyiga 3 ta** | Cheksiz | 1 |
+| **Buxgalter** | **9 999 so'm/oy** | Cheksiz | Cheksiz | 1 |
+| **Byuro** | **39 999 so'm/oy** | Cheksiz | Cheksiz | 5 |
 
 Yillik to'lovda 2 oy bepul.
+
+#### Nega korxona soni tashlandi
+
+2026-08-14 dagi qaror «bepul 3 ta korxona» edi va u cheklov USHLAYDI deb
+faraz qilgandi. Ushlamas ekan — buni tajribali buxgalter aytdi
+(2026-08-25) va kod tasdiqladi:
+
+> «Korxonani 3 ta qilsang hech kim pulini bermaydi — farqi yo'q, o'sha
+> korxonada sverka qilaveradi.»
+
+Dalil: «korxona» — shunchaki nom va STIR yozilgan yozuv. Sverka esa
+YUKLANGAN FAYLDAN ishlaydi. 10 mijozli buxgalter bitta «Mijozlar» degan
+korxona ochib, o'n mijozning ko'chirmasini navbatma-navbat o'sha yerda
+tekshiraveradi va mahsulotning butun qiymatini bepul oladi. U faqat
+mijoz bo'yicha tarixni yo'qotadi — buning uchun oyiga pul to'lanmaydi.
+
+#### Nega «saqlangan hisobot» ham emas
+
+Oraliq taklif «saqlangan hisobot sonini sanash» edi. U ham teshik:
+natijani saqlamasdan **Excel yuklash** bilan olib ketish mumkin. Ya'ni
+saqlash — qiymat yetkazilgan lahza EMAS.
+
+#### Sanoq birligi: ko'chirma egasi × davr oyi
+
+Qiymat TAHLIL lahzasida yetkaziladi va ikkala tomonda ham SERVERDA
+bajariladi (`/api/upload-preview`, `/api/income-audit`) — brauzer
+natijani o'zi hisoblay olmaydi, demak sanoqni aylanib o'tib bo'lmaydi.
+
+Kalit bank ko'chirmasidan olinadi: **egasining STIRi (yoki hisob
+raqami) + davr boshlangan oy**. Shundan uch natija:
+
+- **qayta yuklash bepul** — buxgalter farqni ko'radi, mijozdan
+  fakturani so'raydi, to'g'rilangan ro'yxatni qayta yuklaydi; ko'chirma
+  o'sha, davr o'sha, kalit o'sha. 2026-08-14 dagi «sverka sanog'i
+  ishonch tug'ilayotgan lahzada urib qo'yadi» degan e'tiroz shu bilan
+  yopiladi;
+- **kirim va chiqim bitta hisoblanadi** — ikkalasida ham egasi va davr
+  bir xil. Aks holda «3 ta» aslida 1,5 ta bo'lardi;
+- **bitta korxonaga yig'ish yordam bermaydi** — kalit korxona yozuvidan
+  emas, fayldan.
+
+Yiqilgan urinish joy yemaydi: sanoq tahlil muvaffaqiyatli tugagach
+band qilinadi.
+
+#### Nega OYIGA, umuman emas
+
+1–3 mijozli buxgalter baribir pul to'lamaydi — uni bepulda ushlab
+turgan ma'qul, u gapiradi. 4+ mijozli buxgalter esa HAR OY devorga
+uriladi, ya'ni to'lov qarori bir marta emas, muntazam ko'tariladi.
+«Umuman 3 ta» esa uch marta ishlatib g'oyib bo'ladigan odam yasaydi.
+
+Kod: `src/lib/plans.ts`, `src/lib/sverkaQuota.ts`. Invariantlar
+`scripts/verify-parsers.cjs` da qulflangan (kalit mantig'i uchun 8 ta
+tekshiruv + xabardagi son bilan rejadagi son bir xilligi).
 
 **Narx qayerdan olindi (2026-08-14):** dastlab 149 000 taklif qilingan edi —
 u bozordan emas, taxminiy hisobdan chiqqan. Foydalanuvchi **tajribali
@@ -443,8 +496,9 @@ keyin keladi, undan oldin emas.
 - Sverkaga oyiga qancha vaqt ketishi o'lchanmagan.
 
 **To'lov hozir qabul qilinmaydi:** yuridik maqom va Payme/Click shartnomasi
-yo'q. Shuning uchun to'g'ri tartib — bugun bepul 3 korxona cheklovi bilan
-chiqish, «Ko'proq kerak» tugmasi esa faqat aloqa qoldirsin. Kim bosgani —
+yo'q. Shuning uchun to'g'ri tartib — bugun bepul oylik 3 sverka cheklovi
+bilan chiqish, «Hozir to'lay olmayman, lekin kerak» tugmasi esa faqat
+aloqa qoldirsin (`src/components/reconciliation/QuotaWall.tsx`). Kim bosgani —
 bu haqiqiy talab o'lchovi, taxmin emas.
 
 ### To'lov qabul qilish — tekshirilgan faktlar (2026-08-14)
