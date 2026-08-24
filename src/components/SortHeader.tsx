@@ -25,6 +25,7 @@ export default function SortHeader<K extends string>({
   const active = activeKey === k;
   return (
     <button
+      type="button"
       onClick={() => onToggle(k)}
       className={cx(
         "group/s inline-flex items-center gap-1.5 text-caption font-medium transition-colors hover:text-ink",
@@ -40,7 +41,7 @@ export default function SortHeader<K extends string>({
           <ChevronDown className="h-3.5 w-3.5" />
         )
       ) : (
-        <ChevronsUpDown className="h-3.5 w-3.5 opacity-0 transition-opacity group-hover/s:opacity-60" />
+        <ChevronsUpDown className="h-3.5 w-3.5 opacity-0 transition-opacity group-hover/s:opacity-60 group-focus-visible/s:opacity-60" />
       )}
     </button>
   );

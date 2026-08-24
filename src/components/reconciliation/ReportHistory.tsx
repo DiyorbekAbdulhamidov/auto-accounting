@@ -119,9 +119,9 @@ export default function ReportHistory({
             </Alert>
           )}
 
-          <TableFrame>
+          <TableFrame maxHeight="max-h-[60vh]">
             <Table>
-              <Thead>
+              <Thead sticky>
                 <Tr>
                   <Th>{t("Сақланган сана")}</Th>
                   <Th>{t("Давр")}</Th>

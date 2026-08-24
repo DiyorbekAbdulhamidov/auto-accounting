@@ -76,9 +76,9 @@ export default function OpenInvoices({
       <h3 className="mb-2 text-caption font-semibold text-ink-2">
         {title} ({sorted.length}) — <span className="tabular">{format(total)}</span>
       </h3>
-      <TableFrame>
+      <TableFrame maxHeight="max-h-[70vh]">
         <Table>
-          <Thead>
+          <Thead sticky>
             <tr>
               <Th>{t("Сана")}</Th>
               <Th>{t("Ҳужжат")}</Th>

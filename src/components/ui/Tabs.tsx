@@ -42,6 +42,7 @@ export default function Tabs<K extends string>({
         return (
           <button
             key={item.key}
+            type="button"
             role="tab"
             aria-selected={active}
             onClick={() => onChange(item.key)}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useId, useRef } from "react";
 import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 import { cx } from "./styles";
@@ -19,6 +19,11 @@ import { useT } from "@/context/LanguageContext";
  *     deb izlamasligi kerak.
  *  3. Ochiq turganda sahifa aylanmaydi, aks holda modal ostidagi
  *     jadval qimirlab, qaysi qatorda ekani yo'qoladi.
+ *  4. FOKUS ichkarida qulflanadi va oyna balandligi ekrandan
+ *     oshmaydi. Ikkalasi ham O'LCHANGAN nuqson edi: sahifa
+ *     aylanishi (3-band) o'chirilgani uchun uzun modalning
+ *     PASTKI TUGMALARIGA umuman yetib bo'lmasdi, Tab esa
+ *     modaldan chiqib, orqadagi ko'rinmas tugmalarga o'tardi.
  */
 export default function Modal({
   open,
@@ -52,17 +57,63 @@ export default function Modal({
   // қиймати — айнан ўзини қайтарувчи `t`).
   const t = useT();
 
+  const titleId = useId();
+  const boxRef = useRef<HTMLDivElement>(null);
+
   useEffect(() => {
     if (!open) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+
+    // Qaytariladigan joy: modal yopilgach fokus O'SHA tugmaga qaytadi.
+    const returnTo = document.activeElement as HTMLElement | null;
+
+    const focusable = () => {
+      const root = boxRef.current;
+      if (!root) return [] as HTMLElement[];
+      return Array.from(
+        root.querySelectorAll<HTMLElement>(
+          'a[href],button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])'
+        )
+      ).filter((el) => el.offsetParent !== null);
     };
+
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        onClose();
+        return;
+      }
+      if (e.key !== "Tab") return;
+      const root = boxRef.current;
+      if (!root) return;
+      const list = focusable();
+      if (list.length === 0) {
+        e.preventDefault();
+        root.focus({ preventScroll: true });
+        return;
+      }
+      const first = list[0];
+      const last = list[list.length - 1];
+      const active = document.activeElement;
+      const outside = !active || !root.contains(active);
+      if (e.shiftKey && (outside || active === first)) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && (outside || active === last)) {
+        e.preventDefault();
+        first.focus();
+      }
+    };
+
     document.addEventListener("keydown", onKey);
     const prev = document.body.style.overflow;
     document.body.style.overflow = "hidden";
+    // Oynaning O'ZI fokuslanadi, birinchi maydon EMAS: telefonda
+    // maydonga fokus klaviaturani ochib, oynaning yarmini yopadi.
+    boxRef.current?.focus({ preventScroll: true });
+
     return () => {
       document.removeEventListener("keydown", onKey);
       document.body.style.overflow = prev;
+      returnTo?.focus?.({ preventScroll: true });
     };
   }, [open, onClose]);
 
@@ -80,19 +131,24 @@ export default function Modal({
       role="presentation"
     >
       <div
+        ref={boxRef}
         role="dialog"
         aria-modal="true"
+        aria-labelledby={titleId}
+        tabIndex={-1}
         onClick={(e) => e.stopPropagation()}
         className={cx(
-          "anim-scale w-full rounded-lg border border-line bg-surface shadow-lg",
+          "anim-scale flex max-h-[92dvh] w-full flex-col rounded-lg border border-line bg-surface shadow-lg outline-none",
           width
         )}
       >
-        <div className="flex items-start justify-between gap-3 border-b border-line p-5">
+        <div className="flex shrink-0 items-start justify-between gap-3 border-b border-line p-5">
           <div className="flex min-w-0 items-start gap-2.5">
             {icon && <span className="mt-0.5 shrink-0 text-accent-ink">{icon}</span>}
             <div className="min-w-0">
-              <h2 className="text-h3 font-semibold text-ink">{title}</h2>
+              <h2 id={titleId} className="text-h3 font-semibold text-ink">
+                {title}
+              </h2>
               {hint && <p className="mt-1 text-caption text-ink-3">{hint}</p>}
             </div>
           </div>
@@ -106,10 +162,10 @@ export default function Modal({
           </button>
         </div>
 
-        {children && <div className="p-5">{children}</div>}
+        {children && <div className="custom-scrollbar min-h-0 flex-1 overflow-y-auto p-5">{children}</div>}
 
         {footer && (
-          <div className="flex flex-wrap items-center justify-end gap-2 border-t border-line p-5">
+          <div className="flex shrink-0 flex-wrap items-center justify-end gap-2 border-t border-line p-5">
             {footer}
           </div>
         )}

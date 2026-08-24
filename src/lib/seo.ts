@@ -16,7 +16,7 @@ import type { PathKey } from './routes';
 
 /** Ishlab chiqarish manzili. Vercel/hosting'da o'zgartirish uchun env. */
 export const SITE_URL = (
-  process.env.NEXT_PUBLIC_SITE_URL || 'https://moslik.uz'
+  process.env.NEXT_PUBLIC_SITE_URL || 'https://www.moslik.uz'
 ).replace(/\/$/, '');
 
 export interface SeoCopy {
