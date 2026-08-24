@@ -1,0 +1,23 @@
+# ============================================================
+# GITHUB'DAGI TIL STATISTIKASI
+# ------------------------------------------------------------
+# GitHub (Linguist) tilni FAYL BAYTLARI bo'yicha sanaydi — kod
+# qayerda yozilganini emas. Shuning uchun bitta katta fayl butun
+# repozitoriyani boshqa til loyihasidek ko'rsatib qo'yadi.
+#
+# 2026-08-25 da aynan shunday bo'lgan: `design/` dagi dizayn
+# kanvasining eksporti (2,2 MB, ichida tahrirlagich kodi ham bor)
+# HTML ni **66,8%** ga chiqarib, TypeScript ni 30,4% ga tushirgan.
+# O'sha fayl kuzatuvdan olib tashlandi (`.gitignore`), shundan
+# keyin nisbat HTML ~5,7% / TypeScript ~88,6% bo'ladi.
+#
+# Quyidagi belgilar qolgan hujjat va dizayn fayllarini ham
+# hisobdan chiqaradi, ya'ni statistika faqat MAHSULOT kodini
+# ko'rsatadi. `linguist-documentation` ataylab tanlangan:
+# `linguist-generated` dan farqi — u farqlarni (diff) yig'ib
+# yashirmaydi, faqat sanoqdan chiqaradi.
+# ============================================================
+
+docs/**     linguist-documentation
+design/**   linguist-documentation
+brand/**    linguist-documentation

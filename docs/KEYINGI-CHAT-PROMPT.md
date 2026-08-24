@@ -22,9 +22,13 @@ Chuqurroq: `HANDOFF.md` (texnik ma'lumotnoma), `MAHSULOT-QARORLARI.md`
 
 ## 1. HOLAT (2026-08-25)
 
-Oxirgi kommit `dad6cf8`, `origin/master` bilan teng — jonli `moslik.uz`
-da o'sha versiya turibdi. **Undan keyin 35 ta fayl o'zgargan
-(28 tuzatilgan + 7 yangi), kommit qilinmagan.**
+**Avval `git status` va `git log --oneline -3` ni O'QI** — quyidagisi
+2026-08-25 kunidagi holat.
+
+O'sha kuni hamma ish kommit qilindi va deploy bo'ldi: oxirgi kommit
+**`1894172`**, `origin/master` bilan teng, Vercel deploy'i READY.
+Jonli tekshirildi: narx sahifasida yangi tarif, `/uz/bilmadim` →
+404 + «Sahifa topilmadi». Ya'ni **kod va jonli sayt bir xil**.
 
 ### Kommit qilingani (jonli)
 
@@ -33,7 +37,7 @@ iliq palitra, radius 2–8px), shaxsiy ma'lumot saytdan olib tashlangan,
 `/clients` ish stoli ikkala yo'nalishni ko'rsatadi, marshrutlar
 birlashtirilgan, sitemap Search Console'ga yuborilgan (32 URL, «Успешно»).
 
-### Kommit qilinmagani (mahalliy)
+### Shu kuni qo'shilgani
 
 **Tarif modeli almashtirildi.** Bepul reja endi **oyiga 3 ta sverka**,
 korxona soni cheklanmaydi. Sanoq birligi — **ko'chirma egasi (STIR yoki
@@ -82,18 +86,14 @@ ochiq sahifaga (qo'llanma, prezentatsiya) QO'YILMAYDI.
 
 ## 3. NAVBATDAGI ISH
 
-1. **Kommit + deploy** — 35 fayl. Kommitdan oldin `git status` ni QAYTA
-   o'qi (egasi parallel kommit qilgan bo'lishi mumkin).
-   Firestore qoidalarini deploy qilish **shart emas**: yangi
-   `sverka_usage` kolleksiyasini umumiy «qolgani yopiq» qoidasi shundoq
-   ham klientdan yopadi, serverda esa admin SDK ishlaydi.
-2. **Kirim sverkasining ichki qismlari** — tuzilishi hali ko'rilmagan
+1. **Kirim sverkasining ichki qismlari** — tuzilishi hali ko'rilmagan
    (chiqim tomoni 2026-08-25 da ko'rildi). `OpenInvoices`, filtr
-   qatorining o'ralishi ham shu yerda.
-3. **To'lov yo'li** — 1-noyabrgacha kerak. Hozir hamma hisob bepul
+   qatorining o'ralishi va 404 sahifasining pastdagi bo'sh joyi ham
+   shu yerda — hech biri nuqson emas, sayqal.
+2. **To'lov yo'li** — 1-noyabrgacha kerak. Hozir hamma hisob bepul
    rejada, saytning o'z matni ham shuni aytadi.
-4. **Firebase Blaze** ($9,09 qarz) — SMS bilan kirish umuman ishlamaydi.
-5. Search Console: bosh sahifa uchun «Запросить индексирование».
+3. **Firebase Blaze** ($9,09 qarz) — SMS bilan kirish umuman ishlamaydi.
+4. Search Console: bosh sahifa uchun «Запросить индексирование».
 
 **Egasi «tursin» degani (tegilmaydi):** `Hamkorbank` belgisi,
 `counterpartyCategory.ts` dagi STIR→nom jadvali, `docs/pitch-deck.html`,
