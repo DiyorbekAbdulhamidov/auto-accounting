@@ -57,11 +57,18 @@ export interface PlanLimits {
 // to'lamasligi kerak, lekin o'sishni odam soni bilan o'lchash
 // tushuntirishga oson.
 export const PLANS: Record<Plan, PlanLimits> = {
-  // 3 ta ATAYLAB: 1–3 mijozli buxgalter baribir pul to'lamaydi —
-  // uni bepulda ushlab turgan ma'qul, u gapiradi. 4+ mijozli
-  // buxgalter esa HAR OY devorga uriladi, ya'ni to'lov qarori
-  // bir marta emas, muntazam ko'tariladi.
-  free: { sverkaPerMonth: 3, members: 1, priceUzs: 0, label: 'Бепул' },
+  // ⚠️ CHEKLOV YOQILADIGAN YAGONA JOY — quyidagi ikkita son.
+  //    Pulli qilish payti kelganda `free` ga eski qiymatlar
+  //    qaytariladi: `sverkaPerMonth: 3, members: 1`. Boshqa hech
+  //    qayerga tegish SHART EMAS — sanoq mexanizmi (`sverkaQuota.ts`),
+  //    devor ekrani (`QuotaWall.tsx`) va a'zo cheklovi
+  //    (`api/workspace/members`) joyida, sinovlari bilan turibdi va
+  //    o'sha zahoti ishlay boshlaydi.
+  free: { sverkaPerMonth: Infinity, members: Infinity, priceUzs: 0, label: 'Бепул' },
+
+  // Bu ikkalasi HOZIR HECH KIMGA berilmaydi va saytda ko'rsatilmaydi.
+  // Ular kelajakdagi qiymat uchun saqlanadi: `api/admin/plan` shu
+  // ro'yxatdan o'qiydi, ya'ni narx qaytarilganda tayyor turadi.
   buxgalter: { sverkaPerMonth: Infinity, members: 1, priceUzs: 9_999, label: 'Бухгалтер' },
   byuro: { sverkaPerMonth: Infinity, members: 5, priceUzs: 39_999, label: 'Бюро' },
 };
@@ -69,6 +76,26 @@ export const PLANS: Record<Plan, PlanLimits> = {
 export function planOf(value: unknown): Plan {
   return value === 'buxgalter' || value === 'byuro' ? value : 'free';
 }
+
+/* ============================================================
+   HAMMASI BEPUL — QAROR 2026-08-25 (EGASI)
+   ------------------------------------------------------------
+   Cheklov UMUMAN qo'yilmaydi: sverka ham, foydalanuvchi ham,
+   korxona ham cheksiz. Sayt narx haqida HECH NARSA demaydi.
+
+   Sabab egasining o'z so'zi bilan: odamlar o'rganmaguncha va
+   auditoriya katta bo'lmaguncha pul so'ralmaydi; qachon pulli
+   qilish — egasining qarori. «Qolgan qoladi, qolmagan ketadi.»
+
+   NEGA VAQT CHEGARASI (masalan «ro'yxatdan 6 oy») KODGA
+   YOZILMADI. Sanoq qo'yilsa, u bir kuni O'ZI ISHLAB KETADI va
+   hech kim buni kutmagan paytda hisoblar qulflanadi — pulli
+   qilish qarori esa egasida, kodda emas. Shuning uchun cheklov
+   YO'Q, uni yoqish esa yuqoridagi ikkita sonni o'zgartirish.
+
+   Eski «2026-09-01 … 2026-11-01» global davri ham shu sababdan
+   olib tashlangan edi (2026-08-19).
+   ============================================================ */
 
 /* ============================================================
    NEGA VAQTINCHALIK «CHEKSIZ» DAVR YO'Q

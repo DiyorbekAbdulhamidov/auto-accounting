@@ -147,6 +147,10 @@ interface SavedIncomeReport {
   companyId: string;
   workspaceId: string;
   includePending?: boolean;
+  /** Қўлда бирлаштирилган гуруҳлар. Илгари САҚЛАНМАСДИ: сақланган
+   *  ҳисоботни очганда жадвал бирлашган ҳолда келарди, лекин
+   *  «Бирлаштириш» ойнаси бўш кўринарди — бухгалтер ажратолмасди. */
+  merges?: MergeGroup[];
   report: IncomeResponse;
   savedAt?: { toMillis: () => number; toDate: () => Date };
 }
@@ -192,6 +196,31 @@ function verdict(diff: number): { text: string; tone: Tone } {
   if (diff > 0.01) return { text: "Бизга қарздор", tone: "bad" };
   if (diff < -0.01) return { text: "Ҳисоб фактура ёзиш керак", tone: "warn" };
   return { text: "-", tone: "muted" };
+}
+
+/** ЯКУНИЙ рақамнинг ранги. Нол — «фарқ йўқ», яъни ЯХШИ хабар:
+ *  ўша ҳолда «ok» (яшил). Илгари бу қоида фақат тепадаги катта
+ *  картада бор эди — АЙНИ ШУ рақам фильтр қаторида ва жадвал остида
+ *  кулранг («muted») чиқарди.
+ *
+ *  ҚАТОР даражасида эса `verdict` ўзгармайди: 128 та қаторнинг
+ *  ярмини яшил бўяш жадвални шовқинга айлантиради, у ерда «-» етади. */
+function totalTone(diff: number): Tone {
+  return Math.abs(diff) <= 0.01 ? "ok" : verdict(diff).tone;
+}
+
+/** БЎШ ЖАДВАЛ ҚАТОРИ.
+ *  Илгари фақат «Сверка» табида бор эди: қолган бешталари бўшлигида
+ *  сарлавҳа + нол якун бўлиб турарди ва бухгалтер «файл ўқилмади»
+ *  деб ўйлаши мумкин эди. Чиқим сверкасида бу аллақачон бор. */
+function EmptyRow({ cols, text }: { cols: number; text: string }) {
+  return (
+    <tr>
+      <td colSpan={cols} className="p-12 text-center text-body text-ink-3">
+        {text}
+      </td>
+    </tr>
+  );
 }
 
 type SortKey = "name" | "inn" | "credit" | "factura" | "diff";
@@ -330,6 +359,7 @@ export default function IncomingReconciliation({
         setReport(latest.report);
         setSelectedKeys(latest.report.parties.map((x) => x.key));
         setIncludePending(latest.includePending === true);
+        setMerges(latest.merges || []);
         setActiveReportId(latest.id);
         setRestoredAt(formatStamp(stampToDate(latest.savedAt)));
       } catch (err) {
@@ -384,6 +414,7 @@ export default function IncomingReconciliation({
     setReport(d.report);
     setSelectedKeys(d.report.parties.map((x) => x.key));
     setIncludePending(d.includePending === true);
+    setMerges(d.merges || []);
     setActiveReportId(d.id);
     setRestoredAt(formatStamp(stampToDate(d.savedAt)));
   };
@@ -480,6 +511,7 @@ export default function IncomingReconciliation({
       companyId,
       workspaceId,
       includePending,
+      merges,
       report,
     };
     const bytes = new TextEncoder().encode(JSON.stringify(payload)).length;
@@ -645,11 +677,24 @@ export default function IncomingReconciliation({
   }, [report]);
 
   // ⏳ ҚАРЗДОРЛИК ЁШИ — фактураларни FIFO билан тўловларга ёпиб, қолдиқни ёшга ажратади.
-  // Ҳисоб санаси: даврнинг охирги куни (маълум бўлса), акс ҳолда бугун.
-  const aging = useMemo(
-    () => buildAging(displayRows, report?.meta.periodTo ?? null),
-    [displayRows, report]
-  );
+  //
+  // ҲИСОБ САНАСИ. Илгари у фақат ТЎЛОВлардан олинарди
+  // (`meta.periodTo`). Тўлов бўлмаса ёки саналари ўқилмаса қиймат
+  // `null` бўлиб, `buildAging` БУГУНни оларди — яъни САҚЛАНГАН
+  // ҳисоботни уч ойдан кейин очганда ўша-ўша фактуралар бошқа ёш
+  // кўрсатарди ва «90+» гуруҳи ўзидан ўзи ўсарди. Энди фактура
+  // саналари ҳам ҳисобга олинади: сана бор экан, натижа ҚОТАДИ.
+  const agingAsOf = useMemo(() => {
+    let last = report?.meta.periodTo ?? null;
+    for (const p of report?.parties ?? []) {
+      for (const inv of p.invoices) {
+        if (inv.date && (!last || inv.date > last)) last = inv.date;
+      }
+    }
+    return last;
+  }, [report]);
+
+  const aging = useMemo(() => buildAging(displayRows, agingAsOf), [displayRows, agingAsOf]);
 
   const allShownSelected = rows.length > 0 && rows.every((p) => selectedKeys.includes(p.key));
 
@@ -674,12 +719,21 @@ export default function IncomingReconciliation({
     setExpanded((prev) => (prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]));
 
   // ---- ТАБЛАР УЧУН МАЪЛУМОТ (Excel варақлари билан бир хил) ----
-  /** Kontragent kaliti -> aging natijasi. `aging.parties` ro'yxat
-   *  bo'lgani uchun har qatorda qidirmaslik uchun xarita. */
-  const agingByKey = useMemo(
-    () => new Map(aging.parties.map((x) => [x.key, x])),
-    [aging]
-  );
+  /** ЁПИЛМАГАН ФАКТУРАЛАР — ҲАММА контрагент бўйича, птичкадан
+   *  ҚАТЪИ НАЗАР.
+   *
+   *  Илгари бу харита `aging` дан олинарди, `aging` эса фақат
+   *  БЕЛГИЛАНГАН қаторлардан қурилади. Жадвал эса белгиланмаганини
+   *  ҳам чизади — натижада птичкаси олинган қаторни «Очиш» босилса
+   *  «✓ Ёпилмаган фактура йўқ» деган ЁЛҒОН чиқарди. Чиқим
+   *  сверкасида бу тўғри эди (`openInvoicesByKey` — ҳамма қатордан).
+   *
+   *  `aging` ЎЗГАРМАЙДИ: тепадаги «Қарз ёши» таби ва ЖАМИ рақамлари
+   *  птичкага боғлиқ бўлиб қолади. */
+  const openInvoicesByKey = useMemo(() => {
+    const all = buildAging(report?.parties ?? [], agingAsOf);
+    return new Map(all.parties.map((x) => [x.key, x.openInvoices]));
+  }, [report, agingAsOf]);
 
   const yearKeys = useMemo(() => (report ? report.meta.byYear.map((y) => y.year) : []), [report]);
 
@@ -787,21 +841,21 @@ export default function IncomingReconciliation({
   const actOpening = actParty ? opening.balances[actParty.key] : undefined;
   const actSaldo = (actOpening ?? 0) + (actParty?.difference ?? 0);
 
+  // ТАБ ЁНИДАГИ СОН = ЎША ТАБДА НЕЧТА ҚАТОР ЧИЗИЛИШИ.
+  // Илгари учтаси бошқа нарсани санарди: «Сверка» БЕЛГИЛАНГАНларни
+  // санаб, ФИЛЬТРЛАНГАНларни чизарди (птичка олинса сон тушиб,
+  // қатор жойида қоларди); «Йиллар» қатор эмас, ЙИЛ сонини;
+  // «Қарз ёши» фақат қарздорларни санаб, ҳаммасини чизарди.
   const TABS: TabItem<TabKey>[] = [
-    { key: "RECONCILIATION", label: t("Сверка"), icon: Table2, count: displayRows.length },
-    { key: "YEARS", label: t("Йиллар"), icon: CalendarRange, count: yearKeys.length },
+    { key: "RECONCILIATION", label: t("Сверка"), icon: Table2, count: rows.length },
+    { key: "YEARS", label: t("Йиллар"), icon: CalendarRange, count: displayRows.length },
     { key: "MONTHLY", label: t("Ойма-ой"), icon: CalendarDays, count: monthlyRows.length },
     { key: "PAYMENTS", label: t("Тўловлар"), icon: Banknote, count: paymentRows.length },
     { key: "INVOICES", label: t("Фактуралар"), icon: Receipt, count: invoiceRows.length },
-    {
-      key: "AGING",
-      label: t("Қарз ёши"),
-      icon: Hourglass,
-      count: aging.parties.filter((p) => p.receivable > 0.01).length,
-    },
+    { key: "AGING", label: t("Қарз ёши"), icon: Hourglass, count: aging.parties.length },
   ];
 
-  // 📈 EXCEL EXPORT — 5 варақли ҳисобот (src/lib/incomeExcel.ts)
+  // 📈 EXCEL EXPORT — 6 варақли ҳисобот (src/lib/incomeExcel.ts)
   const handleExport = async () => {
     if (!report || displayRows.length === 0) {
       setError(t("Рўйхат бўш. Камида битта контрагентни белгиланг!"));
@@ -809,7 +863,9 @@ export default function IncomingReconciliation({
     }
     const today = new Date().toLocaleDateString("ru-RU");
     const years = report.meta.byYear.map((y) => y.year).filter((y) => /^\d{4}$/.test(y));
-    const wb = buildIncomeWorkbook(report, displayRows, shown, today);
+    // Ҳисоб санаси экрандагиси билан БИР ХИЛ узатилади — акс ҳолда
+    // файлдаги «Қарз ёши» варағи бошқа кунга ҳисобланиб қоларди.
+    const wb = buildIncomeWorkbook(report, displayRows, shown, today, agingAsOf);
     const buffer = await wb.xlsx.writeBuffer();
     const safe = companyName.replace(/[^A-Za-zА-Яа-я0-9]+/g, "_").slice(0, 40);
     saveAs(
@@ -927,7 +983,7 @@ export default function IncomingReconciliation({
               label={t("Фарқи")}
               count={allTotals.diff}
               format={fmt}
-              tone={Math.abs(allTotals.diff) <= 0.01 ? "ok" : verdict(allTotals.diff).tone}
+              tone={totalTone(allTotals.diff)}
               hint={
                 <>
                   {allTotals.count} {t("контрагент, шундан")}{" "}
@@ -991,7 +1047,7 @@ export default function IncomingReconciliation({
                     disabled={displayRows.length === 0}
                     icon={<Download className="h-3.5 w-3.5" />}
                   >
-                    {t("Excel юклаш (5 варақ)")}
+                    {t("Excel юклаш (6 варақ)")}
                   </Button>
                   <Button
                     variant="primary"
@@ -1036,14 +1092,22 @@ export default function IncomingReconciliation({
                   {t("Ёзилган фактура")}: <Num tone="invoice" strong>{fmt(shown.factura)}</Num>
                 </span>
                 <span className="text-ink-3">
-                  {t("Фарқ")}: <Num tone={verdict(shown.diff).tone} strong>{fmt(shown.diff)}</Num>
+                  {t("Фарқ")}: <Num tone={totalTone(shown.diff)} strong>{fmt(shown.diff)}</Num>
                 </span>
               </div>
             </div>
 
             <div className="p-4">
               {tab === "RECONCILIATION" && (
-                <TableFrame>
+                /* `maxHeight` ШАРТ. `TableFrame` да `overflow-auto` бор,
+                   яъни у sticky учун «ойна» бўлиб қолади; баландлиги
+                   чекланмаса ойна ҲЕЧ ҚАЧОН сурилмайди ва
+                   `Thead sticky` / `Tfoot sticky` БЕКОР бўлади —
+                   ўлчанган: саҳифа 972px сурилганда шапка y = −599 га
+                   кетган. Қолган тўрт таб аллақачон `max-h-[70vh]`
+                   билан ишлаётган эди, яъни битта экранда икки хил
+                   хулқ бор эди. */
+                <TableFrame className="anim-fade" maxHeight="max-h-[70vh]">
                   <Table>
                     <Thead sticky>
                       <tr>
@@ -1076,11 +1140,7 @@ export default function IncomingReconciliation({
 
                     <Tbody>
                       {rows.length === 0 ? (
-                        <tr>
-                          <td colSpan={8} className="p-12 text-center text-body text-ink-3">
-                            {t("Маълумот топилмади... 🕵️‍♂️")}
-                          </td>
-                        </tr>
+                        <EmptyRow cols={8} text={t("Маълумот топилмади... 🕵️‍♂️")} />
                       ) : (
                         rows.map((p) => {
                           const v = verdict(p.difference);
@@ -1161,7 +1221,7 @@ export default function IncomingReconciliation({
                                           ўринда: бухгалтерга керак
                                           бўладиган нарса аслида шу. */}
                                       <OpenInvoices
-                                        invoices={agingByKey.get(p.key)?.openInvoices ?? []}
+                                        invoices={openInvoicesByKey.get(p.key) ?? []}
                                         format={fmt}
                                         title={t("Тўланмаган фактуралар")}
                                         emptyText={t("Ёпилмаган фактура йўқ")}
@@ -1183,6 +1243,9 @@ export default function IncomingReconciliation({
                                               </tr>
                                             </Thead>
                                             <Tbody>
+                                              {periods.length === 0 && (
+                                                <EmptyRow cols={4} text={t("Ойлик маълумот йўқ")} />
+                                              )}
                                               {periods.map((period) => {
                                                 const b = p.monthly[period];
                                                 const d = b.factura - b.credit;
@@ -1275,8 +1338,8 @@ export default function IncomingReconciliation({
                           </Td>
                           <NumTd tone="cash">{fmt(shown.credit)}</NumTd>
                           <NumTd tone="invoice">{fmt(shown.factura)}</NumTd>
-                          <NumTd tone={verdict(shown.diff).tone}>{fmt(shown.diff)}</NumTd>
-                          <Td className={cx("text-caption", toneText[verdict(shown.diff).tone])}>
+                          <NumTd tone={totalTone(shown.diff)}>{fmt(shown.diff)}</NumTd>
+                          <Td className={cx("text-caption", toneText[totalTone(shown.diff)])}>
                             {t(verdict(shown.diff).text)}
                           </Td>
                           <Td />
@@ -1289,11 +1352,11 @@ export default function IncomingReconciliation({
 
               {/* ===== ЙИЛЛАР ===== */}
               {tab === "YEARS" && (
-                <TableFrame className="anim-fade">
+                <TableFrame className="anim-fade" maxHeight="max-h-[70vh]">
                   <Table>
-                    <Thead>
+                    <Thead sticky>
                       <tr>
-                        <Th className="sticky left-0 bg-surface-2" width="min-w-[240px]">
+                        <Th className="sticky left-0 z-20 bg-surface-2" width="min-w-[240px]">
                           {t("Фирма номлари")}
                         </Th>
                         <Th align="center">{t("СТИР")}</Th>
@@ -1310,6 +1373,12 @@ export default function IncomingReconciliation({
                       </tr>
                     </Thead>
                     <Tbody>
+                      {displayRows.length === 0 && (
+                        <EmptyRow
+                          cols={2 + yearKeys.length * 3 + 3}
+                          text={t("Битта ҳам қатор белгиланмаган — «Сверка» табида контрагент танланг.")}
+                        />
+                      )}
                       {displayRows.map((p) => (
                         <Tr key={p.key}>
                           <Td main className="sticky left-0 bg-surface">{p.name}</Td>
@@ -1332,9 +1401,9 @@ export default function IncomingReconciliation({
                         </Tr>
                       ))}
                     </Tbody>
-                    <Tfoot>
+                    <Tfoot sticky>
                       <tr>
-                        <Td className="sticky left-0 bg-surface-2 text-caption text-ink-3">{t("ЖАМИ")}</Td>
+                        <Td className="sticky left-0 z-20 bg-surface-2 text-caption text-ink-3">{t("ЖАМИ")}</Td>
                         <Td />
                         {yearKeys.map((y) => {
                           const c = displayRows.reduce((a, p) => a + yearOf(p, y).credit, 0);
@@ -1351,7 +1420,7 @@ export default function IncomingReconciliation({
                         })}
                         <NumTd>{fmt(shown.credit)}</NumTd>
                         <NumTd>{fmt(shown.factura)}</NumTd>
-                        <NumTd tone={verdict(shown.diff).tone}>{fmt(shown.diff)}</NumTd>
+                        <NumTd tone={totalTone(shown.diff)}>{fmt(shown.diff)}</NumTd>
                       </tr>
                     </Tfoot>
                   </Table>
@@ -1374,6 +1443,12 @@ export default function IncomingReconciliation({
                       </tr>
                     </Thead>
                     <Tbody>
+                      {monthlyRows.length === 0 && (
+                        <EmptyRow
+                          cols={7}
+                          text={t("Битта ҳам қатор белгиланмаган — «Сверка» табида контрагент танланг.")}
+                        />
+                      )}
                       {monthlyRows.map((m, i) => (
                         <Tr key={i}>
                           <Td main>{m.name}</Td>
@@ -1393,7 +1468,7 @@ export default function IncomingReconciliation({
                         </Td>
                         <NumTd>{fmt(shown.credit)}</NumTd>
                         <NumTd>{fmt(shown.factura)}</NumTd>
-                        <NumTd tone={verdict(shown.diff).tone}>{fmt(shown.diff)}</NumTd>
+                        <NumTd tone={totalTone(shown.diff)}>{fmt(shown.diff)}</NumTd>
                       </tr>
                     </Tfoot>
                   </Table>
@@ -1417,6 +1492,9 @@ export default function IncomingReconciliation({
                       </tr>
                     </Thead>
                     <Tbody>
+                      {paymentRows.length === 0 && (
+                        <EmptyRow cols={8} text={t("Тўлов топилмади — банк кўчирмаси юкланганини текширинг.")} />
+                      )}
                       {paymentRows.map((r, i) => (
                         <Tr key={i} className="align-top">
                           <Td align="center" className="whitespace-nowrap">{fmtDate(r.date)}</Td>
@@ -1459,6 +1537,9 @@ export default function IncomingReconciliation({
                       </tr>
                     </Thead>
                     <Tbody>
+                      {invoiceRows.length === 0 && (
+                        <EmptyRow cols={7} text={t("Фактура топилмади — реестр файли юкланганини текширинг.")} />
+                      )}
                       {invoiceRows.map((r, i) => (
                         <Tr key={i}>
                           <Td align="center" className="whitespace-nowrap">{fmtDate(r.date)}</Td>
@@ -1520,6 +1601,12 @@ export default function IncomingReconciliation({
                         </tr>
                       </Thead>
                       <Tbody>
+                        {aging.parties.length === 0 && (
+                          <EmptyRow
+                            cols={3 + BUCKET_KEYS.length + 2}
+                            text={t("Битта ҳам қатор белгиланмаган — «Сверка» табида контрагент танланг.")}
+                          />
+                        )}
                         {aging.parties.map((p) => (
                           <Tr key={p.key}>
                             <Td main>{p.name}</Td>

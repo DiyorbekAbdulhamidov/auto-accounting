@@ -68,7 +68,10 @@ export default function PublicShell({ children }: { children: React.ReactNode })
   const signedIn = !loading && !!user;
 
   return (
-    <div className={layout.page}>
+    /* `flex flex-col` + `main` да `flex-1`: калта саҳифада (404,
+       алоқа) поябзал юқорида осилиб қоларди — ўлчанган: 1280×720 да
+       поябзал 614px да тугаб, тагида 106px бўш жой қоларди. */
+    <div className={cx(layout.page, "flex flex-col")}>
       {/* ============================================================
           ШАПКА — қайта ёзилди (2026-08-23)
           ------------------------------------------------------------
@@ -135,7 +138,7 @@ export default function PublicShell({ children }: { children: React.ReactNode })
         </nav>
       </header>
 
-      <main>{children}</main>
+      <main className="flex-1">{children}</main>
 
       <Footer />
     </div>

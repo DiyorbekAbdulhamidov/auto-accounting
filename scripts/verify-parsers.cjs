@@ -826,20 +826,19 @@ function runInviteKeyTest() {
   ok(inviteKeyOf('+7 900 123 45 67') === null, 'boshqa davlat kodi rad etildi');
 }
 
-function runPlanLimitTest() {
+async function runPlanLimitTest() {
   console.log(`\n============================================================`);
   console.log("REJA: oylik sverka cheklovi va uning KALITI");
 
+  /* HAMMASI BEPUL (qaror 2026-08-25). Sinov endi «3 ta» ni emas,
+     CHEKLOV YO'QLIGINI tekshiradi — cheklov jimgina qaytib
+     qolmasin. Pulli qilinganda bu blok ham qaytariladi. */
   const free = limitsOf('free');
-  ok(free.sverkaPerMonth === 3, `bepul reja: oyiga ${free.sverkaPerMonth} ta sverka`);
-  ok(free.members === 1, "bepul reja: 1 foydalanuvchi");
-  ok(free.priceUzs === 0, "bepul reja: narx 0");
-
-  ok(limitsOf('buxgalter').sverkaPerMonth === Infinity, "Бухгалтер: sverka cheksiz");
-  ok(limitsOf('buxgalter').members === 1, "Бухгалтер: 1 foydalanuvchi");
-  ok(limitsOf('byuro').sverkaPerMonth === Infinity, "Бюро: sverka cheksiz");
-  ok(limitsOf('byuro').members === 5, "Бюро: 5 foydalanuvchi");
-  ok(limitsOf(undefined).sverkaPerMonth === 3, "noma'lum reja bepulga tushadi");
+  ok(free.sverkaPerMonth === Infinity, 'bepul reja: sverka CHEKSIZ');
+  ok(free.members === Infinity, 'bepul reja: foydalanuvchi CHEKSIZ');
+  ok(free.priceUzs === 0, 'bepul reja: narx 0');
+  ok(limitsOf(undefined).sverkaPerMonth === Infinity, "noma'lum reja ham cheksiz");
+  ok(limitsOf('nomalum-reja').members === Infinity, "begona qiymat ham cheksizga tushadi");
 
   // KORXONA endi CHEKLANMAYDI — eski cheklovning qoldig'i qolmasin.
   ok(free.companies === undefined, "korxona cheklovi kodda YO'Q");
@@ -847,8 +846,8 @@ function runPlanLimitTest() {
 
   // VAQT: ikkinchi argument berilsa ham e'tiborga OLINMAYDI.
   ok(
-    limitsOf('free', new Date('2026-10-01T00:00:00+05:00')).sverkaPerMonth === 3,
-    "sana berilsa ham cheklov o'zgarmadi (yashirin «cheksiz oyna» yo'q)"
+    limitsOf('free', new Date('2026-10-01T00:00:00+05:00')).sverkaPerMonth === Infinity,
+    "sana berilsa ham natija o'zgarmadi (yashirin «muddat tugadi» oynasi yo'q)"
   );
   ok(plans.promoActive === undefined, "vaqtinchalik cheksiz davr KODDA YO'Q");
   ok(plans.PROMO_UNTIL === undefined, "davr sanasi ham qolmadi");
@@ -895,12 +894,38 @@ function runPlanLimitTest() {
     "«-» STIR bo'sh bilan bir xil (parser shunday qaytaradi)"
   );
 
-  // XABAR va CHEKLOV bir xil sonni aytsin: matn qo'lda yozilgan,
-  // ya'ni reja o'zgarganda u eskirib qolishi mumkin edi.
-  ok(
-    quota.QUOTA_MESSAGE.includes(String(free.sverkaPerMonth)),
-    "cheklov xabari rejadagi son bilan bir xil"
-  );
+  /* ----------------------------------------------------------
+     DEVOR HECH QACHON CHIQMASIN.
+     ------------------------------------------------------------
+     Yuqoridagi ikkita `Infinity` ni tekshirish yetarli emas:
+     `claimSverka` ning o'zi ham cheksizni to'g'ri o'qishi kerak.
+     Bu yerda soxta Firestore bilan 50 ta HAR XIL sverka qilinadi —
+     bittasi ham rad etilmasligi va sanoq hujjati YOZILMASLIGI shart.
+     ---------------------------------------------------------- */
+  const writes = [];
+  const fakeDb = {
+    collection: () => ({ doc: (id) => ({ id }) }),
+    runTransaction: async (fn) =>
+      fn({
+        get: async (ref) => ({
+          exists: true,
+          // Ish maydoni hujjati: rejasi «free»
+          data: () => (String(ref.id).includes('_') ? { keys: [] } : { plan: 'free' }),
+        }),
+        set: (ref, data) => writes.push({ id: ref.id, data }),
+      }),
+  };
+  let blocked = 0;
+  for (let i = 0; i < 50; i++) {
+    const outcome = await quota.claimSverka(fakeDb, 'ws1', `mijoz${i}|2026-08`);
+    if (!outcome.allowed) blocked++;
+  }
+  ok(blocked === 0, `50 ta har xil sverka — bittasi ham rad ETILMADI (${blocked} ta devor)`);
+  ok(writes.length === 0, `cheksiz rejada sanoq hujjati YOZILMADI (${writes.length} ta yozuv)`);
+
+  // Cheklov qaytarilganda kerak bo'ladigan matn joyida turibdi.
+  ok(typeof quota.QUOTA_MESSAGE === 'string' && quota.QUOTA_MESSAGE.length > 0,
+    "cheklov xabari kodda saqlangan (pulli qilinganda kerak bo'ladi)");
 
   ok(usageMonth(new Date('2026-08-25T10:00:00')) === '2026-08', "sanoq oynasi: 2026-08");
   ok(usageMonth(new Date('2026-01-03T10:00:00')) === '2026-01', "yanvar nol bilan yoziladi");
@@ -1119,6 +1144,202 @@ function runPhoneTest() {
   ok(accountKeyOf('', same) === same, "bo'sh email telefonni to'smaydi");
 }
 
+
+/* ============================================================
+ * EXCEL EKSPORTI — KATAK darajasida
+ * ------------------------------------------------------------
+ * Nega bu kerak: harness `buildIncomeWorkbook` ni ILGARI ham
+ * chaqirardi, lekin faqat «bu faylni qayta yuklab bo'ladimi» deb.
+ * Katakka HECH QACHON qaramasdi. Shu sababli «Сверка» varag'idagi
+ * «ЙИЛЛАР БЎЙИЧА» bloki teskari ishora bilan yozilib turdi: ayni
+ * varaqning o'z ЖАМИ qatori «+3 500 Бизга қарздор» deyar, olti
+ * qator pastda esa «−3 500 Ҳисоб фактура ёзиш керак».
+ *
+ * Qoida bitta: FARQ = ФАКТУРА − ПУЛ, hamma joyda.
+ * ============================================================ */
+async function runIncomeExcelTest() {
+  console.log(`\n============================================================`);
+  console.log('EXCEL EKSPORTI: katakdagi ishora va varaqlar');
+
+  const party = {
+    key: '300000001',
+    name: 'ТЕСТ МЧЖ',
+    inn: '300000001',
+    aliases: ['ТЕСТ МЧЖ'],
+    bankCredit: 3000,
+    facturaSent: 6500,
+    difference: 3500,
+    monthly: {
+      '2025-03': { credit: 1000, factura: 1500 },
+      '2026-04': { credit: 2000, factura: 5000 },
+    },
+    payments: [{ date: '2025-03-10', amount: 1000, doc: '1', purpose: 'tolov' }],
+    invoices: [
+      { date: '2025-03-01', number: 'F-1', amount: 1500 },
+      { date: '2026-04-01', number: 'F-2', amount: 5000 },
+    ],
+  };
+  const report = {
+    totals: { bankCredit: 3000, facturaSent: 6500, difference: 3500 },
+    meta: {
+      ownName: 'БИЗНИНГ КОРХОНА',
+      byYear: [
+        { year: '2025', bankCredit: 1000, facturaSent: 1500, difference: 500 },
+        { year: '2026', bankCredit: 2000, facturaSent: 5000, difference: 3000 },
+      ],
+      periodFrom: '2025-01-01',
+      periodTo: '2026-12-31',
+    },
+  };
+  const shown = { credit: 3000, factura: 6500, diff: 3500 };
+  const wb = buildIncomeWorkbook(report, [party], shown, '25.08.2026', '2026-12-31');
+
+  const names = wb.worksheets.map((w) => w.name);
+  ok(
+    names.join(' | ') === 'Сверка | Йиллар | Ойма-ой | Тўловлар | Фактуралар | Қарз ёши',
+    `6 ta varaq va tartibi: ${names.join(', ')}`
+  );
+
+  const rowsOf = (ws) => {
+    const out = [];
+    ws.eachRow((r) => {
+      const v = [];
+      r.eachCell({ includeEmpty: true }, (c) => v.push(c.value));
+      out.push(v);
+    });
+    return out;
+  };
+  const sr = rowsOf(wb.getWorksheet('Сверка'));
+
+  const capIdx = sr.findIndex((r) => String(r[0] || '').startsWith('ЙИЛЛАР БЎЙИЧА'));
+  ok(capIdx > 0, '«ЙИЛЛАР БЎЙИЧА» bloki topildi');
+  const y2025 = sr.find((r) => String(r[0]) === '2025');
+  const y2026 = sr.find((r) => String(r[0]) === '2026');
+  ok(y2025 && y2025[4] === 500, `2025 farqi = factura − pul = +500 (topildi: ${y2025 && y2025[4]})`);
+  ok(y2026 && y2026[4] === 3000, `2026 farqi = factura − pul = +3000 (topildi: ${y2026 && y2026[4]})`);
+  ok(y2025 && y2025[5] === 'Бизга қарздор', `2025 izohi ishoraga MOS: «${y2025 && y2025[5]}»`);
+
+  const totals = sr.filter((r) => String(r[0]) === 'ЖАМИ');
+  ok(totals.length === 2, `«Сверка» varag'ida ikkita ЖАМИ qatori bor (${totals.length})`);
+  ok(
+    totals.length === 2 && totals[0][4] === totals[1][4],
+    `asosiy ЖАМИ (${totals[0] && totals[0][4]}) va yillar ЖАМИси (${totals[1] && totals[1][4]}) TENG`
+  );
+  ok(
+    totals.length === 2 && totals[0][5] === totals[1][5],
+    `ikkala ЖАМИ bir xil xulosa aytadi: «${totals[0] && totals[0][5]}»`
+  );
+
+  const yr = rowsOf(wb.getWorksheet('Йиллар'));
+  const yBody = yr.find((r) => String(r[0]) === 'ТЕСТ МЧЖ');
+  ok(yBody && yBody[4] === 500 && yBody[7] === 3000, "«Йиллар» varag'i «Сверка» bilan bir xil ishorada");
+
+  const expect = buildAging([party], '2026-12-31');
+  const ar = rowsOf(wb.getWorksheet('Қарз ёши'));
+  const aTotal = ar.find((r) => String(r[0]) === 'ЖАМИ');
+  ok(
+    aTotal && Math.abs(aTotal[2] - expect.totals.receivable) < 0.005,
+    `«Қарз ёши» ЖАМИси buildAging bilan teng: ${aTotal && aTotal[2]} = ${expect.totals.receivable}`
+  );
+  ok(
+    ar.some((r) => String(r[2] || '').startsWith('Ҳисоб санаси')),
+    'varaqda hisob sanasi YOZILGAN (ekran bilan solishtirish uchun)'
+  );
+}
+
+/* ============================================================
+ * KIRIM: DAVR KELISHUVI
+ * ------------------------------------------------------------
+ * Chiqim tomonida bu tekshiruv bor edi, kirimda YO'Q edi —
+ * `incomeParser.ts` da «ДАВРЛАР» so'zi umuman uchramasdi. Yil
+ * darajasidagi ogohlantirish faqat bir tomon BUTUN yil nol
+ * bo'lsa ishlaydi, ya'ni yil ICHIDAGI nomuvofiqlikni ko'rmaydi.
+ * ============================================================ */
+const IN_BANK_HEADER = ['№', 'Дата', 'Наименование плательщика', 'ИНН', 'Дебет', 'Кредит', 'Назначение платежа'];
+const IN_FAK_HEADER = [
+  'Статус', 'Счет-фактура', 'Продавец ИНН', 'Продавец наименование',
+  'Покупатель ИНН', 'Покупатель наименование', 'Сумма к оплате',
+];
+
+function incomeBankSheet(months, amount) {
+  const rows = [IN_BANK_HEADER];
+  months.forEach((m, i) => {
+    rows.push([i + 1, `15.${m}.2026`, 'ООО "MIJOZ"', '300000002', '', amount, 'товар учун тўлов']);
+  });
+  return rows;
+}
+
+function incomeFacturaSheet(months, amount) {
+  const rows = [IN_FAK_HEADER];
+  months.forEach((m, i) => {
+    rows.push([
+      'Подтвержден', `${i + 1} от 20.${m}.2026`,
+      '300000001', 'ООО "BIZ"',
+      '300000002', 'ООО "MIJOZ"',
+      amount,
+    ]);
+  });
+  return rows;
+}
+
+function incomeFile(name, aoa) {
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(aoa), 'Sheet1');
+  return { name, buffer: XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' }) };
+}
+
+function runIncomePeriodTest() {
+  console.log(`\n============================================================`);
+  console.log("KIRIM: DAVR KELISHUVI (ko'chirma <-> faktura)");
+
+  const SEVEN = ['01', '02', '03', '04', '05', '06', '07'];
+  const hasDavr = (r) => r.meta.warnings.some((w) => w.startsWith('ДАВРЛАР'));
+
+  const good = analyzeIncome([
+    incomeFile('KIRIM 7 oy oborotka.xlsx', incomeBankSheet(SEVEN, 1000000)),
+    incomeFile('KIRIM 7 oy faktura.xlsx', incomeFacturaSheet(SEVEN, 1000000)),
+  ]);
+  ok(good.parties.length > 0, `to'g'ri juftlik o'qildi (${good.parties.length} kontragent)`);
+  ok(!hasDavr(good), "to'g'ri juftlikda davr ogohlantirishi YO'Q (yolg'on signal yo'q)");
+  ok(
+    good.meta.periods.bank.from === '2026-01' && good.meta.periods.bank.to === '2026-07',
+    `bank davri: ${good.meta.periods.bank.from} … ${good.meta.periods.bank.to}`
+  );
+  ok(
+    good.meta.periods.faktura.from === '2026-01' && good.meta.periods.faktura.to === '2026-07',
+    `faktura davri: ${good.meta.periods.faktura.from} … ${good.meta.periods.faktura.to}`
+  );
+
+  const bad = analyzeIncome([
+    incomeFile('KIRIM 1 oy oborotka.xlsx', incomeBankSheet(['07'], 1000000)),
+    incomeFile('KIRIM 7 oy faktura.xlsx', incomeFacturaSheet(SEVEN, 1000000)),
+  ]);
+  ok(hasDavr(bad), "1 oylik ko'chirma + 7 oylik faktura — OGOHLANTIRISH chiqdi");
+  const w = bad.meta.warnings.find((x) => x.startsWith('ДАВРЛАР')) || '';
+  ok(w.includes('2026-07') && w.includes('2026-01'), 'ogohlantirish IKKALA davrni aytdi');
+  ok(/\d{1,3}%/.test(w), 'ogohlantirish qancha pul tashqarida qolganini AYTDI');
+  ok(
+    !bad.meta.warnings.some((x) => /БАНК КЎЧИРМАСИ юкланмаган/.test(x)),
+    'yil darajasidagi eski ogohlantirish bu holatni USHLAMAYDI (yangisi shuning uchun kerak edi)'
+  );
+  for (const x of bad.meta.warnings.filter((y) => y.startsWith('ДАВРЛАР'))) console.log('  ⚠  ' + x);
+
+  const none = analyzeIncome([
+    incomeFile('KIRIM yanvar oborotka.xlsx', incomeBankSheet(['01'], 1000000)),
+    incomeFile('KIRIM iyul faktura.xlsx', incomeFacturaSheet(['07'], 1000000)),
+  ]);
+  ok(
+    none.meta.warnings.some((x) => x.startsWith('ДАВРЛАР УМУМАН МОС КЕЛМАЙДИ')),
+    "kesishmaydigan davrlar uchun ALOHIDA, qat'iyroq ogohlantirish"
+  );
+
+  ok(
+    Math.abs(good.totals.facturaSent - 7000000) < 0.5 &&
+      Math.abs(good.totals.bankCredit - 7000000) < 0.5,
+    `davr tekshiruvi hisobga TEGMADI (${good.totals.bankCredit} / ${good.totals.facturaSent})`
+  );
+}
+
 for (const name of Object.keys(ETALON)) run(name, [name]);
 run('IMANMAX 7 oylik (oborotka + faktura)', [
   'IMANMAX 7 oylik OBOROTKA.xlsx',
@@ -1129,14 +1350,17 @@ runSwapTest();
 runPeriodTest();
 runOpenInvoiceTest();
 runMergeTest();
-runPlanLimitTest();
 runInviteKeyTest();
 runFailureLogTest();
 runPhoneTest();
+runIncomePeriodTest();
 
 // Eksportni qayta o'qish sinovi ExcelJS tufayli asinxron — shuning
 // uchun yakuniy hisob shu yerda chiqariladi.
-runOwnExportTest().then(() => {
+runPlanLimitTest()
+  .then(runOwnExportTest)
+  .then(runIncomeExcelTest)
+  .then(() => {
   console.log('\n============================================================');
   console.log(
     failed === 0

@@ -174,6 +174,10 @@ function rowKey(tx: AggregatedTx): string {
 }
 interface ReconciliationReportDoc {
   companyId: string;
+  /** Қўлда бирлаштирилган гуруҳлар. Илгари САҚЛАНМАСДИ: сақланган
+   *  ҳисоботни очганда жадвал бирлашган ҳолда келарди, лекин
+   *  «Бирлаштириш» ойнаси бўш кўринарди — бухгалтер ажратолмасди. */
+  merges?: MergeGroup[];
   savedAt?: { toMillis: () => number; toDate: () => Date };
   /** Қайси давр кесими сақлангани (`handleSaveToFirebase` ёзади) */
   period?: { year: number | null; month: number | null; cumulative: boolean; label: string } | null;
@@ -213,9 +217,20 @@ function sortedPeriods(monthlyData: Record<string, MonthlyBucket>): string[] {
 //
 // Кирим сверкасидаги `verdict` билан БИР ХИЛ маъно: мусбат = улар
 // қарздор. Ранг дизайн тизимидан келади.
+/** ЯКУНИЙ рақамнинг ранги — кирим сверкасидаги `totalTone` билан
+ *  бир хил қоида: нол «фарқ йўқ», яъни ЯХШИ хабар («ok»). Илгари
+ *  тепадаги карта нолда яшил, жадвал ости эса «default» эди. */
+function totalTone(diff: number): Tone {
+  return Math.abs(diff) <= 0.01 ? "ok" : verdict(diff).tone;
+}
+
 function verdict(diff: number): { text: string; tone: Tone } {
-  if (diff > 0) return { text: "Ҳисоб фактура олиш керак", tone: "warn" };
-  if (diff < 0) return { text: "Қарзмиз", tone: "bad" };
+  // ЧЕГАРА (0.01) кирим сверкасидаги билан БИР ХИЛ. Усиз 0,004 сўмлик
+  // сузувчи нуқта қолдиғи бор қатор фильтр учун «тенг» (у
+  // `Math.abs(diff) <= 0.01` ишлатади), «Изоҳ» устуни учун эса
+  // «Ҳисоб фактура олиш керак» бўларди — битта қатор ўзига зид.
+  if (diff > 0.01) return { text: "Ҳисоб фактура олиш керак", tone: "warn" };
+  if (diff < -0.01) return { text: "Қарзмиз", tone: "bad" };
   return { text: "-", tone: "muted" };
 }
 
@@ -396,6 +411,7 @@ export default function OutgoingReconciliation({
             }));
             setParsedData(correctedData);
             setSelectedInns(correctedData.filter((d) => catOf(d) === "korxona").map((d) => rowKey(d)));
+            setMerges(latestReport.merges || []);
             setActiveReportId(latestReport.id);
             setRestoredAt(formatStamp(stampToDate(latestReport.savedAt)));
           }
@@ -930,6 +946,7 @@ export default function OutgoingReconciliation({
     }));
     setParsedData(corrected);
     setSelectedInns(corrected.filter((x) => catOf(x) === "korxona").map((x) => rowKey(x)));
+    setMerges(d.merges || []);
     setActiveReportId(d.id);
     setRestoredAt(formatStamp(stampToDate(d.savedAt)));
   };
@@ -1036,6 +1053,7 @@ export default function OutgoingReconciliation({
         period,
         totals,
         diffCount,
+        merges,
         firmsData: selectedFullData,
       });
       // `serverTimestamp()` klientda hali BO'SH — tarix qatori sanasiz
@@ -1050,6 +1068,7 @@ export default function OutgoingReconciliation({
             savedAt: localStamp,
             period,
             totals,
+            merges,
             firmsData: selectedFullData,
           },
           ...prev,
@@ -1472,7 +1491,7 @@ export default function OutgoingReconciliation({
               label={`${t("Фарқи")} · ${t("корхоналар")} (${periodTitle})`}
               count={companyDiff}
               format={formatNum}
-              tone={Math.abs(companyDiff) <= 0.01 ? "ok" : verdict(companyDiff).tone}
+              tone={totalTone(companyDiff)}
               hint={
                 <>
                   {periodTotals.otherCount > 0 ? (
@@ -1592,7 +1611,11 @@ export default function OutgoingReconciliation({
                 </Select>
               </div>
 
-              <div className="flex shrink-0 gap-2">
+              {/* `flex-wrap` ШАРТ: тўртта тугма 675px, тор экранда
+                  (375px) саҳифа 707px га сурилиб кетарди — ўлчанган.
+                  `shrink-0` эса қолади: кенг экранда тугмалар
+                  сиқилмасин. */}
+              <div className="flex shrink-0 flex-wrap gap-2">
                 <Button
                   variant="secondary"
                   onClick={() => setBalanceOpen(true)}
@@ -1647,7 +1670,12 @@ export default function OutgoingReconciliation({
 
             {/* JADVAL */}
             <div className="p-4">
-              <TableFrame>
+              {/* `maxHeight` ШАРТ. `TableFrame` да `overflow-auto` бор —
+                  у sticky учун «ойна» бўлади; баландлиги чекланмаса
+                  ойна ҳеч қачон сурилмайди ва `Thead sticky` ҳам,
+                  `Tfoot sticky` ҳам БЕКОР бўлади (ўлчанган: саҳифа
+                  972px сурилганда шапка y = −599). */}
+              <TableFrame maxHeight="max-h-[70vh]">
                 <Table>
                   <Thead sticky>
                     <tr>
@@ -1925,7 +1953,7 @@ ${t("Ўзгартирган")}: ${who.by}${who.at ? ` · ${who.at.slice(0, 10)}`
                         )}
                         <NumTd tone="cash">{formatNum(grandTotals.debit)}</NumTd>
                         <NumTd tone="invoice">{formatNum(grandTotals.credit)}</NumTd>
-                        <NumTd tone={grandTotals.diff === 0 ? "default" : verdict(grandTotals.diff).tone}>
+                        <NumTd tone={totalTone(grandTotals.diff)}>
                           {formatNum(grandTotals.diff)}
                         </NumTd>
                         {showOpening && (
@@ -1939,7 +1967,7 @@ ${t("Ўзгартирган")}: ${who.by}${who.at ? ` · ${who.at.slice(0, 10)}`
                             )}
                           </NumTd>
                         )}
-                        <Td className={cx("text-caption", toneText[verdict(grandTotals.diff).tone])}>
+                        <Td className={cx("text-caption", toneText[totalTone(grandTotals.diff)])}>
                           {t(verdict(grandTotals.diff).text)}
                         </Td>
                         <Td />

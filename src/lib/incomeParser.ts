@@ -96,6 +96,13 @@ export interface YearTotal {
   difference: number;
 }
 
+/** Бир томоннинг даври: 'YYYY-MM' чегаралари + сanasiz ҳужжатлар сони */
+export interface IncomePeriod {
+  from: string | null;
+  to: string | null;
+  undated: number;
+}
+
 export interface IncomeReport {
   parties: PartyRow[];
   totals: {
@@ -114,8 +121,14 @@ export interface IncomeReport {
     invoiceCount: number;
     skippedInvoices: SkippedInvoice[];
     byYear: YearTotal[];
+    /** Банк кўчирмасининг даври (тўловлар бўйича) */
     periodFrom: string | null;
     periodTo: string | null;
+    /** ИККАЛА томоннинг даври алоҳида. Чиқим сверкасида бу аллақачон
+     *  бор эди (`statementAudit.ts`), киримда эса фактура даври
+     *  умуман ҳисобланмасди — шу сабабли «1 ойлик кўчирма + 7 ойлик
+     *  фактура» жимгина ўтиб кетарди. */
+    periods: { bank: IncomePeriod; faktura: IncomePeriod };
     warnings: string[];
     /** Ҳар файл учун қолдиқ тенгламаси: бошланғич қолдиқ + кредит −
      *  дебет = охирги қолдиқ. «Итого»дан мустақил назорат. */
@@ -851,6 +864,12 @@ export interface IncomeOptions {
   includePending?: boolean;
 }
 
+/** Иккинчи файл қамрамаган даврдаги пул улуши шу чегарадан ошса
+ *  огоҳлантирилади. Чиқим сверкасидаги билан АЙНАН бир хил (10%):
+ *  июл тўлови июн фактурасини ёпиши нормал ҳол ва у бир неча фоиз
+ *  бўлади; 7 ойлик фарқ эса 70% дан ошади. */
+const PERIOD_MISMATCH_SHARE = 0.10;
+
 export function analyzeIncome(files: InputFile[], options: IncomeOptions = {}): IncomeReport {
   const includePending = options.includePending === true;
   const warnings: string[] = [];
@@ -1240,6 +1259,79 @@ export function analyzeIncome(files: InputFile[], options: IncomeOptions = {}): 
     }
   }
 
+  // ============================================================
+  // DAVR KELISHUVI — «ko'chirma va faktura BIR XIL davrmi?»
+  // ------------------------------------------------------------
+  // Chiqim tomonida bu tekshiruv bor edi, kirimda YO'Q edi. Haqiqiy
+  // fayllarda o'lchangan: 1 oylik ko'chirma + 7 oylik faktura =
+  // milliardlik SOXTA farq va bitta ham ogohlantirish yo'q.
+  //
+  // Yil darajasidagi ogohlantirish (pastda) buni USHLAMAYDI: u faqat
+  // bir tomon BUTUN yil bo'yi nol bo'lsa ishlaydi. Bu yerdagi
+  // tekshiruv esa yil ICHIDAGI mos kelmaslikni ko'radi.
+  //
+  // Qoida qattiq EMAS: iyul to'lovi iyun fakturasini yopishi normal
+  // hol. Chegara — QAMRALMAGAN oylardagi PULNING ulushi.
+  // ============================================================
+  const monthsBy = { bank: new Map<string, number>(), faktura: new Map<string, number>() };
+  let undatedBank = 0;
+  let undatedFaktura = 0;
+  for (const p of list) {
+    for (const pay of p.payments) {
+      if (!pay.date) { undatedBank += pay.amount; continue; }
+      const m = pay.date.slice(0, 7);
+      monthsBy.bank.set(m, (monthsBy.bank.get(m) || 0) + pay.amount);
+    }
+    for (const inv of p.invoices) {
+      if (!inv.date) { undatedFaktura += inv.amount; continue; }
+      const m = inv.date.slice(0, 7);
+      monthsBy.faktura.set(m, (monthsBy.faktura.get(m) || 0) + inv.amount);
+    }
+  }
+
+  const rangeOf = (m: Map<string, number>, undated: number): IncomePeriod => {
+    const keys = [...m.keys()].sort();
+    return { from: keys[0] ?? null, to: keys[keys.length - 1] ?? null, undated };
+  };
+  const bankRange = rangeOf(monthsBy.bank, undatedBank);
+  const facturaRange = rangeOf(monthsBy.faktura, undatedFaktura);
+
+  if (bankRange.from && facturaRange.from) {
+    /** Ikkinchi tomon UMUMAN qamramagan oylardagi pul ulushi */
+    const outsideShare = (mine: Map<string, number>, other: IncomePeriod) => {
+      let outside = 0;
+      let total = 0;
+      for (const [month, amount] of mine) {
+        total += amount;
+        if (month < other.from! || month > other.to!) outside += amount;
+      }
+      return { outside, total, share: total > 0 ? outside / total : 0 };
+    };
+
+    const noOverlap = bankRange.to! < facturaRange.from! || facturaRange.to! < bankRange.from!;
+    const b = outsideShare(monthsBy.bank, facturaRange);
+    const f = outsideShare(monthsBy.faktura, bankRange);
+    const worst = f.share >= b.share ? { ...f, label: 'фактура рўйхатининг' } : { ...b, label: 'банк кўчирмасининг' };
+    const shownRange = (r: IncomePeriod) => (r.from === r.to ? r.from : `${r.from} … ${r.to}`);
+    const money = (n: number) => n.toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+    if (noOverlap) {
+      warnings.push(
+        `ДАВРЛАР УМУМАН МОС КЕЛМАЙДИ: банк кўчирмаси ${shownRange(bankRange)}, ` +
+        `фактура рўйхати ${shownRange(facturaRange)} даврини қамрайди. Бу иккитаси ` +
+        `бошқа-бошқа давр — уларни солиштириб бўлмайди. Бир хил давр учун файл юкланг.`
+      );
+    } else if (worst.share >= PERIOD_MISMATCH_SHARE) {
+      warnings.push(
+        `ДАВРЛАР МОС КЕЛМАЙДИ: банк кўчирмаси ${shownRange(bankRange)}, фактура рўйхати ` +
+        `${shownRange(facturaRange)} даврини қамрайди. Шу сабабли ${worst.label} ` +
+        `${money(worst.outside)} сўми (${Math.round(worst.share * 100)}%) иккинчи файлда ` +
+        `УМУМАН ЙЎҚ даврга тегишли ва фарқ сифатида кўринади. Икки файл бир хил ` +
+        `даврни қамраши керак.`
+      );
+    }
+  }
+
   // Yillar kesimida (bir necha yillik fayllar birga yuklanганда kerak)
   const NO_DATE = 'Санасиз';
   const yearMap = new Map<string, YearTotal>();
@@ -1297,6 +1389,7 @@ export function analyzeIncome(files: InputFile[], options: IncomeOptions = {}): 
       byYear,
       periodFrom: from,
       periodTo: to,
+      periods: { bank: bankRange, faktura: facturaRange },
       warnings,
       balanceChecks,
     },

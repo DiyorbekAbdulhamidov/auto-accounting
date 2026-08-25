@@ -27,7 +27,6 @@ import { useAuth } from "@/context/AuthContext";
 import { useLocale, useT } from "@/context/LanguageContext";
 import { BRAND } from "@/lib/brand";
 import { path } from "@/lib/routes";
-import { PLANS } from "@/lib/plans";
 import { LogoMark } from "@/components/Brand";
 import { ReconciliationAnimationText } from "@/components/guide/ReconciliationAnimation";
 import LedgerPanel from "./LedgerPanel";
@@ -105,7 +104,7 @@ export function Hero() {
             </div>
 
             <p className="mt-3 text-caption text-ink-3">
-              {t("Карта сўралмайди. Бепул режада ойига 3 та сверка, корхона сони чекланмайди.")}
+              {t("Карта сўралмайди, тўлов сўралмайди. Ҳамма имконият очиқ ва чекловсиз.")}
             </p>
 
             <div className="mt-7">
@@ -274,41 +273,29 @@ export function Comparison() {
    тузилма; бу файлда турса, иккиси ҳам ўқилмас бўлиб қоларди. */
 
 /* ============================================================
-   НАРХ
+   НАРХ ЙЎҚ — ҲАММАСИ БЕПУЛ
    ------------------------------------------------------------
-   Чеклов СВЕРКА сонига эмас, КОРХОНА сонига (src/lib/plans.ts).
-   Нарх шу файлдан олинади — иккита жойда ёзилса, биттаси эскирарди.
-   ============================================================ */
+   Илгари бу ерда учта тариф картаси турарди (Бепул / Бухгалтер /
+   Бюро). Қарор 2026-08-25 (эгаси): дастур ҳали ёш, аввал одамлар
+   ишлатиб ўрганиши керак — шунинг учун ҳамма имконият чекловсиз
+   ва бепул, сайт эса нарх ҳақида ҲЕЧ НАРСА демайди.
 
-function money(n: number): string {
-  return n.toLocaleString("ru-RU");
-}
+   Тарифлар КОДДА қолди (`src/lib/plans.ts`) — фақат кўрсатилмайди.
+   Пул сўраладиган пайт келганда улар тайёр туради.
+   ============================================================ */
 
 export function Pricing({ heading = true }: { heading?: boolean }) {
   const t = useT();
   const locale = useLocale();
-  const items = [
-    {
-      plan: PLANS.free,
-      key: "free",
-      forWhom: "Синаб кўриш учун",
-      lines: ["Ойига 3 та сверка", "Корхона чексиз", "1 фойдаланувчи", "Барча ҳисоботлар"],
-      highlight: false,
-    },
-    {
-      plan: PLANS.buxgalter,
-      key: "buxgalter",
-      forWhom: "Мижозлари бор бухгалтер учун",
-      lines: ["Сверка чексиз", "Корхона чексиз", "1 фойдаланувчи", "Барча ҳисоботлар"],
-      highlight: true,
-    },
-    {
-      plan: PLANS.byuro,
-      key: "byuro",
-      forWhom: "Жамоа билан ишлайдиган бюро учун",
-      lines: ["Сверка чексиз", "Корхона чексиз", "5 фойдаланувчи", "Умумий иш майдони"],
-      highlight: false,
-    },
+
+  // Учта устун ЎРНИГА битта рўйхат: солиштирадиган нарса йўқ, демак
+  // карта ҳам, «Кўпчиликка мос» белгиси ҳам керак эмас.
+  const lines = [
+    "Сверка сони чекланмайди",
+    "Корхона сони чекланмайди",
+    "Фойдаланувчи сони чекланмайди",
+    "Акт сверки ва Excel ҳисобот",
+    "Қарз ёши, формат хотираси, бирлаштириш",
   ];
 
   return (
@@ -316,80 +303,48 @@ export function Pricing({ heading = true }: { heading?: boolean }) {
       <Reveal>
         {heading && (
           <>
-            <h2 className="text-title font-semibold text-ink">{t("Нарх")}</h2>
+            <h2 className="text-title font-semibold text-ink">{t("Ҳозирча ҳаммаси бепул")}</h2>
             <p className="mt-3 max-w-2xl text-lead text-ink-2">
-              {t("Корхона сони чекланмайди. Бепул режада ойига 3 та сверка — бир мижознинг айни ўша даврини қайта юклаш янги сверка ҳисобланмайди.")}
+              {t("Барча имкониятлар очиқ ва чекловсиз. Карта сўралмайди, тўлов сўралмайди, синов муддати йўқ.")}
             </p>
           </>
         )}
 
-        <div className={cx("grid grid-cols-1 gap-5 md:grid-cols-3", heading && "mt-8")}>
-          {items.map((it) => (
-            <Card
-              key={it.key}
-              lift
-              // Танланган режа РАМКА билан эмас, БАЛАНДЛИК билан
-              // ажралади: у қоғоздан бир поғона юқорида туради.
-              elevation={it.highlight ? 2 : 1}
-              className={cx(
-                "relative flex h-full flex-col overflow-hidden",
-                it.highlight && "border-accent"
-              )}
-            >
-              {it.highlight && (
-                <span className="brand-gradient absolute inset-x-0 top-0 h-1" />
-              )}
-              <div className="flex items-center justify-between gap-2">
-                <h3 className="text-h3 font-semibold text-ink">{t(it.plan.label)}</h3>
-                {it.highlight && <Badge tone="info">{t("Кўпчиликка мос")}</Badge>}
-              </div>
-              <p className="mt-1 text-caption text-ink-3">{t(it.forWhom)}</p>
-
-              {/* `tabular` ФАҚАТ рақамда. Илгари у бутун қаторда
-                  эди ва «Бепул» СЎЗИ моношрифтда чиқарди — сўз
-                  моношрифтда «код» бўлиб кўринади (ўлчанган). */}
-              <p className="mt-4 text-num font-semibold text-ink">
-                {it.plan.priceUzs === 0 ? (
-                  t("Бепул")
-                ) : (
-                  <>
-                    <span className="tabular">{money(it.plan.priceUzs)}</span>
-                    <span className="ml-1.5 text-caption font-medium text-ink-3">
-                      {t("сўм/ой")}
-                    </span>
-                  </>
-                )}
+        <Card elevation={2} className={cx("relative overflow-hidden", heading && "mt-8")}>
+          <span className="brand-gradient absolute inset-x-0 top-0 h-1" />
+          <div className="flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
+            <div className="min-w-0">
+              {/* `tabular` ФАҚАТ рақамда — «Бепул» СЎЗИ моношрифтда
+                  «код» бўлиб кўринарди (ўлчанган). */}
+              <p className="text-num font-semibold text-ink">{t("Бепул")}</p>
+              <p className="mt-1 text-caption text-ink-3">
+                {t("Ҳамма учун — мустақил бухгалтер ҳам, жамоа ҳам")}
               </p>
+            </div>
 
-              {/* Uchta rejada 12 ta bir xil yashil «✓» turardi. Belgi
-                  hamma qatorda bir xil bo'lsa, u ma'lumot emas — bezak.
-                  Chiziq esa qatorni ajratadi va solishtirishni osonlashtiradi. */}
-              <ul className="mt-4 flex-1 divide-y divide-line border-t border-line">
-                {it.lines.map((l) => (
-                  <li key={l} className="py-2 text-body text-ink-2">
-                    {t(l)}
-                  </li>
-                ))}
-              </ul>
+            <ul className="flex-1 divide-y divide-line border-t border-line md:max-w-md md:border-t-0">
+              {lines.map((l) => (
+                <li key={l} className="py-2 text-body text-ink-2">
+                  {t(l)}
+                </li>
+              ))}
+            </ul>
 
-              <NextLink
-                href={path("login", locale)}
-                className={cx(
-                  buttonClasses(it.highlight ? "primary" : "secondary", "md", { block: true }),
-                  "mt-5"
-                )}
-              >
-                {t("Бепул бошлаш")}
-              </NextLink>
-            </Card>
-          ))}
-        </div>
+            <NextLink
+              href={path("login", locale)}
+              className={cx(buttonClasses("primary", "md"), "shrink-0")}
+            >
+              {t("Бепул бошлаш")}
+              <ArrowRight className="h-4 w-4" />
+            </NextLink>
+          </div>
+        </Card>
 
-        {/* ҲАЛОЛ ЭСЛАТМА. Тўлов ҳали уланмаган — буни яширмаган
-            маъқул: одам тугмани босиб, кейин билиб қолса ишонч
-            йўқолади. */}
+        {/* ҲАЛОЛ ЭСЛАТМА. «Ҳозирча» деган сўз яширилмайди: одам
+            кейин пулли бўлишидан хабардор бўлсин, лекин бу
+            жимгина эмас, олдиндан эълон қилинади. */}
         <p className="mt-4 text-caption text-ink-3">
-          {t("Ҳозирча тўлов қабул қилинмайди — ҳамма ҳисоб бепул режада ишлайди. Пулли режа керак бўлса, ёзиб қолдиринг: ким сўраганини биламиз ва аввал ўшаларга очамиз.")}
+          {t("Дастур ҳали ёш. Кейинчалик пулли режа пайдо бўлса, буни олдиндан эълон қиламиз — ҳисобингиз жимгина қулфланмайди.")}
         </p>
       </Reveal>
     </section>

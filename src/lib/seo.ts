@@ -31,7 +31,7 @@ const UZ: Record<PathKey, SeoCopy> = {
     description:
       "Bank ko'chirmasi va faktura ro'yxatini yuklang — tizim har bir kontragent bo'yicha " +
       "raqamlarni tekshiradi va farq borlarini ajratib beradi. Akt sverki, qarzdorlik yoshi, " +
-      "Excel hisobot. Bepul rejada oyiga 3 ta sverka.",
+      "Excel hisobot. Hammasi bepul va cheklovsiz.",
     keywords: [
       "buxgalteriya dasturi",
       "sverka",
@@ -57,10 +57,10 @@ const UZ: Record<PathKey, SeoCopy> = {
     ],
   },
   pricing: {
-    title: "Narx — bepul rejada oyiga 3 ta sverka",
+    title: "Narx yo'q — hammasi bepul",
     description:
-      "Korxona soni cheklanmaydi. Bepul: oyiga 3 ta sverka. Buxgalter: 9 999 so'm/oy, " +
-      "korxona cheksiz. Byuro: 39 999 so'm/oy, 5 foydalanuvchi.",
+      "Sverka soni ham, korxona soni ham, foydalanuvchi soni ham cheklanmaydi. " +
+      "Karta so'ralmaydi, sinov muddati yo'q — ro'yxatdan o'tasiz va ishlaysiz.",
     keywords: [
       "buxgalteriya dasturi narxi",
       "sverka dasturi narx",
@@ -73,7 +73,7 @@ const UZ: Record<PathKey, SeoCopy> = {
     description:
       "Qoldiq tenglamasi fayl to'g'riligini o'zi tekshiradi. Notanish bank shaklini tizim " +
       "o'rganib oladi. Kommunal va byudjet ajratiladi, JAMI to'liq qoladi. Akt sverki va " +
-      "5 varaqli Excel hisobot.",
+      "6 varaqli Excel hisobot.",
     keywords: [
       "qoldiq tenglamasi",
       "bank formatlari",
@@ -84,7 +84,7 @@ const UZ: Record<PathKey, SeoCopy> = {
   },
   login: {
     title: "Kirish",
-    description: "Hisobingizga kiring yoki bepul ro'yxatdan o'ting — oyiga 3 ta sverka bepul.",
+    description: "Hisobingizga kiring yoki bepul ro'yxatdan o'ting — hammasi cheklovsiz.",
     keywords: [],
   },
   offer: {
@@ -117,7 +117,7 @@ const UZ_CYRL: Record<PathKey, SeoCopy> = {
     description:
       "Банк кўчирмаси ва фактура рўйхатини юкланг — тизим ҳар бир контрагент бўйича " +
       "рақамларни текширади ва фарқ борларини ажратиб беради. Акт сверки, қарздорлик ёши, " +
-      "Excel ҳисобот. Бепул режада ойига 3 та сверка.",
+      "Excel ҳисобот. Ҳаммаси бепул ва чекловсиз.",
     keywords: [
       "буxгалтерия дастури",
       "сверка",
@@ -137,10 +137,10 @@ const UZ_CYRL: Record<PathKey, SeoCopy> = {
     keywords: ["сверка қандай қилинади", "акт сверки тайёрлаш", "буxгалтерия қўлланма"],
   },
   pricing: {
-    title: "Нарх — бепул режада ойига 3 та сверка",
+    title: "Нарх йўқ — ҳаммаси бепул",
     description:
-      "Корхона сони чекланмайди. Бепул: ойига 3 та сверка. Буxгалтер: 9 999 сўм/ой, " +
-      "корхона чексиз. Бюро: 39 999 сўм/ой, 5 фойдаланувчи.",
+      "Сверка сони ҳам, корхона сони ҳам, фойдаланувчи сони ҳам чекланмайди. " +
+      "Карта сўралмайди, синов муддати йўқ — рўйхатдан ўтасиз ва ишлайсиз.",
     keywords: ["буxгалтерия дастури нархи", "сверка дастури нарх", "бепул буxгалтерия дастури"],
   },
   features: {
@@ -148,12 +148,12 @@ const UZ_CYRL: Record<PathKey, SeoCopy> = {
     description:
       "Қолдиқ тенгламаси файл тўғрилигини ўзи текширади. Нотаниш банк шаклини тизим " +
       "ўрганиб олади. Коммунал ва бюджет ажратилади, ЖАМИ тўлиқ қолади. Акт сверки ва " +
-      "5 варақли Excel ҳисобот.",
+      "6 варақли Excel ҳисобот.",
     keywords: ["қолдиқ тенгламаси", "банк форматлари", "қарздорлик ёши", "акт сверки excel"],
   },
   login: {
     title: "Кириш",
-    description: "Ҳисобингизга киринг ёки бепул рўйхатдан ўтинг — ойига 3 та сверка бепул.",
+    description: "Ҳисобингизга киринг ёки бепул рўйхатдан ўтинг — ҳаммаси чекловсиз.",
     keywords: [],
   },
   offer: {
@@ -186,7 +186,7 @@ const RU: Record<PathKey, SeoCopy> = {
     description:
       "Загрузите выписку банка и реестр счетов-фактур — система сверит суммы по каждому " +
       "контрагенту и покажет, где расхождение. Акт сверки, анализ дебиторской задолженности " +
-      "по срокам, выгрузка в Excel. Бесплатно: 3 сверки в месяц.",
+      "по срокам, выгрузка в Excel. Всё бесплатно и без ограничений.",
     keywords: [
       "сверка взаиморасчетов",
       "акт сверки",
@@ -212,10 +212,10 @@ const RU: Record<PathKey, SeoCopy> = {
     ],
   },
   pricing: {
-    title: "Цены — бесплатно 3 сверки в месяц",
+    title: "Цены нет — всё бесплатно",
     description:
-      "Количество организаций не ограничено. Бесплатно: 3 сверки в месяц. " +
-      "Бухгалтер: 9 999 сум/мес, организаций без ограничений. Бюро: 39 999 сум/мес, 5 пользователей.",
+      "Не ограничены ни количество сверок, ни количество организаций, ни количество пользователей. " +
+      "Карта не нужна, пробного периода нет — просто зарегистрируйтесь и работайте.",
     keywords: [
       "цена бухгалтерской программы",
       "стоимость сверки",
@@ -239,7 +239,7 @@ const RU: Record<PathKey, SeoCopy> = {
   },
   login: {
     title: "Вход",
-    description: "Войдите в аккаунт или зарегистрируйтесь бесплатно — 3 сверки в месяц.",
+    description: "Войдите в аккаунт или зарегистрируйтесь бесплатно — всё без ограничений.",
     keywords: [],
   },
   offer: {
@@ -272,7 +272,7 @@ const EN: Record<PathKey, SeoCopy> = {
     description:
       "Upload a bank statement and an invoice register — the system checks every counterparty " +
       "and shows where the numbers disagree. Reconciliation act, receivables ageing, Excel export. " +
-      "Free plan: 3 reconciliations a month.",
+      "Everything is free and unlimited.",
     keywords: [
       "reconciliation software",
       "accounts reconciliation",
@@ -290,10 +290,9 @@ const EN: Record<PathKey, SeoCopy> = {
     keywords: ["how to reconcile accounts", "reconciliation act", "bank statement parsing"],
   },
   pricing: {
-    title: "Pricing — 3 free reconciliations a month",
+    title: "No pricing — everything is free",
     description:
-      "No limit on companies. Free: 3 reconciliations a month. Accountant: 9,999 UZS/month, " +
-      "unlimited companies. Bureau: 39,999 UZS/month, 5 users.",
+      "Reconciliations, companies and users are all unlimited. No card, no trial period \u2014 just sign up and work.",
     keywords: ["reconciliation software pricing", "accounting software price", "free reconciliation tool"],
   },
   features: {
@@ -305,7 +304,7 @@ const EN: Record<PathKey, SeoCopy> = {
   },
   login: {
     title: "Sign in",
-    description: "Sign in or create a free account — 3 reconciliations a month.",
+    description: "Sign in or create a free account — everything is unlimited.",
     keywords: [],
   },
   offer: {

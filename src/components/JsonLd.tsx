@@ -76,26 +76,19 @@ export function ProductJsonLd({ locale, lang }: { locale: Locale; lang: Lang }) 
               translate("Акт сверки", lang),
               translate("Қарздорлик ёши", lang),
             ],
-            offers: [
-              {
-                "@type": "Offer",
-                name: translate(PLANS.free.label, lang),
-                price: 0,
-                priceCurrency: "UZS",
-              },
-              {
-                "@type": "Offer",
-                name: translate(PLANS.buxgalter.label, lang),
-                price: PLANS.buxgalter.priceUzs,
-                priceCurrency: "UZS",
-              },
-              {
-                "@type": "Offer",
-                name: translate(PLANS.byuro.label, lang),
-                price: PLANS.byuro.priceUzs,
-                priceCurrency: "UZS",
-              },
-            ],
+            /* БИТТА таклиф: 0 сўм.
+               ------------------------------------------------------------
+               Илгари бу ерда учта Offer турарди ва иккитасида 9 999 /
+               39 999 сўм ёзилганди. Дастур бепул бўлгач, тузилмали
+               маълумотда нарх қолиши — қидирув натижасида «дан 9 999
+               сўм» деб чиқиши демакдир, яъни саҳифада йўқ нарса. */
+            offers: {
+              "@type": "Offer",
+              name: translate(PLANS.free.label, lang),
+              price: 0,
+              priceCurrency: "UZS",
+              availability: "https://schema.org/InStock",
+            },
           },
         ],
       }}

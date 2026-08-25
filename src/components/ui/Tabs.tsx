@@ -68,7 +68,12 @@ export default function Tabs<K extends string>({
           </button>
         );
       })}
-      {actions && <div className="ml-auto flex items-center gap-2">{actions}</div>}
+      {/* `flex-wrap` ШАРТ. Усиз бу қути БЎЛИНМАС блок бўлиб қоларди:
+          кирим сверкасидаги тўртта тугма 631px, шу сабабли 640px лик
+          экранда САҲИФА ЎНГГА СУРИЛАРДИ (ўлчанган: 375px да
+          scrollWidth 707px, яъни 282px). Тугмалар энди ўзаро ҳам
+          қаторга бўлинади. */}
+      {actions && <div className="ml-auto flex flex-wrap items-center gap-2">{actions}</div>}
     </div>
   );
 }

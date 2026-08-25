@@ -89,21 +89,16 @@ const OFFER_CYRL: LegalDoc = {
     {
       h: '4. Хизмат нархи ва тўлов тартиби',
       items: [
-        'Бепул режа: ойига 3 та сверка ва 1 та фойдаланувчи, корхона сони чекланмайди. Тўлов талаб қилинмайди, ' +
-          'карта сўралмайди.',
-        '«Бухгалтер» режаси: ойига 9 999 сўм. Корхона сони чекланмайди, 1 та фойдаланувчи.',
-        '«Бюро» режаси: ойига 39 999 сўм. Корхона сони чекланмайди, 5 тагача фойдаланувчи.',
-        'Сверкалар сони ҳамма режада чекланмайди.',
-        'Нархлар Ўзбекистон сўмида кўрсатилган ва бошқа солиқлар қўшилмайди.',
-        'Тўлов бир ой учун олдиндан амалга оширилади.',
-        'Ҳозирча тўлов қўлда қабул қилинади: Фойдаланувчи ' + MERCHANT.telegram +
-          ' Телеграм каналига ёзади, тўлов реквизитларини ўша ерда олади ва ' +
-          'тўловни амалга оширади. Тўлов чеки юборилгач режа очилади — одатда ' +
-          'бир неча соат ичида, кечи билан 1 иш куни.',
-        'Онлайн тўлов тизими уланганидан кейин тўлов у орқали ҳам қабул қилинади ' +
-          'ва ушбу офертада эълон қилинади.',
-        'Ижрочи нархни ўзгартириш ҳуқуқига эга. Янги нарх фақат кейинги тўлов даврига ' +
-          'татбиқ этилади — тўланган давр ўзгармайди.',
+        'Ҳозирги вақтда хизмат ТЎЛИҚ БЕПУЛ тақдим этилади. Сверкалар сони, корхоналар ' +
+          'сони ва фойдаланувчилар сони чекланмайди.',
+        'Тўлов талаб қилинмайди, карта ва бошқа тўлов маълумотлари сўралмайди. ' +
+          'Тизимда тўлов қабул қилиш йўли уланмаган.',
+        'Синов муддати белгиланмаган: хизматдан фойдаланиш вақт билан чекланмайди.',
+        'Ижрочи келажакда пулли режалар жорий қилиш ҳуқуқига эга. Бундай ҳолда янги ' +
+          'шартлар ушбу офертада эълон қилинади ва Фойдаланувчига камида 30 (ўттиз) ' +
+          'кун олдин маълум қилинади.',
+        'Пулли режалар жорий қилинганида ҳам Фойдаланувчининг мавжуд маълумотлари ' +
+          'ўчирилмайди ва ҳисоби огоҳлантиришсиз тўсиб қўйилмайди.',
       ],
     },
     {
@@ -202,21 +197,16 @@ const OFFER_RU: LegalDoc = {
     {
       h: '4. Стоимость и порядок оплаты',
       items: [
-        'Бесплатный тариф: 3 сверки в месяц и 1 пользователь, количество организаций не ограничено. Оплата не требуется, ' +
-          'карта не запрашивается.',
-        'Тариф «Бухгалтер»: 9 999 сум в месяц. Число организаций не ограничено, 1 пользователь.',
-        'Тариф «Бюро»: 39 999 сум в месяц. Число организаций не ограничено, до 5 пользователей.',
-        'Количество сверок не ограничено на всех тарифах.',
-        'Цены указаны в сумах Республики Узбекистан, дополнительные налоги не начисляются.',
-        'Оплата производится авансом за один месяц.',
-        'Пока оплата принимается вручную: Пользователь пишет в Телеграм-канал ' +
-          MERCHANT.telegram + ', получает там платёжные реквизиты и совершает оплату. ' +
-          'После отправки чека тариф открывается: обычно в течение нескольких часов, ' +
-          'максимум 1 рабочий день.',
-        'После подключения платёжной системы оплата будет приниматься и через неё, ' +
-          'о чём будет объявлено в настоящей оферте.',
-        'Исполнитель вправе изменить цену. Новая цена применяется только к следующему ' +
-          'оплачиваемому периоду — оплаченный период не меняется.',
+        'В настоящее время сервис предоставляется ПОЛНОСТЬЮ БЕСПЛАТНО. Количество ' +
+          'сверок, организаций и пользователей не ограничено.',
+        'Оплата не требуется, карта и иные платёжные данные не запрашиваются. ' +
+          'Приём оплаты в сервисе не подключён.',
+        'Пробный период не установлен: срок использования сервиса не ограничен.',
+        'Исполнитель вправе в будущем ввести платные тарифы. В этом случае новые ' +
+          'условия публикуются в настоящей оферте, и Пользователь уведомляется ' +
+          'не менее чем за 30 (тридцать) дней.',
+        'При введении платных тарифов данные Пользователя не удаляются, а доступ ' +
+          'к аккаунту не блокируется без предварительного уведомления.',
       ],
     },
     {
@@ -313,20 +303,16 @@ const OFFER_EN: LegalDoc = {
     {
       h: '4. Price and payment',
       items: [
-        'Free plan: 3 reconciliations a month and 1 user, with no limit on companies. No payment is required and no card is requested.',
-        'Buxgalter plan: 9,999 UZS per month. Unlimited companies, 1 user.',
-        'Byuro plan: 39,999 UZS per month. Unlimited companies, up to 5 users.',
-        'The number of reconciliations is unlimited on every plan.',
-        'Prices are stated in Uzbek soums; no additional taxes are added.',
-        'Payment is made in advance for one month.',
-        'For now, payment is handled manually: the User writes to the Telegram channel ' +
-          MERCHANT.telegram + ', receives the payment details there and makes the payment. ' +
-          'Once the receipt is sent, the plan is opened — usually within a few hours, ' +
-          'at most 1 business day.',
-        'Once an online payment system is connected, payment will also be accepted ' +
-          'through it, and this offer will be updated accordingly.',
-        'The Provider may change prices. A new price applies only to the next payment ' +
-          'period — a period already paid for is not affected.',
+        'The service is currently provided COMPLETELY FREE OF CHARGE. There is no limit ' +
+          'on the number of reconciliations, companies or users.',
+        'No payment is required, and no card or other payment details are requested. ' +
+          'Payment collection is not connected to the service.',
+        'There is no trial period: use of the service is not limited in time.',
+        'The Provider may introduce paid plans in the future. In that case the new terms ' +
+          'will be published in this offer and the User will be notified at least ' +
+          '30 (thirty) days in advance.',
+        'If paid plans are introduced, the User\'s existing data will not be deleted and ' +
+          'account access will not be blocked without prior notice.',
       ],
     },
     {
@@ -390,8 +376,9 @@ const OFFER_EN: LegalDoc = {
 const REFUND_CYRL: LegalDoc = {
   title: 'Тўловни қайтариш',
   lead:
-    'Тўлов қайтарилиши мумкин бўлган ҳолатлар, ариза бериш тартиби ва муддатлар. ' +
-    'Ушбу саҳифа Оммавий офертанинг ажралмас қисми.',
+    'ҲОЗИРГИ ВАҚТДА ХИЗМАТ ТЎЛИҚ БЕПУЛ — тўлов олинмайди, демак қайтарадиган ' +
+    'сумма ҳам бўлмайди. Қуйидаги қоидалар келажакда пулли режалар жорий ' +
+    'қилинган тақдирда амал қилади. Ушбу саҳифа Оммавий офертанинг ажралмас қисми.',
   sections: [
     {
       h: 'Қачон қайтарилади',
@@ -437,8 +424,9 @@ const REFUND_CYRL: LegalDoc = {
 const REFUND_RU: LegalDoc = {
   title: 'Возврат средств',
   lead:
-    'Случаи, когда платёж может быть возвращён, порядок подачи заявления и сроки. ' +
-    'Эта страница является неотъемлемой частью Публичной оферты.',
+    'В НАСТОЯЩЕЕ ВРЕМЯ СЕРВИС ПОЛНОСТЬЮ БЕСПЛАТЕН — оплата не взимается, а значит ' +
+    'и возвращать нечего. Правила ниже действуют, если в будущем будут введены ' +
+    'платные тарифы. Эта страница является неотъемлемой частью Публичной оферты.',
   sections: [
     {
       h: 'Когда средства возвращаются',
@@ -484,8 +472,9 @@ const REFUND_RU: LegalDoc = {
 const REFUND_EN: LegalDoc = {
   title: 'Refunds',
   lead:
-    'When a payment can be refunded, how to request it, and the timelines. This page is ' +
-    'an integral part of the Public offer.',
+    'THE SERVICE IS CURRENTLY COMPLETELY FREE — no payment is taken, so there is nothing ' +
+    'to refund. The rules below apply if paid plans are introduced in the future. ' +
+    'This page is an integral part of the Public offer.',
   sections: [
     {
       h: 'When a refund is given',

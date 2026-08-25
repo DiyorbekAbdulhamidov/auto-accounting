@@ -37,8 +37,8 @@ export default async function PricingPage({
       <BreadcrumbJsonLd locale={locale} page="pricing" />
       <PublicShell>
         <PublicHeading
-          title="Нарх"
-          lead="Чеклов сверка сонига эмас, КОРХОНА сонига. Сверкани қанча хоҳласангиз шунча марта қайта юкласангиз бўлади."
+          title="Нарх йўқ — ҳаммаси бепул"
+          lead="Барча имкониятлар очиқ ва чекловсиз. Карта сўралмайди, тўлов сўралмайди, синов муддати йўқ."
         />
         <Pricing heading={false} />
         <PricingFaq />
