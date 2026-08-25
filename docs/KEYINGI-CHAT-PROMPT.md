@@ -7,7 +7,7 @@ Men o'zbekcha (lotin) yozaman. UI matnlari va `t()` kalitlari — kirill o'zbekc
 ## 0. BOSHLASH
 
 ```
-node scripts/verify-parsers.cjs   →  151/151
+node scripts/verify-parsers.cjs   →  171/171
 node scripts/check-contrast.cjs   →  70/70 (35 yorug' + 35 tungi)
 npx tsc --noEmit                  →  toza
 npx eslint src --max-warnings=0   →  toza
@@ -20,54 +20,64 @@ Chuqurroq: `HANDOFF.md` (texnik ma'lumotnoma), `MAHSULOT-QARORLARI.md`
 
 ---
 
-## 1. HOLAT (2026-08-25)
+## 1. HOLAT (2026-08-25, kechqurun)
 
 **Avval `git status` va `git log --oneline -3` ni O'QI** — quyidagisi
-2026-08-25 kunidagi holat.
+2026-08-25 kunining OXIRIDAGI holat.
 
-O'sha kuni hamma ish kommit qilindi va deploy bo'ldi: oxirgi kommit
-**`1894172`**, `origin/master` bilan teng, Vercel deploy'i READY.
-Jonli tekshirildi: narx sahifasida yangi tarif, `/uz/bilmadim` →
-404 + «Sahifa topilmadi». Ya'ni **kod va jonli sayt bir xil**.
+Oxirgi kommit **`317572c`** («changed project plan»), `origin/master`
+bilan teng, deploy bo'lgan. Jonli tekshirildi: `moslik.uz/uz/pricing`
+yangi «Narx yo'q — hammasi bepul» sahifasini ko'rsatadi. Ya'ni **kod va
+jonli sayt bir xil**.
 
-### Kommit qilingani (jonli)
+### Ertalab kommit qilingani
 
 Dizayn tizimi «hisob qog'ozi» (Golos Text + Literata + IBM Plex Mono,
 iliq palitra, radius 2–8px), shaxsiy ma'lumot saytdan olib tashlangan,
 `/clients` ish stoli ikkala yo'nalishni ko'rsatadi, marshrutlar
-birlashtirilgan, sitemap Search Console'ga yuborilgan (32 URL, «Успешно»).
+birlashtirilgan, sitemap Search Console'ga yuborilgan (32 URL, «Успешно»),
+404 va xato sahifalari, dizayn tizimidagi uch jimgina xato, brauzer
+dialoglari o'rniga `ConfirmDialog`.
 
-### Shu kuni qo'shilgani
+### Kechqurun qo'shilgani — IKKI KATTA ISH
 
-**Tarif modeli almashtirildi.** Bepul reja endi **oyiga 3 ta sverka**,
-korxona soni cheklanmaydi. Sanoq birligi — **ko'chirma egasi (STIR yoki
-hisob raqami) × davr oyi**. Sabab: eski «3 ta korxona» cheklovi
-ushlamasdi (hammasini bitta korxonaga yig'ib bepul ishlash mumkin edi),
-«saqlangan hisobot» ham ushlamasdi (Excel yuklab olib ketiladi).
-Kod: `src/lib/plans.ts`, `src/lib/sverkaQuota.ts`, ikkala tahlil
-marshruti, `QuotaWall.tsx`. To'liq sabab —
-`MAHSULOT-QARORLARI.md` → «Narx va cheklov (2026-08-25 da QAYTA KO'RILDI)».
+**A. HAMMASI BEPUL BO'LDI.** Egasining qarori: cheklov UMUMAN yo'q —
+sverka, korxona, foydalanuvchi hammasi cheksiz; sayt narx haqida
+hech narsa demaydi. «Qachon pulli qilish — mening ishim; odamlar
+o'rgansin, auditoriya katta bo'lsin.»
 
-**404 va xato sahifasi qo'shildi:** `[locale]/not-found.tsx`,
-`[locale]/error.tsx`, `global-error.tsx` va `[locale]/[...rest]/page.tsx`.
-Oxirgisi shart: mos kelmagan manzil ILDIZDAGI `not-found` ni qidiradi,
-ildiz maket esa `[locale]/layout.tsx`.
+- **Muddat KODGA YOZILMADI** (suhbat «ro'yxatdan 6 oy» dan boshlangan
+  edi). Sanoq qo'yilsa u bir kuni O'ZI ishlab ketadi va hech kim
+  kutmagan paytda hisoblar qulflanadi. Qaror egasida bo'lsin.
+- **Cheklov yoqiladigan YAGONA joy:** `src/lib/plans.ts` dagi
+  `free: { sverkaPerMonth, members }` — ularni `3` va `1` ga
+  qaytarish yetarli. Sanoq mexanizmi, `QuotaWall`, a'zo cheklovi va
+  tariflar (9 999 / 39 999) kodda joyida, faqat ko'rsatilmaydi.
+- Sayt tomoni: narx sahifasi, narx savollari, bosh sahifa, ТСС,
+  `seo.ts` (4 til), JSON-LD (bitta Offer, 0 so'm), `legal.ts`
+  (oferta 4-bo'limi + qaytarish sahifasi — «30 kun oldin ogohlantirish»).
+  Uch tilda jonli tekshirildi.
 
-**Dizayn tizimidagi UCH ta jimgina xato tuzatildi** (hammasi bir oila —
-umumiy sinf qatoriga qattiq yozilgan qiymatni chaqiruvchi bekor qila
-olmasdi):
-- `fieldClasses` dagi `w-full` → `<Select className="w-auto">` va
-  `<Input className="w-44">` to'liq kenglikda chiqardi;
-- `tableCls.th` dagi `text-left` → `<Th align="center">` ishlamasdi;
-- `Button` `iconOnly` da bolasini tashlardi → o'chirish tugmasi jadvalda
-  BO'SH kvadrat bo'lib turardi.
+**B. KIRIM SVERKASI KO'RIB CHIQILDI, 8 ta nuqson tuzatildi.**
+Uchtasi raqamga tegadigan:
+- `incomeExcel.ts` — «Сверка» varag'i ostidagi «ЙИЛЛАР БЎЙИЧА» bloki
+  farqni TESKARI ishorada yozardi (`c - f`), ya'ni ayni varaqning o'z
+  ЖАМИ qatoriga zid edi. Harness `buildIncomeWorkbook` ni chaqirardi,
+  lekin KATAKKA qaramasdi — endi qaraydi (`runIncomeExcelTest`).
+- `agingByKey` faqat BELGILANGAN qatorlardan qurilardi, jadval esa
+  hammasini chizadi → птичкаси olingan qatorni ochganda «Ёпилмаган
+  фактура йўқ» degan YOLG'ON chiqardi. Endi `openInvoicesByKey`
+  hamma kontragentdan quriladi (chiqimdagi naqsh).
+- `incomeParser.ts` ga **davr kelishuvi** qo'shildi («ДАВРЛАР МОС
+  КЕЛМАЙДИ») — chiqimda bor edi, kirimda YO'Q edi. Yig'indiga
+  tegilmadi, faqat ogohlantirish.
 
-**Brauzer dialoglari ketdi:** uchta `confirm()` o'rniga `ConfirmDialog`.
-`Modal` ga fokus qulfi, ichki aylanish va **stek** qo'shildi (modal
-ustiga modal ochilganda Escape faqat tepadagisini yopadi).
-`FileDrop` endi haqiqatan fayl tashlashni qabul qiladi.
-
----
+Qolgan beshtasi: aging hisob sanasi endi fakturani ham hisobga oladi
+(«bugun» ga tushmaydi), tab sanoqlari chizilgan qatorga teng,
+oltala tabda bo'sh holat, Excelga **6-varaq «Қарз ёши»** qo'shildi,
+`Tabs` va chiqim toolbariga `flex-wrap` (375px da sahifa 707px ga
+surilardi), asosiy jadvallarga `max-h-[70vh]` (sticky shapka
+ISHLAMASDI — o'lchandi), 404 sahifasi pastidagi 106px bo'shliq.
 
 ## 2. XAVFSIZLIK
 
@@ -86,14 +96,27 @@ ochiq sahifaga (qo'llanma, prezentatsiya) QO'YILMAYDI.
 
 ## 3. NAVBATDAGI ISH
 
-1. **Kirim sverkasining ichki qismlari** — tuzilishi hali ko'rilmagan
-   (chiqim tomoni 2026-08-25 da ko'rildi). `OpenInvoices`, filtr
-   qatorining o'ralishi va 404 sahifasining pastdagi bo'sh joyi ham
-   shu yerda — hech biri nuqson emas, sayqal.
-2. **To'lov yo'li** — 1-noyabrgacha kerak. Hozir hamma hisob bepul
-   rejada, saytning o'z matni ham shuni aytadi.
-3. **Firebase Blaze** ($9,09 qarz) — SMS bilan kirish umuman ishlamaydi.
-4. Search Console: bosh sahifa uchun «Запросить индексирование».
+1. **«Акт сверки» umuman SINOVSIZ** — `reconciliationAct.ts`
+   `verify-parsers` da 0 marta uchraydi. U ikkala sverkada
+   ishlatiladigan rasmiy ikki tomonlama hujjat, kirim Excel'idagi
+   ishora xatosi esa aynan shu turkumdan edi. Naqsh tayyor:
+   `runIncomeExcelTest` workbook KATAGINI o'qiydi.
+2. **Chiqim Excel eksporti komponent ichida** —
+   `OutgoingReconciliation.tsx` `ExcelJS` ni to'g'ridan import qiladi,
+   ya'ni Node'dan sinab bo'lmaydi. Kirimniki `src/lib/incomeExcel.ts`
+   da va qoplangan. Yana bir farq: chiqim **1 varaq**, kirim **6**.
+   Ideal — `lib/outgoingExcel.ts` ga ko'chirib, harness bilan qoplash.
+3. **Firebase Blaze** ($9,09 qarz) — SMS bilan kirish umuman
+   ishlamaydi. Hammasi bepul bo'lgach bu MUHIMROQ bo'ldi: maqsad
+   imkon qadar ko'p ro'yxatdan o'tish, telefon esa eng tabiiy yo'l.
+4. **Search Console** — narx sahifasining matni butunlay almashdi,
+   qayta indekslash so'ralsin.
+5. **Ko'rilmagan modullar:** `counterpartyMerge.ts`,
+   `openingBalance.ts`, `formatMemory.ts`, `universalParser.ts` va
+   login ortidagi qolgan ekranlar (`/clients` ro'yxati, admin, jamoa).
+
+**Ro'yxatdan TUSHDI:** «to'lov yo'li 1-noyabrgacha» — 2026-08-25 dagi
+«hammasi bepul» qarori uni bekor qildi.
 
 **Egasi «tursin» degani (tegilmaydi):** `Hamkorbank` belgisi,
 `counterpartyCategory.ts` dagi STIR→nom jadvali, `docs/pitch-deck.html`,
@@ -101,7 +124,9 @@ kirish sahifasidagi demo email/parol (hakamlar tekshirishi uchun),
 `test-project.webleaders.uz`, qo'llanmadagi namuna ekranlar
 (hozirgisi yetadi — ular jonli komponentlardan yasalgan, PNG emas).
 
----
+⚠️ `docs/pitch-deck.html` da hali **9 999 / 39 999 UZS/mo** turibdi va
+bu mahsulotga ZID. Egasi ataylab «tegma» dedi (2026-08-25) — jimgina
+«tuzatib» qo'yilmaydi, faqat so'ralganda o'zgartiriladi.
 
 ## 4. BUZILMAYDIGAN QOIDALAR
 

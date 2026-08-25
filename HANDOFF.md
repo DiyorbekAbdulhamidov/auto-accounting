@@ -46,8 +46,8 @@ Brauzerda tekshirilgan: 10 ta manzil, `/xyz/pricing` → 404.
 | **Logotip** | Ikkita teng chiziq = «мос келди». Yuqorigi `--cash`, pastkisi `--invoice`. `src/components/Brand.tsx`, `src/app/icon.svg` |
 | **Tillar** | 4 ta, **URL'da**: `uz` (lotin) · `uz-cyrl` · `ru` · `en`. Lug'at qamrovi **92,4%** (qolgani tarjima qilinmaydigan narsalar) |
 | **Kirish** | O'zi ro'yxatdan o'tadi, darhol ishlaydi |
-| **Rejalar** | Bepul **oyiga 3 sverka** (korxona cheksiz) · Buxgalter 9 999 so'm · Byuro 39 999 so'm. Sanoq birligi: ko'chirma egasi × davr oyi — `src/lib/sverkaQuota.ts` |
-| **Tekshiruv** | `verify-parsers` **151 ta** · `check-contrast` · `tsc` · `eslint` · `next build` — hammasi o'tadi |
+| **Rejalar** | **CHEKLOV YO'Q** (2026-08-25): sverka, korxona, foydalanuvchi — hammasi cheksiz va bepul, sayt narx haqida hech narsa demaydi. Yoqiladigan yagona joy: `src/lib/plans.ts` dagi `free.sverkaPerMonth` / `free.members` |
+| **Tekshiruv** | `verify-parsers` **171 ta** · `check-contrast` · `tsc` · `eslint` · `next build` — hammasi o'tadi |
 | **Oxirgi holat** | Joriy holat va navbatdagi ish uchun **`docs/KEYINGI-CHAT-PROMPT.md`** ni o'qing — u har sessiya oxirida yangilanadi. Quyidagi bo'limlar TEXNIK ma'lumotnoma (parserlar, formatlar, deploy tartibi) va ular eskirmaydi |
 
 ## Ikki asosiy hujjat
@@ -343,11 +343,16 @@ O'zi ro'yxatdan o'tadi, tasdiqlash kutilmaydi. Yangi fayllar:
 `src/lib/plans.ts`, `src/app/api/signup/route.ts`,
 `src/app/api/companies/route.ts`.
 
-⚠️ **ESKIRGAN (2026-08-25 da o'zgardi).** Bu yerda ilgari «cheklov
-korxona soniga» deb yozilgan edi. Endi **cheklov oylik SVERKA soniga**:
-bepul rejada oyiga 3 ta, korxona soni cheklanmaydi. Sababi va sanoq
-birligi — `MAHSULOT-QARORLARI.md` dagi «Narx va cheklov (2026-08-25 da
-QAYTA KO'RILDI)» bo'limida. Kod: `src/lib/sverkaQuota.ts`.
+⚠️ **CHEKLOV HOZIR UMUMAN YO'Q (2026-08-25, egasining qarori).**
+Bu yerda avval «cheklov korxona soniga», keyin «oylik sverka soniga»
+deb yozilgan edi. Ikkalasi ham tarix: endi sverka ham, korxona ham,
+foydalanuvchi ham **cheksiz va bepul**.
+
+Mexanizm o'chirilmadi — `sverkaQuota.ts` (oylik sanoq, kalit =
+ko'chirma egasi × davr oyi), `QuotaWall.tsx` va a'zo cheklovi joyida
+turibdi va sinovlari bor. Yoqish — `src/lib/plans.ts` dagi
+`free: { sverkaPerMonth, members }` ni `3` va `1` ga qaytarish.
+Sabab: `MAHSULOT-QARORLARI.md` → «Narx va cheklov».
 
 Ikki tuzoq va ular qanday yopilgani:
 - `/api/signup` `requireUser()` ni ISHLATMAYDI — u `allowed_users` ni
@@ -1258,10 +1263,12 @@ Vaqt mintaqasi ataylab yozilgan: server UTC, Toshkent +05:00 —
 ko'rsatilmasa davr besh soat oldin tugardi. Harness shu chegarani
 tekshiradi.
 
-**Narx sahifasi `PLANS` ni to'g'ridan-to'g'ri o'qiydi**, `limitsOf()`
-esa faqat cheklovni qo'llash uchun. ✅ 2026-08-25: matnlar to'rt tilda
-yangilandi (narx bo'limi, FAQ, bosh sahifa, `seo.ts`, `legal.ts`) —
-qurilgan sahifalarda eski «3 ta korxona» va'dasi qolmagani tekshirildi.
+**2026-08-25 (kechqurun): narx saytdan BUTUNLAY olib tashlandi.**
+Narx sahifasi endi `PLANS` ni o'qimaydi — u «Нарх йўқ — ҳаммаси
+бепул» deydi. JSON-LD da bitta Offer (0 so'm), `seo.ts` va `legal.ts`
+to'rt tilda yangilandi, uch tilda jonli tekshirildi. `PLANS` dagi
+9 999 / 39 999 kodda qoldi (`api/admin/plan` o'qiydi), lekin hech
+qayerda ko'rsatilmaydi.
 
 ### 18b. Yiqilgan fayl jurnali (`parse_failures`)
 

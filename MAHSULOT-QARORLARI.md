@@ -387,17 +387,49 @@ qilingan, YATT va o'zini o'zi band qilganlar uchun 1% aylanma solig'i
 kiritilgan, 100 mln so'mgacha ozod. Ya'ni **hisob yuritishi kerak bo'lgan
 odamlar soni keskin ko'paydi, ularning aksariyatida buxgalter yo'q.**
 
-### Narx va cheklov (2026-08-25 da QAYTA KO'RILDI)
+### Narx va cheklov
 
-**Cheklov oylik SVERKA soniga qo'yiladi. Korxona soni cheklanmaydi.**
+## AMALDAGI QAROR (2026-08-25, kechqurun): CHEKLOV YO'Q
 
-| Reja | Narx | Sverka | Korxona | Foydalanuvchi |
-|---|---|---|---|---|
-| **Bepul** | 0 | **oyiga 3 ta** | Cheksiz | 1 |
-| **Buxgalter** | **9 999 so'm/oy** | Cheksiz | Cheksiz | 1 |
-| **Byuro** | **39 999 so'm/oy** | Cheksiz | Cheksiz | 5 |
+**Hech qanday cheklov qo'yilmaydi.** Sverka soni, korxona soni,
+foydalanuvchi soni — hammasi cheksiz va bepul. Sayt narx haqida
+**hech narsa demaydi**: tariflar narx sahifasidan, JSON-LD dan, SEO
+matnidan va ofertadan olib tashlandi.
 
-Yillik to'lovda 2 oy bepul.
+Egasining o'z so'zi:
+
+> «Hamma narsani tekin qil. Qachon pulli qilish — mening ishim.
+> Qachon odamlar o'rgansa, auditoriya juda katta bo'lsa — shunda
+> pulli qilamiz. Qolgan qoladi, qolmagan ketadi.»
+
+**Muddat kodga YOZILMADI.** Suhbat «ro'yxatdan o'tgan kundan 6 oy»
+dan boshlangan edi. Sanoq kodga qo'yilmadi, chunki u bir kuni O'ZI
+ishlab ketadi va hech kim kutmagan paytda hisoblar qulflanadi — pulli
+qilish qarori esa egasida bo'lishi kerak, kodda emas.
+
+**Yoqish nuqtasi bitta:** `src/lib/plans.ts` dagi
+`free: { sverkaPerMonth, members }`. Ularni `3` va `1` ga qaytarish
+yetarli — quyida tasvirlangan butun mexanizm joyida turibdi va
+`verify-parsers` bilan qoplangan. `PLANS.buxgalter` (9 999) va
+`PLANS.byuro` (39 999) kodda qoldi, faqat ko'rsatilmaydi.
+
+Regress endi «3 ta» ni emas, **cheklov yo'qligini** tekshiradi: soxta
+Firestore bilan 50 ta har xil sverka qilinadi, bittasi ham rad
+etilmasligi va sanoq hujjati yozilmasligi shart.
+
+⚠️ `docs/pitch-deck.html` da hali eski narx turibdi — egasi ataylab
+«tegma» dedi.
+
+---
+
+## TARIX: nega avval bunday qilingan edi
+
+Quyidagisi endi AMALDA EMAS, lekin sabablari saqlanadi — pulli
+qilinadigan kun kelganda qaytadan o'ylanmasin.
+
+**2026-08-25 ertalab:** cheklov oylik SVERKA soniga qo'yilgan edi
+(bepul: oyiga 3 ta, korxona cheksiz; Buxgalter 9 999 so'm/oy;
+Byuro 39 999 so'm/oy, 5 foydalanuvchi; yillik to'lovda 2 oy bepul).
 
 #### Nega korxona soni tashlandi
 
@@ -747,10 +779,12 @@ va oyna tor.**
 - Tizim buxgalter O'TKAZIB YUBORGAN farqlarni topdi: HUDUDGAZ
   50 278 000, pochta 227 503, Zero Waste 1 366 176.
 - Eng qiyin texnik qism tayyor: 6 ta bank formati, qoldiq
-  tenglamasi, 58 ta tekshiruv, toifa himoyasi.
+  tenglamasi, 171 ta tekshiruv, toifa himoyasi.
 - 2026 dan o'zini o'zi band qilganlar ham e-faktura yozadi —
   hisob yuritishi kerak bo'lganlar soni o'sdi.
-- Narx haqiqiy buxgalterdan olingan (9 999), taxminan emas.
+- Narx haqiqiy buxgalterdan olingan (9 999), taxminan emas —
+  HOZIR QO'LLANMAYDI (mahsulot butunlay bepul), lekin dalil
+  saqlanadi: pulli qilinadigan kun kelganda qaytadan so'ralmasin.
 
 **Qarshi — muhimlik tartibida:**
 
