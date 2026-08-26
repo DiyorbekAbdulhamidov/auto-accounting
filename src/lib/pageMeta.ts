@@ -64,10 +64,15 @@ export function pageMeta(locale: Locale, key: PathKey): Metadata {
 
   return {
     // Brend nomi SARLAVHADA bo'lishi SHART: Google brend so'roviga
-    // (`moslik`) aynan `<title>` ga qaraydi. Ilgari «Moslik» faqat
-    // `og:title` va JSON-LD ichida bor edi — ular reytingga ta'sir
-    // qilmaydi, ya'ni sayt o'z nomi bilan topilmasdi.
-    title: `${copy.title} · ${BRAND.name}`,
+    // (`moslik`) aynan `<title>` ga qaraydi. Ilgari «Moslik» bosh
+    // sahifada umuman yo'q edi — `[locale]/layout.tsx` dagi
+    // `template: '%s · Moslik'` o'zi e'lon qilingan segmentga
+    // qo'llanmaydi, ya'ni ichki sahifalar brendni olardi, bosh sahifa
+    // esa yo'q.
+    //
+    // `absolute` SHART: oddiy satr qaytarilsa ichki sahifalarda
+    // shablon ustiga yana qo'shilib «... · Moslik · Moslik» chiqadi.
+    title: { absolute: `${copy.title} · ${BRAND.name}` },
     description: copy.description,
     keywords: copy.keywords.length ? copy.keywords : undefined,
     alternates: { canonical, languages: languages(key) },
