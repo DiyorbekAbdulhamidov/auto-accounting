@@ -63,7 +63,11 @@ export function pageMeta(locale: Locale, key: PathKey): Metadata {
   const isPublic = key !== 'clients' && key !== 'adminUsers';
 
   return {
-    title: copy.title,
+    // Brend nomi SARLAVHADA bo'lishi SHART: Google brend so'roviga
+    // (`moslik`) aynan `<title>` ga qaraydi. Ilgari «Moslik» faqat
+    // `og:title` va JSON-LD ichida bor edi — ular reytingga ta'sir
+    // qilmaydi, ya'ni sayt o'z nomi bilan topilmasdi.
+    title: `${copy.title} · ${BRAND.name}`,
     description: copy.description,
     keywords: copy.keywords.length ? copy.keywords : undefined,
     alternates: { canonical, languages: languages(key) },
