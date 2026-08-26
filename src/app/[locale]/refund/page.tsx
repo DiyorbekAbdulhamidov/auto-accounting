@@ -17,6 +17,8 @@ export async function generateMetadata({
   return pageMeta(locale, "refund");
 }
 
+// 
+
 /**
  * TO'LOVNI QAYTARISH — ATAYLAB alohida sahifa.
  *
