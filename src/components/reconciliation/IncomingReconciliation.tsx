@@ -513,6 +513,16 @@ export default function IncomingReconciliation({
       includePending,
       merges,
       report,
+      /* РЎЙХАТ САҲИФАСИ УЧУН — `/api/reports/summary` АЙНАН шу
+         майдонларни ўқийди: `totals.facturaSent`, `totals.bankCredit`,
+         `diffCount`. Улар ёзилмасди, шунинг учун «Корхоналар»
+         саҳифасининг «Кирим сверкаси» таби сақланган ҳисобот бор
+         бўлса ҳам ҲАР ДОИМ 0,00 кўрсатарди (2026-09-27 да ўлчанган).
+
+         Ҳисоб-китоб ЎЗГАРМАЙДИ: булар `report` ичида аллақачон
+         ҳисобланган қийматлар, шу ернинг ЎЗИДА қайта ҳисобланмайди. */
+      totals: report.totals,
+      diffCount: report.parties.filter((p) => Math.abs(p.difference) >= 0.005).length,
     };
     const bytes = new TextEncoder().encode(JSON.stringify(payload)).length;
     const LIMIT = 900_000; // 1 MB dan zaxira bilan pastda
