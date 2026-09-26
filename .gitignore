@@ -49,3 +49,6 @@ design/*-yonalishlari.html
 # Ildizdagi vaqtinchalik chiqish fayllari (skript natijasini konsol
 # kirillni chiqara olmagani uchun faylga yozadi)
 /*.txt
+
+# Firestore zaxirasi - HAQIQIY MIJOZ MALUMOTI, hech qachon kommit qilinmaydi
+.backup/
