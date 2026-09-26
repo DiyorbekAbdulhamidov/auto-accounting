@@ -18,6 +18,7 @@ const XLSX = require(path.join(PROJ, 'node_modules/xlsx'));
 const { createJiti } = require(path.join(PROJ, 'node_modules/jiti'));
 const jiti = createJiti(path.join(PROJ, 'scripts/x.cjs'));
 const { auditFiles } = jiti(path.join(PROJ, 'src/lib/statementAudit.ts'));
+const { analyzeIncome } = jiti(path.join(PROJ, 'src/lib/incomeParser.ts'));
 
 const OUT = __dirname;
 
@@ -44,12 +45,17 @@ const SUPPLIERS = [
   { name: 'OOO "YANGI DAVR SERVIS"',       inn: '307119458', pays: [54_000_000],             invs: [54_000_000] },
 ];
 
-/* ---------- XARIDORLAR (kirim — ko'chirma haqiqiy ko'rinsin) ---------- */
+/* ---------- XARIDORLAR (KIRIM sverkasi) ----------
+   pays — bizning hisobga TUSHGAN pul (кредит)
+   invs — biz YOZGAN счёт-фактура
+   Uchtasida ataylab farq bor, bittasi umuman to'lamagan. */
 const CUSTOMERS = [
-  { name: 'OOO "FARGONA SAVDO MARKAZI"', inn: '308654201', amount: 210_000_000 },
-  { name: 'OOO "BUXORO TAOM SANOAT"',    inn: '309337846', amount: 185_000_000 },
-  { name: 'OOO "XORAZM DEHQON XIZMATI"', inn: '310228573', amount: 125_000_000 },
+  { name: 'OOO "FARGONA SAVDO MARKAZI"', inn: '308654201', pays: [120_000_000, 90_000_000], invs: [210_000_000] },
+  { name: 'OOO "BUXORO TAOM SANOAT"',    inn: '309337846', pays: [120_000_000],             invs: [110_000_000, 75_000_000] }, // +65 000 000 bizga qarzdor
+  { name: 'OOO "XORAZM DEHQON XIZMATI"', inn: '310228573', pays: [140_000_000],             invs: [125_000_000] },             // -15 000 000 avans
+  { name: 'OOO "SIRDARYO AGRO MARKET"',  inn: '311540967', pays: [],                        invs: [48_000_000] },              // umuman to'lamagan
 ];
+const IN_OPENING = 250_000_000;
 
 const day = (n) => `${String(n).padStart(2, '0')}.07.2026`;
 
@@ -136,6 +142,90 @@ function buildInvoices() {
 }
 
 /* ============================================================
+   3) KIRIM: BANK KO'CHIRMASI — tushgan pul (кредит)
+   Biz SOTUVCHIMIZ: mijoz pul o'tkazadi, biz faktura yozamiz.
+   ============================================================ */
+function buildIncomeStatement() {
+  const rows = [];
+  rows.push(['СПРАВКА ПО РАБОТЕ СЧЕТА']);
+  rows.push([`Счет: ${OWN.account}  ${OWN.name}  ИНН : ${OWN.inn}`]);
+  rows.push([`Период: ${PERIOD.from} - ${PERIOD.to}`]);
+  rows.push([]);
+  rows.push(['Остаток на начало периода:', IN_OPENING, 'ПАССИВ']);
+  rows.push([]);
+  rows.push(['Дата', 'Номер док.', 'Наименование', 'ИНН', 'Расчетный счет', 'Дебет', 'Кредит', 'Назначение платежа']);
+
+  const tx = [];
+  let d = 4, doc = 5201;
+  for (const c of CUSTOMERS) {
+    for (const amount of c.pays) {
+      tx.push({
+        date: day(d), doc: String(doc++), name: c.name, inn: c.inn,
+        acc: `20208000${c.inn}001`, credit: amount,
+        purpose: 'Оплата за поставленный товар',
+      });
+      d += 3; if (d > 27) d = 5;
+    }
+  }
+  tx.sort((a, b) => Number(a.date.slice(0, 2)) - Number(b.date.slice(0, 2)));
+
+  let credit = 0;
+  for (const t of tx) {
+    credit += t.credit;
+    rows.push([t.date, t.doc, t.name, t.inn, t.acc, '', t.credit, t.purpose]);
+  }
+
+  rows.push([]);
+  rows.push(['ИТОГО', '', '', '', '', 0, credit, '']);
+  const closing = IN_OPENING + credit;
+  rows.push(['Остаток на конец периода:', closing, 'ПАССИВ']);
+
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(rows), 'Выписка');
+  return { wb, credit, closing, count: tx.length };
+}
+
+/* ============================================================
+   4) KIRIM: BIZ YOZGAN FAKTURALAR
+   Biz — SOTUVCHI, shuning uchun «Продавец ИНН» hamma qatorda
+   bir xil: parser aynan shundan «biz kim» ekanini aniqlaydi.
+   ============================================================ */
+function buildIncomeInvoices() {
+  const rows = [];
+  rows.push(['Реестр исходящих счетов-фактур']);
+  rows.push([`${OWN.name}   ИНН: ${OWN.inn}`]);
+  rows.push([`Период: ${PERIOD.from} - ${PERIOD.to}`]);
+  rows.push([]);
+  rows.push([
+    '№', 'ID', 'Счет-фактура', 'Дата', 'Статус',
+    'Продавец ИНН', 'Продавец наименование',
+    'Покупатель ИНН', 'Покупатель наименование',
+    'Сумма к оплате',
+  ]);
+
+  let n = 1, id = 880310, d = 2, total = 0;
+  for (const c of CUSTOMERS) {
+    for (const amount of c.invs) {
+      total += amount;
+      rows.push([
+        n++, String(id++), `СФ-${7100 + n} от ${day(d)}`, day(d), 'Подтверждён',
+        OWN.inn, OWN.name, c.inn, c.name, amount,
+      ]);
+      d += 3; if (d > 28) d = 3;
+    }
+  }
+  rows.push([]);
+  // ИТОГО «Покупатель наименование» ustuniga QO'YILMAYDI: kirimda biz
+  // sotuvchimiz va parser kontragentni aynan o'sha ustundan oladi —
+  // yakuniy qator soxta kontragent bo'lib qo'shilardi (o'lchangan).
+  rows.push(['ИТОГО', '', '', '', '', '', '', '', '', total]);
+
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(rows), 'Счета-фактуры');
+  return { wb, total, count: n - 1 };
+}
+
+/* ============================================================
    YOZISH VA TEKSHIRISH
    ============================================================ */
 const st = buildStatement();
@@ -197,4 +287,74 @@ console.log(res.warnings && res.warnings.length ? 'OGOHLANTIRISHLAR:' : 'Ogohlan
 for (const w of res.warnings || []) console.log('  · ' + w);
 
 console.log('');
-console.log(ok ? '>>> HAMMASI MOS' : '>>> NOMUVOFIQLIK BOR');
+
+/* ============================================================
+   KIRIM SVERKASI — alohida juftlik, alohida tekshiruv
+   ============================================================ */
+const inSt = buildIncomeStatement();
+const inIv = buildIncomeInvoices();
+
+const F_IN_BANK = 'NAVBAHOR-SAVDO_kirim-bank_07-2026.xlsx';
+const F_IN_FAK = 'NAVBAHOR-SAVDO_kirim-fakturalar_07-2026.xlsx';
+
+const bufInBank = XLSX.write(inSt.wb, { type: 'buffer', bookType: 'xlsx' });
+const bufInFak = XLSX.write(inIv.wb, { type: 'buffer', bookType: 'xlsx' });
+fs.writeFileSync(path.join(OUT, F_IN_BANK), bufInBank);
+fs.writeFileSync(path.join(OUT, F_IN_FAK), bufInFak);
+
+console.log('');
+console.log('============================================================');
+console.log('KIRIM SVERKASI');
+console.log('  ' + F_IN_BANK + '   — ' + inSt.count + " o'tkazma");
+console.log('  ' + F_IN_FAK + '   — ' + inIv.count + ' faktura');
+console.log('');
+console.log('KUTILGAN QIYMATLAR');
+console.log('  tushgan pul  :', M(inSt.credit));
+console.log('  faktura jami :', M(inIv.total));
+console.log('  farq         :', M(inIv.total - inSt.credit), '(faktura − pul)');
+console.log('');
+
+const inRes = analyzeIncome([
+  { name: F_IN_BANK, buffer: bufInBank },
+  { name: F_IN_FAK, buffer: bufInFak },
+]);
+
+console.log('PARSER NATIJASI');
+console.log('  kontragentlar:', inRes.parties.length);
+console.log('  biz kim      :', inRes.meta.ownName || '(aniqlanmadi)', inRes.meta.ownInn);
+check('tushgan pul', inRes.totals.bankCredit, inSt.credit);
+check('faktura jami', inRes.totals.facturaSent, inIv.total);
+check('farq', inRes.totals.difference, inIv.total - inSt.credit);
+if (inRes.parties.length !== CUSTOMERS.length) {
+  ok = false;
+  console.log(`  [XATO] kontragent soni: ${inRes.parties.length} (kutilgan ${CUSTOMERS.length})`);
+} else {
+  console.log(`  [OK]  hamma xaridor topildi (${inRes.parties.length} ta)`);
+}
+
+console.log('');
+console.log('DAVRLAR (ikkala tomon mos kelishi SHART)');
+console.log('  bank    :', inRes.meta.periods.bank.from, '…', inRes.meta.periods.bank.to);
+console.log('  faktura :', inRes.meta.periods.faktura.from, '…', inRes.meta.periods.faktura.to);
+
+console.log('');
+console.log('HAR BIR XARIDOR');
+for (const p of inRes.parties) {
+  const diff = p.facturaSent - p.bankCredit;
+  const verdict = Math.abs(diff) < 0.005 ? "to'g'ri" : diff > 0 ? 'bizga qarzdor' : 'avans (ortiqcha)';
+  console.log(
+    `  ${p.name.padEnd(34)} pul ${M(p.bankCredit).padStart(18)}  faktura ${M(p.facturaSent).padStart(18)}  farq ${M(diff).padStart(18)}  ${verdict}`
+  );
+}
+
+console.log('');
+const inWarn = (inRes.meta.warnings || []).filter((w) => !/^ДАВРЛАР/.test(w) || true);
+console.log(inWarn.length ? 'OGOHLANTIRISHLAR:' : 'Ogohlantirish yo\'q');
+for (const w of inWarn) console.log('  · ' + w);
+if ((inRes.meta.warnings || []).some((w) => /^ДАВРЛАР/.test(w))) {
+  ok = false;
+  console.log('  [XATO] davrlar mos kelmadi — demo fayllar bir davrda bo\'lishi SHART');
+}
+
+console.log('');
+console.log(ok ? '>>> HAMMASI MOS (chiqim + kirim)' : '>>> NOMUVOFIQLIK BOR');

@@ -8,6 +8,8 @@ import {
   sendPasswordResetEmail,
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
+  setPersistence,
+  browserLocalPersistence,
   RecaptchaVerifier,
   signInWithPhoneNumber,
   type ConfirmationResult,
@@ -16,6 +18,7 @@ import { doc, getDoc } from "firebase/firestore";
 import { usePathname, useRouter } from "next/navigation";
 import { isPath, localeFromPathname, path } from "@/lib/routes";
 import { accountKeyOf } from "@/lib/workspace";
+import { phoneToAuthEmail } from "@/lib/phone";
 
 /**
  * Ilova ko'radigan foydalanuvchi: Firebase hisobi + `allowed_users`
@@ -42,6 +45,16 @@ export interface AuthValue {
   login: (email: string, pass: string) => Promise<void>;
   /** Xato matnini qaytaradi; muvaffaqiyatda `null` */
   signup: (email: string, pass: string) => Promise<string | null>;
+  /**
+   * TELEFON + PAROL — kirish va ro'yxatdan o'tish BIR amal.
+   *
+   * Nega bitta: foydalanuvchi uchun «hisobim bormi yo'qmi» degan
+   * savol yo'q. Raqam tanish bo'lsa — kiradi, bo'lmasa — hisob
+   * ochiladi. Ekranda ikkita tugma va ikkita rejim YO'Q.
+   *
+   * Xato matnini qaytaradi; muvaffaqiyatda `null`.
+   */
+  phoneAccess: (phone: string, pass: string) => Promise<string | null>;
   /** Parolni tiklash xati. `null` — yuborildi, aks holda xato matni. */
   resetPassword: (email: string) => Promise<string | null>;
   /** SMS yuborish. `phone` E.164 shaklida (`+998901234567`). */
@@ -106,6 +119,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // «ruxsat yo'q» deb foydalanuvchini tashqariga uloqtirardi. Shu bayroq
   // o'sha oraliqni yopadi.
   const signingUpRef = useRef(false);
+
+  /* SESSIYA DOIMIY — brauzer yopilsa ham saqlanadi.
+     Firebase'da veb uchun `browserLocalPersistence` allaqachon
+     standart, lekin u ATAYLAB shu yerda yozilgan: buxgalter
+     «meni chiqarib yubordi» degan holatga tushmasligi kerak.
+     Yozilmasa, keyinroq kimdir uni sessiyaga almashtirib
+     qo'yishi va buni hech kim sezmasligi mumkin.
+     Yiqilsa kirish to'xtamaydi — standart qiymat baribir amal qiladi. */
+  useEffect(() => {
+    setPersistence(auth, browserLocalPersistence).catch(() => {});
+  }, []);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
@@ -384,13 +408,65 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  /* ============================================================
+     TELEFON + PAROL — BITTA AMAL
+     ------------------------------------------------------------
+     Firebase'da «telefon + parol» yo'q, shuning uchun raqam
+     barqaror soxta emailga o'giriladi (`phoneToAuthEmail`).
+
+     Firebase'ning «email enumeration protection» i yoqilganda
+     NOMA'LUM hisob ham, XATO parol ham bir xil `invalid-credential`
+     beradi — ya'ni xatoning o'zidan farqni bilib bo'lmaydi.
+     Farqni ochadigan yagona yo'l: hisob OCHISHGA urinib ko'rish.
+     «Аллақачон рўйхатдан ўтган» qaytsa — hisob BOR, demak parol
+     xato edi.
+     ============================================================ */
+  const phoneAccess = async (phone: string, pass: string): Promise<string | null> => {
+    // EMAIL ham qabul qilinadi — ekranda bunday maydon YO'Q, lekin:
+    //   · ko'rsatuv (demo) hisobi email bilan ochilgan va hakamlar
+    //     aynan o'sha bilan kiradi — kirish telefonga o'tgani uchun
+    //     ularni QULFLAB QO'YISH mumkin emas;
+    //   · avval email bilan ochilgan hisoblar ham yo'qolmaydi.
+    // `@` telefon raqamida hech qachon uchramaydi, shuning uchun
+    // farqlash xavfsiz.
+    const typed = String(phone || "").trim();
+    const authEmail = typed.includes("@") ? typed.toLowerCase() : phoneToAuthEmail(typed);
+    if (!authEmail) return "Телефон рақами нотўғри. Мисол: 90 123 45 67";
+
+    setLoading(true);
+    try {
+      await signInWithEmailAndPassword(auth, authEmail, pass);
+      setLoading(false);
+      return null;
+    } catch (error) {
+      const code = String((error as { code?: string })?.code || "");
+      const unknown =
+        code.includes("user-not-found") ||
+        code.includes("invalid-credential") ||
+        code.includes("invalid-login-credentials");
+      if (!unknown) {
+        setLoading(false);
+        if (code.includes("too-many-requests"))
+          return "Жуда кўп уриниш бўлди. Бироз кутиб, қайта уриниб кўринг.";
+        return "Кириш амалга ошмади. Қайта уриниб кўринг.";
+      }
+    }
+
+    // Hisob topilmadi -> ochamiz. `signup` /api/signup ni ham chaqiradi
+    // va ish maydonini yaratadi (idempotent).
+    const message = await signup(authEmail, pass);
+    // Bu matn shu faylning O'ZIDA, `signup` ichida yoziladi.
+    if (message && message.includes("аллақачон рўйхатдан ўтган")) return "Парол нотўғри.";
+    return message;
+  };
+
   const logout = async () => {
     await signOut(auth);
     router.replace(path("login", localeRef.current));
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, signup, resetPassword, sendSmsCode, confirmSmsCode, logout }}>
+    <AuthContext.Provider value={{ user, loading, login, signup, phoneAccess, resetPassword, sendSmsCode, confirmSmsCode, logout }}>
       {children}
     </AuthContext.Provider>
   );

@@ -69,6 +69,11 @@ const {
   suggestMerges,
   buildMergeMap,
 } = jiti(path.join(PROJ, 'src/lib/counterpartyMerge.ts'));
+const {
+  buildReconciliationActWorkbook,
+  numberToWordsRu,
+  amountInWords,
+} = jiti(path.join(PROJ, 'src/lib/reconciliationAct.ts'));
 
 const DIR = process.argv[2] || 'C:/Users/hp/Downloads/Telegram Desktop';
 
@@ -1340,6 +1345,262 @@ function runIncomePeriodTest() {
   );
 }
 
+/* ============================================================
+ * АКТ СВЕРКИ — ekran va rasmiy hujjat bir xil raqam beradimi
+ * ------------------------------------------------------------
+ * `reconciliationAct.ts` IKKALA sverkada ishlatiladigan rasmiy
+ * hujjatni quradi, lekin bu harnessda 0 marta uchramasdi.
+ *
+ * TEKSHIRILADIGAN INVARIANTLAR
+ *
+ *  1) EKRAN = HUJJAT. Ekranda «Якуний қолдиқ» = (boshlang'ich
+ *     qoldiq ?? 0) + Фарқ (IncomingReconciliation.tsx:842 va
+ *     OutgoingReconciliation.tsx:534), hujjatda «Сальдо конечное»
+ *     = opening + debet − kredit. Ikkalasi AYNAN bir son.
+ *
+ *  2) ФАРҚ = ДЕБЕТ − КРЕДИТ ikkala sverkada. Rollar TESKARI —
+ *     kirimda faktura debet, chiqimda to'lov debet — shuning
+ *     uchun ikkalasi ALOHIDA tekshiriladi. Agar chaqiruvchi
+ *     tomonlarni almashtirsa, «Обороты» to'g'ri ko'rinib turib
+ *     qatorlar teskari bo'lardi.
+ *
+ *  3) KO'ZGU. O'ng taraf (sherikning ma'lumoti) chap tarafning
+ *     debet ↔ kredit almashtirilgan nusxasi bo'lishi shart.
+ *
+ *  4) PUL YO'QOLMAYDI. Hujjat qatorlaridagi debet yig'indisi
+ *     «Обороты за период» dagi debetga teng; kredit ham.
+ *
+ *  5) QOLDIQ NOMA'LUM ≠ QOLDIQ NOL. `openingBalance: 0` berilsa
+ *     izoh CHIQMASLIGI, `undefined` bo'lsa CHIQISHI shart — aks
+ *     holda hujjat «nol edi» deb YOLG'ON aytadi.
+ * ============================================================ */
+const ACT_SHEET = 'Акт сверки';
+const ACT_SERVICE = ['Сальдо начальное', 'Обороты за период', 'Сальдо конечное'];
+
+function actRows(wb) {
+  const ws = wb.getWorksheet(ACT_SHEET);
+  const out = [];
+  ws.eachRow((r) => {
+    const v = [];
+    r.eachCell({ includeEmpty: true }, (c) => v.push(c.value));
+    out.push(v);
+  });
+  return out;
+}
+
+const actLine = (rows, label) => rows.find((r) => String(r[0] || '').trim() === label);
+
+/** Hujjat qatorlari — xizmat qatorlari va sarlavhalardan tozalangan */
+const actBody = (rows) =>
+  rows.filter(
+    (r) => !ACT_SERVICE.includes(String(r[0] || '').trim()) && typeof r[2] === 'number'
+  );
+
+const actHasNote = (rows) => rows.some((r) => String(r[0] || '').startsWith('Диққат'));
+
+/** EKRANDAGI son. Ikkala komponentda ham AYNAN shu ifoda. */
+const screenSaldo = (opening, difference) =>
+  (opening === undefined ? 0 : opening) + difference;
+
+/**
+ * Bitta aktni to'liq tekshiradi.
+ * `difference` — asosiy jadvaldagi «Фарқ» (ekranga chiqadigan son).
+ */
+function checkAct(label, party, opts, difference) {
+  const wb = buildReconciliationActWorkbook(party, opts);
+  const rows = actRows(wb);
+
+  ok(wb.worksheets.length === 1 && wb.worksheets[0].name === ACT_SHEET,
+    `${label}: bitta «${ACT_SHEET}» varag'i`);
+
+  const open = actLine(rows, 'Сальдо начальное');
+  const turn = actLine(rows, 'Обороты за период');
+  const end = actLine(rows, 'Сальдо конечное');
+  ok(!!open && !!turn && !!end, `${label}: uchala xizmat qatori topildi`);
+  if (!open || !turn || !end) return rows;
+
+  // --- 2) ФАРҚ = ДЕБЕТ − КРЕДИТ -----------------------------
+  ok(Math.abs(difference - (party.debitTotal - party.creditTotal)) < 0.005,
+    `${label}: Фарқ = дебет − кредит = ${M(difference)}`);
+
+  // --- 1) EKRAN = HUJJAT ------------------------------------
+  const screen = screenSaldo(opts.openingBalance, difference);
+  // Hujjatda saldo ishorasiz yoziladi: musbati debetga, manfiysi
+  // kreditga. Ishorani tiklaymiz va ekrandagi son bilan solishtiramiz.
+  const docSaldo = (end[2] || 0) - (end[3] || 0);
+  ok(Math.abs(docSaldo - screen) < 0.005,
+    `${label}: ekran (${M(screen)}) = hujjat «Сальдо конечное» (${M(docSaldo)})`);
+
+  // Ishora to'g'ri ustunda turibdimi
+  if (Math.abs(screen) >= 0.005) {
+    const rightCol = screen > 0
+      ? (end[2] || 0) > 0 && (end[3] || 0) === 0
+      : (end[3] || 0) > 0 && (end[2] || 0) === 0;
+    ok(rightCol, `${label}: qoldiq ${screen > 0 ? 'ДЕБЕТ' : 'КРЕДИТ'} ustunida`);
+  } else {
+    ok((end[2] || 0) === 0 && (end[3] || 0) === 0,
+      `${label}: qoldiq nol — ikkala ustun ham nol`);
+  }
+
+  // --- «Обороты» aynan berilgan yig'indilarni yozadi ---------
+  ok(turn[2] === party.debitTotal && turn[3] === party.creditTotal,
+    `${label}: «Обороты» = berilgan yig'indilar (${M(turn[2])} / ${M(turn[3])})`);
+
+  // --- 4) PUL YO'QOLMAYDI -----------------------------------
+  const body = actBody(rows);
+  const sumD = body.reduce((s, r) => s + (r[2] || 0), 0);
+  const sumC = body.reduce((s, r) => s + (r[3] || 0), 0);
+  ok(Math.abs(sumD - party.debitTotal) < 0.005 && Math.abs(sumC - party.creditTotal) < 0.005,
+    `${label}: qatorlar yig'indisi = «Обороты» (${M(sumD)} / ${M(sumC)})`);
+  ok(body.length === party.debitDocs.length + party.creditDocs.length,
+    `${label}: hamma hujjat chizilgan (${body.length} ta)`);
+
+  // --- 3) KO'ZGU --------------------------------------------
+  const mirrored = [open, ...body, turn, end].every(
+    (r) => (r[6] || 0) === (r[3] || 0) && (r[7] || 0) === (r[2] || 0)
+  );
+  ok(mirrored, `${label}: o'ng taraf chapning ko'zgusi (дебет ↔ кредит)`);
+
+  // --- 5) QOLDIQ NOMA'LUM ≠ QOLDIQ NOL ----------------------
+  const known = opts.openingBalance !== undefined;
+  ok(actHasNote(rows) === !known,
+    known
+      ? `${label}: qoldiq berilgan — ogohlantirish izohi YO'Q`
+      : `${label}: qoldiq berilmagan — ogohlantirish izohi BOR`);
+
+  return rows;
+}
+
+function runActTest() {
+  console.log(`\n============================================================`);
+  console.log('АКТ СВЕРКИ: ekran va hujjat bir xil raqam beradimi');
+
+  const OWN = 'БИЗНИНГ КОРХОНА';
+
+  // ----------------------------------------------------------
+  // KIRIM (xaridor, 4010 aktiv): biz yozgan faktura — ДЕБЕТ,
+  // kelgan pul — КРЕДИТ. Фарқ = faktura − pul.
+  // ----------------------------------------------------------
+  const IN_PARTY = {
+    name: 'ТЕСТ МЧЖ',
+    inn: '300000001',
+    debitTotal: 6500,
+    creditTotal: 3000,
+    debitDocs: [
+      { date: '2025-03-01', number: 'F-1 от 01.03.2025', amount: 1500 },
+      { date: '2026-04-01', number: 'F-2', amount: 5000 },
+    ],
+    creditDocs: [
+      { date: '2025-03-10', number: 'П-1', amount: 1000 },
+      { date: '2026-04-05', number: 'П-2', amount: 2000 },
+    ],
+  };
+  const IN_DIFF = 6500 - 3000; // ekrandagi «Фарқ»
+
+  checkAct('КИРИМ, қолдиқ номаълум', IN_PARTY, { ownName: OWN }, IN_DIFF);
+  checkAct('КИРИМ, қолдиқ 2500', IN_PARTY, { ownName: OWN, openingBalance: 2500 }, IN_DIFF);
+  // NOL ≠ NOMA'LUM: shu ikkisi bir xil ko'rinsa hujjat yolg'on aytadi
+  checkAct('КИРИМ, қолдиқ АНИҚ нол', IN_PARTY, { ownName: OWN, openingBalance: 0 }, IN_DIFF);
+  // Manfiy qoldiq saldoni teskari tomonga o'tkazadi
+  checkAct('КИРИМ, қолдиқ −10000', IN_PARTY, { ownName: OWN, openingBalance: -10000 }, IN_DIFF);
+
+  // ----------------------------------------------------------
+  // CHIQIM (yetkazib beruvchi, 6010 passiv): ROLLAR TESKARI —
+  // biz to'lagan pul — ДЕБЕТ, kelgan faktura — КРЕДИТ.
+  // ----------------------------------------------------------
+  const OUT_PARTY = {
+    name: 'ТАЪМИНОТЧИ МЧЖ',
+    inn: '300000002',
+    debitTotal: 9000000,   // biz to'lagan pul
+    creditTotal: 12000000, // kelgan faktura
+    debitDocs: [
+      { date: '2026-01-15', number: '31-BPF от 30.04.2025', amount: 4000000 },
+      { date: '2026-02-20', number: '77-BPF', amount: 5000000 },
+    ],
+    creditDocs: [
+      { date: '2026-01-10', number: 'СФ-100', amount: 7000000 },
+      { date: null, number: 'СФ-101', amount: 5000000 },
+    ],
+  };
+  const OUT_DIFF = 9000000 - 12000000; // −3 000 000, biz qarzdormiz
+
+  checkAct('ЧИҚИМ, қолдиқ номаълум', OUT_PARTY, { ownName: OWN }, OUT_DIFF);
+  // Qoldiq aynan farqni yopadi -> saldo NOL
+  const zeroRows = checkAct(
+    'ЧИҚИМ, қолдиқ 3 000 000 (сальдо нол)',
+    OUT_PARTY,
+    { ownName: OWN, openingBalance: 3000000 },
+    OUT_DIFF
+  );
+  ok(!!zeroRows, 'ЧИҚИМ нол ҳолати қурилди');
+
+  // ----------------------------------------------------------
+  // Hujjat raqami va sana shakli
+  // ----------------------------------------------------------
+  const outRows = actRows(buildReconciliationActWorkbook(OUT_PARTY, { ownName: OWN }));
+  const outBody = actBody(outRows);
+  ok(outBody.some((r) => r[1] === '31-BPF'),
+    '«31-BPF от 30.04.2025» -> «31-BPF» (сана рақамдан ажратилди)');
+  ok(outBody.some((r) => r[0] === '15.01.2026'),
+    'сана ISO дан кун.ой.йил шаклига ўтди (15.01.2026)');
+  const noDate = outBody.find((r) => r[1] === 'СФ-101');
+  ok(noDate && noDate[0] === '',
+    'сана йўқ ҳужжат бўш катак беради (сохта сана ЎЙЛАБ ЧИҚАРИЛМАЙДИ)');
+  const dates = outBody.map((r) => r[0]).filter(Boolean);
+  ok(dates.join('|') === [...dates].sort().join('|') || dates.length < 2,
+    `ҳужжатлар сана бўйича тартибланган (${dates.join(', ')})`);
+
+  // ----------------------------------------------------------
+  // Ikkala tomon sarlavhasi — kimning ma'lumoti qayerda
+  // ----------------------------------------------------------
+  const side = outRows[0];
+  ok(String(side[0]).includes(OWN) && String(side[4]).includes('ТАЪМИНОТЧИ МЧЖ'),
+    'чап устун БИЗНИКИ, ўнг устун ШЕРИКНИКИ');
+
+  // ----------------------------------------------------------
+  // TEKSHIRUVNING O'ZI ISHLAYAPTIMI
+  // Hujjatlar almashtirilsa (debet <-> kredit) «Обороты» baribir
+  // to'g'ri ko'rinadi — chunki u alohida uzatiladi. Faqat qatorlar
+  // yig'indisi buni sezadi. Shu sababli 4-invariant bo'sh gap
+  // emasligini ISBOTLAYMIZ.
+  // ----------------------------------------------------------
+  const swappedRows = actRows(
+    buildReconciliationActWorkbook(
+      { ...IN_PARTY, debitDocs: IN_PARTY.creditDocs, creditDocs: IN_PARTY.debitDocs },
+      { ownName: OWN }
+    )
+  );
+  const swTurn = actLine(swappedRows, 'Обороты за период');
+  const swSumD = actBody(swappedRows).reduce((s, r) => s + (r[2] || 0), 0);
+  ok(swTurn[2] === IN_PARTY.debitTotal,
+    "ҳужжатлар алмашса ҳам «Обороты» ЎЗГАРМАЙДИ (шунинг учун у етарли эмас)");
+  ok(Math.abs(swSumD - swTurn[2]) > 0.005,
+    `ҳужжатлар алмашса қаторлар йиғиндиси МОС КЕЛМАЙДИ (${M(swSumD)} ≠ ${M(swTurn[2])})`);
+
+  // ----------------------------------------------------------
+  // Сумма прописью — расмий шаклнинг сўз билан ёзиладиган қатори.
+  // ЭСЛАТМА: bu ikki funksiya EXPORT qilingan, lekin hozircha
+  // hech qayerda CHAQIRILMAYDI (HANDOFF ga yozildi).
+  // ----------------------------------------------------------
+  const WORDS = [
+    [0, 'Ноль'],
+    [1, 'Один'],
+    [11, 'Одиннадцать'],
+    [1000, 'Одна тысяча'],       // «тысяча» аёл родда: одИН эмас, однА
+    [2000, 'Две тысячи'],
+    [5000, 'Пять тысяч'],
+    [3222000, 'Три миллиона двести двадцать две тысячи'],
+  ];
+  for (const [n, want] of WORDS) {
+    const got = numberToWordsRu(n);
+    ok(got === want, `${n} -> «${want}»${got === want ? '' : ` (олинди: «${got}»)`}`);
+  }
+  ok(amountInWords(1234.56) === 'Одна тысяча двести тридцать четыре сум 56 тийин',
+    `1234.56 -> «${amountInWords(1234.56)}»`);
+  ok(amountInWords(100) === 'Сто сум 00 тийин',
+    `тийин иккита рақам билан тўлдирилади: «${amountInWords(100)}»`);
+}
+
 for (const name of Object.keys(ETALON)) run(name, [name]);
 run('IMANMAX 7 oylik (oborotka + faktura)', [
   'IMANMAX 7 oylik OBOROTKA.xlsx',
@@ -1354,6 +1615,7 @@ runInviteKeyTest();
 runFailureLogTest();
 runPhoneTest();
 runIncomePeriodTest();
+runActTest();
 
 // Eksportni qayta o'qish sinovi ExcelJS tufayli asinxron — shuning
 // uchun yakuniy hisob shu yerda chiqariladi.

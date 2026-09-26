@@ -62,3 +62,35 @@ export function formatPhone(e164: string): string {
   const n = d.slice(UZ_CODE.length);
   return `+${UZ_CODE} ${n.slice(0, 2)} ${n.slice(2, 5)} ${n.slice(5, 7)} ${n.slice(7, 9)}`;
 }
+
+/* ============================================================
+ * TELEFON -> FIREBASE UCHUN «HISOB EMAILI»
+ * ------------------------------------------------------------
+ * Firebase Auth'da «telefon + parol» degan usul YO'Q: telefon
+ * faqat SMS (OTP) bilan ishlaydi, parol esa faqat email bilan.
+ *
+ * Shuning uchun raqam barqaror soxta email manziliga o'giriladi:
+ *   +998901234567  ->  998901234567@moslik.uz
+ *
+ * Bu manzilga hech qachon xat yuborilmaydi va u hech kimga
+ * ko'rsatilmaydi — u faqat Firebase ichidagi KALIT.
+ *
+ * MUHIM: shu manzil `accountKeyOf()` ga ham tushadi (u emailni
+ * birinchi oladi), ya'ni HISOB KALITI aynan shu bo'ladi. Qoida
+ * uch joyda bir xil qoladi, chunki `firestore.rules` dagi
+ * `authKey()` ham tokendagi emailni o'qiydi — token ichida esa
+ * aynan shu soxta manzil turadi.
+ *
+ * OGOHLANTIRISH: bu usulda raqam KIMNIKI ekani TEKSHIRILMAYDI.
+ * SMS tasdiqlash yo'q, ya'ni istalgan odam istalgan raqamni
+ * yozib hisob ocha oladi. Bu ATAYLAB tanlangan (egasi qarori,
+ * 2026-09-26) — ishqalanishni kamaytirish uchun.
+ * ============================================================ */
+export const AUTH_EMAIL_DOMAIN = 'moslik.uz';
+
+/** `+998901234567` -> `998901234567@moslik.uz`. Noto'g'ri bo'lsa `null`. */
+export function phoneToAuthEmail(raw: string): string | null {
+  const e164 = toE164(raw);
+  if (!e164) return null;
+  return `${e164.replace(/\D/g, '')}@${AUTH_EMAIL_DOMAIN}`;
+}

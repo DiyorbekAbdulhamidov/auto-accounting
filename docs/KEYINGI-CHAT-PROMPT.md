@@ -7,7 +7,7 @@ Men o'zbekcha (lotin) yozaman. UI matnlari va `t()` kalitlari — kirill o'zbekc
 ## 0. BOSHLASH
 
 ```
-node scripts/verify-parsers.cjs   →  171/171
+node scripts/verify-parsers.cjs   →  248/248
 node scripts/check-contrast.cjs   →  70/70 (35 yorug' + 35 tungi)
 npx tsc --noEmit                  →  toza
 npx eslint src --max-warnings=0   →  toza
@@ -94,13 +94,75 @@ ochiq sahifaga (qo'llanma, prezentatsiya) QO'YILMAYDI.
 
 ---
 
+## 2-A. 2026-09-27 DA O'LCHANGAN — HAQIQIY FOYDALANUVCHI YO'Q
+
+`scripts/retention.cjs` (yangi, faqat o'qiydi) bazani o'lchadi:
+
+* `allowed_users` — **3 ta**, uchalasi ham O'ZIMIZNIKI/sinov:
+  `+998901234567` (sinov raqami), `admin@gmail.com` (sinov),
+  `webleaders.uz@gmail.com` (demo, `status` hatto `active` emas).
+* `sverka_reports` — 3 ta, **uchalasi ham** `webleaders.uz@gmail.com` niki
+  (15-iyul, 13-avgust, 16-avgust).
+* `income_reports` — **0 ta**. Kirim sverkasini hech kim ishlatmagan.
+* `companies` — 4 ta, hammasi demo hisobda: `test`, `das`,
+  **`Babybum`** (haqiqiy firma nomiga o'xshaydi, STIR 311091791), `test`.
+
+Ya'ni TASHQI foydalanuvchi **nol**. Eski HANDOFF dagi «4 ta
+foydalanuvchi, oyiga ~2 ta ro'yxatdan o'tish» bazaga MOS EMAS.
+Qo'mitaning «10 ta mijozdagi churn» savoliga hozir javob yo'q —
+ketadigan odam yo'q. Vazifa «4 dan 10 ga» emas, **0 dan 1 ga**.
+
+### Hakamlar saytga kirdimi — o'lchangan
+
+* Firebase: **19-sentyabrdan keyin hech kim parol yozib KIRMAGAN**
+  (xat 25-sentyabrda kelgan).
+* Vercel Analytics, 25-sentyabr: 4 ta tashrifchi, hammasi `/en`,
+  har biriga 1 ta sahifa, referrer yo'q, davlat **US**. O'zbekistondan
+  o'sha kuni 0 ta. Bu odam emas, avtomatik havola tekshiruvi izi.
+* Sentyabr bo'yicha `/en`: **7 tashrifchi / 7 sahifa** — o'sha sahifaga
+  tushgan HECH KIM ichkariga bosmagan.
+* Kabinet: «Ҳозирча мавжуд ҳафталар йўқ» — dastur boshlanmagan,
+  jiddiy qarash OLDINDA.
+
+Hakamlarga berilgan MVP havolasi: **`https://test-project.webleaders.uz/en`**
+(`www.moslik.uz` EMAS). Ikkala domen bitta Vercel loyihasida
+(`auto-accounting`), ya'ni env va kod umumiy.
+
+## 2-B. KIRISH QAYTA QURILDI (2026-09-27, egasi qarori)
+
+* «Рўйхатдан ўтиш / Кириш» bo'linishi, SMS qadami, email yo'li,
+  parolni tiklash — UI dan OLIB TASHLANDI.
+* Endi **modal oyna**, faqat **telefon + parol**, BITTA tugma. Raqam
+  tanish bo'lsa kiradi, bo'lmasa hisob ochiladi (`phoneAccess()`).
+* Firebase'da «telefon + parol» YO'Q, shuning uchun raqam barqaror
+  soxta emailga o'giriladi: `+998901234567` -> `998901234567@moslik.uz`
+  (`src/lib/phone.ts`, `phoneToAuthEmail`). Hisob kaliti ham shu bo'ladi.
+* **SMS TASDIQLASH YO'Q** — raqam kimniki ekani tekshirilmaydi.
+  Bu ataylab tanlangan; narxi kodda ochiq yozilgan.
+* Sessiya doimiy: `browserLocalPersistence` ataylab yozib qo'yilgan.
+* `sendSmsCode` / `confirmSmsCode` AuthContext'da QOLDI (UI dan uzilgan) —
+  qaror qaytarilsa tayyor turadi.
+* **Orqaga moslik**: `phoneAccess()` `@` bo'lsa uni EMAIL deb qabul
+  qiladi va `NEXT_PUBLIC_DEMO_PHONE` topilmasa eski
+  `NEXT_PUBLIC_DEMO_EMAIL` ga tushadi. Sabab: hakamlarning demo
+  hisobi email bilan ochilgan — Vercel o'zgaruvchisi almashtirilmasa
+  ham kirish UZILMAYDI.
+
 ## 3. NAVBATDAGI ISH
 
-1. **«Акт сверки» umuman SINOVSIZ** — `reconciliationAct.ts`
-   `verify-parsers` da 0 marta uchraydi. U ikkala sverkada
-   ishlatiladigan rasmiy ikki tomonlama hujjat, kirim Excel'idagi
-   ishora xatosi esa aynan shu turkumdan edi. Naqsh tayyor:
-   `runIncomeExcelTest` workbook KATAGINI o'qiydi.
+1. **«Сумма прописью» hujjatda YO'Q** — `reconciliationAct.ts` da
+   `amountInWords()` va `numberToWordsRu()` EXPORT qilingan, lekin
+   butun loyihada hech qayerdan CHAQIRILMAYDI (grep bilan o'lchangan).
+   Ya'ni rasmiy akt shaklida odatda bo'ladigan «summa so'z bilan»
+   qatori umuman chizilmaydi. Funksiyalarning o'zi ishlaydi va endi
+   qoplangan (rus tili rod/ko'plik shakllari bilan) — qaror: qatorni
+   aktga qo'shishmi yoki o'lik kodni olib tashlashmi.
+   ESLATMA: «Акт сверки» ning O'ZI endi SINOVSIZ EMAS — 2026-09-26
+   da `runActTest()` qo'shildi (77 ta tekshiruv): ekran = hujjat,
+   Фарқ = дебет − кредит ikkala sverkada, o'ng taraf ko'zgu, pul
+   yo'qolmaydi, qoldiq NOMA'LUM ≠ NOL. Mutatsiya bilan isbotlangan:
+   aktdan boshlang'ich qoldiq olib tashlansa 5 ta tekshiruv, ko'zgu
+   buzilsa 6 ta tekshiruv YIQILADI.
 2. **Chiqim Excel eksporti komponent ichida** —
    `OutgoingReconciliation.tsx` `ExcelJS` ni to'g'ridan import qiladi,
    ya'ni Node'dan sinab bo'lmaydi. Kirimniki `src/lib/incomeExcel.ts`
