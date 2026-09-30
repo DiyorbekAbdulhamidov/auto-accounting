@@ -8,46 +8,29 @@ import { path } from "@/lib/routes";
 import Logo from "@/components/Brand";
 import ThemeToggle from "@/components/ThemeToggle";
 import LanguageToggle from "@/components/LanguageToggle";
-import { Alert, Badge, Button, Field, Input, layout } from "@/components/ui";
+import { Alert, Button, Field, Input, layout } from "@/components/ui";
 
 /* ============================================================
-   KO'RSATUV (DEMO) HISOBI — FORMA OLDINDAN TO'LDIRILADI
+   FORMA HECH QACHON OLDINDAN TO'LDIRILMAYDI (2026-09-30, egasi qarori)
    ------------------------------------------------------------
-   Hakam yoki mijoz saytni ochganda ro'yxatdan o'tmasdan ichkariga
-   kira olishi kerak. Qiymat muhit o'zgaruvchisidan olinadi:
+   Ilgari bu yerda `NEXT_PUBLIC_DEMO_EMAIL` / `NEXT_PUBLIC_DEMO_PASSWORD`
+   bor edi va ko'rsatuv hisobining paroli formaga yozib qo'yilardi.
+   Ikki sabab bilan OLIB TASHLANDI:
 
-     NEXT_PUBLIC_DEMO_PHONE
-     NEXT_PUBLIC_DEMO_PASSWORD
+   1) `NEXT_PUBLIC_` bilan boshlangan qiymat brauzerga YUBORILADI —
+      parol sahifa manbasidan o'qilardi, ya'ni MAXFIY EMAS edi.
+   2) Oddiy foydalanuvchi tugmani bosib UMUMIY demo hisobga tushib
+      qolardi va o'z mijozining bank ko'chirmasini o'sha yerga
+      yuklashi mumkin edi.
 
-   ⚠️ XAVFSIZLIK — ochiq aytiladi. `NEXT_PUBLIC_` bilan boshlangan
-   har qanday qiymat brauzerga YUBORILADI va uni sahifa manbasidan
-   o'qish mumkin. Ya'ni bu yerga qo'yilgan parol MAXFIY EMAS.
-   Shuning uchun bu yerga ASOSIY hisob emas, ALOHIDA ko'rsatuv
-   hisobi qo'yilishi kerak: o'z ish maydoni, o'ylab topilgan namuna
-   ma'lumoti bilan (`demo/make-demo.cjs` shuni tayyorlaydi).
-   Aks holda saytni ochgan har kim haqiqiy mijoz ma'lumotiga
-   to'liq kira oladi — va uni O'ZGARTIRA ham oladi, chunki kodda
-   «faqat o'qish» rejimi yo'q.
+   ATAYLAB KODDAN OLIB TASHLANDI, Vercel'dan emas. Sabab: muhit
+   o'zgaruvchisi koddagi qarorni JIMGINA bekor qiladi — bu loyihada
+   `NEXT_PUBLIC_SITE_URL` (saytni ikkiga bo'lgan) va o'sha demo
+   paroli aynan shunday qaytib kelgan. Endi o'zgaruvchi qo'yilsa
+   ham forma to'ldirilmaydi.
 
-   IKKALA NOM HAM ISHLAYDI. `NEXT_PUBLIC_DEMO_PHONE` — yangisi;
-   topilmasa ESKI `NEXT_PUBLIC_DEMO_EMAIL` ga tushadi. Sabab ANIQ:
-   hakamlarga berilgan havola (`test-project.webleaders.uz/en`)
-   ishlashdan TO'XTAMASLIGI kerak. Vercel'da hozir eski o'zgaruvchi
-   turibdi — u almashtirilgunga qadar ham kirish uzilmaydi.
-   `AuthContext.phoneAccess()` `@` bo'lsa uni email deb qabul qiladi.
+   Ko'rsatuv kerak bo'lsa: hisob ma'lumotini odamga QO'LDA bering.
    ============================================================ */
-const IS_DEV = process.env.NODE_ENV === "development";
-
-const DEMO_PHONE =
-  process.env.NEXT_PUBLIC_DEMO_PHONE ||
-  process.env.NEXT_PUBLIC_DEMO_EMAIL ||
-  (IS_DEV ? "90 123 45 67" : "");
-const DEMO_PASSWORD =
-  process.env.NEXT_PUBLIC_DEMO_PASSWORD || (IS_DEV ? "12345678" : "");
-
-/** Forma oldindan to'ldirilganmi — ekranda buni AYTISH kerak, aks
- *  holda odam «nega mening maydonlarim to'la?» deb hayron bo'ladi. */
-const PREFILLED = Boolean(DEMO_PHONE && DEMO_PASSWORD);
 
 /* ============================================================
    KIRISH — BITTA AMAL
@@ -68,8 +51,8 @@ export default function LoginForm() {
   const locale = useLocale();
   const { phoneAccess } = useAuth();
 
-  const [phone, setPhone] = useState(DEMO_PHONE);
-  const [password, setPassword] = useState(DEMO_PASSWORD);
+  const [phone, setPhone] = useState("");
+  const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -119,12 +102,6 @@ export default function LoginForm() {
               {t("Бухгалтер учун автоматик текширув тизими")}
             </p>
           </div>
-
-          {PREFILLED && (
-            <Badge tone="info" className="mb-4">
-              {t("Кўрсатув учун маълумотлар олдиндан тўлдирилган — «Тизимга кириш»ни босинг")}
-            </Badge>
-          )}
 
           <form className="space-y-4" onSubmit={handleSubmit}>
             <Field
