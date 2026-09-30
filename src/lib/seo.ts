@@ -84,7 +84,7 @@ const UZ: Record<PathKey, SeoCopy> = {
   },
   login: {
     title: "Kirish",
-    description: "Hisobingizga kiring yoki bepul ro'yxatdan o'ting — hammasi cheklovsiz.",
+    description: "Telefon raqami va parol — tizimga shunday kirasiz. Hammasi bepul va cheklovsiz.",
     keywords: [],
   },
   offer: {
@@ -153,7 +153,7 @@ const UZ_CYRL: Record<PathKey, SeoCopy> = {
   },
   login: {
     title: "Кириш",
-    description: "Ҳисобингизга киринг ёки бепул рўйхатдан ўтинг — ҳаммаси чекловсиз.",
+    description: "Телефон рақами ва парол — тизимга шундай кирасиз. Ҳаммаси бепул ва чекловсиз.",
     keywords: [],
   },
   offer: {
@@ -239,7 +239,7 @@ const RU: Record<PathKey, SeoCopy> = {
   },
   login: {
     title: "Вход",
-    description: "Войдите в аккаунт или зарегистрируйтесь бесплатно — всё без ограничений.",
+    description: "Номер телефона и пароль — вот и всё. Бесплатно и без ограничений.",
     keywords: [],
   },
   offer: {
@@ -304,7 +304,7 @@ const EN: Record<PathKey, SeoCopy> = {
   },
   login: {
     title: "Sign in",
-    description: "Sign in or create a free account — everything is unlimited.",
+    description: "Phone number and password — that is the whole sign-in. Free and unlimited.",
     keywords: [],
   },
   offer: {
