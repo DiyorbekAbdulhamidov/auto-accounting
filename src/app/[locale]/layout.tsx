@@ -15,6 +15,7 @@ import { Golos_Text, IBM_Plex_Mono, Literata } from "next/font/google";
 import { notFound } from "next/navigation";
 import { AuthProvider } from "@/context/AuthContext";
 import { LanguageProvider } from "@/context/LanguageContext";
+import { LoginModalProvider } from "@/components/LoginModal";
 import { Analytics } from "@vercel/analytics/next"
 
 import {
@@ -146,10 +147,14 @@ export default async function RootLayout({
           {/* Til endi localStorage'dan EMAS, manzildan keladi — shuning
               uchun server va klient bir xil HTML chiqaradi. */}
           <LanguageProvider lang={lang} locale={locale}>
-            <Analytics />
-            {children}
-            {/* Xabarlar (`alert()` o'rniga) — ildizda BIR MARTA */}
-            <Toaster />
+            {/* Кириш ойнаси — ҳар саҳифадан очилиши мумкин, шунинг
+                учун илдизда. Ёпиқ турганда ҳеч нарса чизмайди. */}
+            <LoginModalProvider>
+              <Analytics />
+              {children}
+              {/* Xabarlar (`alert()` o'rniga) — ildizda BIR MARTA */}
+              <Toaster />
+            </LoginModalProvider>
           </LanguageProvider>
         </AuthProvider>
       </body>

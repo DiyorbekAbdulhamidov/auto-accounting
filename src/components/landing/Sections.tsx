@@ -32,6 +32,7 @@ import { ReconciliationAnimationText } from "@/components/guide/ReconciliationAn
 import LedgerPanel from "./LedgerPanel";
 import { ColourKey } from "@/components/guide/Guide";
 import { Badge, Card, Num, Reveal, buttonClasses, cx } from "@/components/ui";
+import { LoginLink } from "@/components/LoginModal";
 
 /**
  * Кирганми-йўқми.
@@ -91,13 +92,18 @@ export function Hero() {
             <ReconciliationAnimationText />
 
             <div className="mt-7 flex flex-wrap items-center gap-3">
-              <NextLink
-                href={signedIn ? path("clients", locale) : path("login", locale)}
-                className={buttonClasses("primary", "md")}
-              >
-                {signedIn ? t("Иш столига ўтиш") : t("Бепул бошлаш")}{" "}
-                <ArrowRight className="h-4 w-4" />
-              </NextLink>
+              {signedIn ? (
+                <NextLink
+                  href={path("clients", locale)}
+                  className={buttonClasses("primary", "md")}
+                >
+                  {t("Иш столига ўтиш")} <ArrowRight className="h-4 w-4" />
+                </NextLink>
+              ) : (
+                <LoginLink className={buttonClasses("primary", "md")}>
+                  {t("Бепул бошлаш")} <ArrowRight className="h-4 w-4" />
+                </LoginLink>
+              )}
               <NextLink href={path("guide", locale)} className={buttonClasses("secondary", "md")}>
                 {t("Қандай ишлайди")}
               </NextLink>
@@ -286,7 +292,6 @@ export function Comparison() {
 
 export function Pricing({ heading = true }: { heading?: boolean }) {
   const t = useT();
-  const locale = useLocale();
 
   // Учта устун ЎРНИГА битта рўйхат: солиштирадиган нарса йўқ, демак
   // карта ҳам, «Кўпчиликка мос» белгиси ҳам керак эмас.
@@ -330,13 +335,10 @@ export function Pricing({ heading = true }: { heading?: boolean }) {
               ))}
             </ul>
 
-            <NextLink
-              href={path("login", locale)}
-              className={cx(buttonClasses("primary", "md"), "shrink-0")}
-            >
+            <LoginLink className={cx(buttonClasses("primary", "md"), "shrink-0")}>
               {t("Бепул бошлаш")}
               <ArrowRight className="h-4 w-4" />
-            </NextLink>
+            </LoginLink>
           </div>
         </Card>
 
@@ -444,13 +446,18 @@ export function FinalCta() {
             {t("Энг чалкаш мижозингизнинг банк кўчирмаси ва фактура рўйхатини юкланг. Фарқ борми — бир дақиқада биласиз.")}
           </p>
           <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
-            <NextLink
-              href={signedIn ? path("clients", locale) : path("login", locale)}
-              className={buttonClasses("primary", "md")}
-            >
-              {signedIn ? t("Иш столига ўтиш") : t("Бепул бошлаш")}{" "}
-              <ArrowRight className="h-4 w-4" />
-            </NextLink>
+            {signedIn ? (
+              <NextLink
+                href={path("clients", locale)}
+                className={buttonClasses("primary", "md")}
+              >
+                {t("Иш столига ўтиш")} <ArrowRight className="h-4 w-4" />
+              </NextLink>
+            ) : (
+              <LoginLink className={buttonClasses("primary", "md")}>
+                {t("Бепул бошлаш")} <ArrowRight className="h-4 w-4" />
+              </LoginLink>
+            )}
             <NextLink href={path("guide", locale)} className={buttonClasses("secondary", "md")}>
               {t("Тўлиқ қўлланма")}
             </NextLink>
@@ -487,9 +494,9 @@ export function Footer() {
             <NextLink href={path("guide", locale)} className="text-ink-2 hover:text-ink">
               {t("Қўлланма")}
             </NextLink>
-            <NextLink href={path("login", locale)} className="text-ink-2 hover:text-ink">
+            <LoginLink className="text-ink-2 hover:text-ink">
               {t("Кириш")}
-            </NextLink>
+            </LoginLink>
           </nav>
 
           {/* HUQUQIY USTUN. Ataylab alohida: to'lov tizimi moderatsiyasi

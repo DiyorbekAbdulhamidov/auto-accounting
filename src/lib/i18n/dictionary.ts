@@ -23,6 +23,8 @@ export interface Entry {
 export const DICTIONARY: Record<string, Entry> = {
   // ---------- Umumiy / navigatsiya ----------
   'Тизимга кириш': { ru: 'Вход в систему', en: 'Sign in' },
+  'Кириш ёки рўйхатдан ўтиш': { ru: 'Вход или регистрация', en: 'Sign in or sign up' },
+  'Ҳисобингиз бўлмаса — рақамингизни ёзинг, ўзи очилади.': { ru: 'Нет аккаунта — просто введите номер, он создастся сам.', en: 'No account yet? Just enter your number — it will be created.' },
   'Тизимдан чиқиш': { ru: 'Выйти из системы', en: 'Sign out' },
   'Чиқиш': { ru: 'Выход', en: 'Sign out' },
   'Сверка': { latn: 'Sverka', ru: 'Сверка', en: 'Reconciliation' },

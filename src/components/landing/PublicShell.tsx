@@ -21,6 +21,7 @@ import { useLocale, useT } from "@/context/LanguageContext";
 import { PATHS, path } from "@/lib/routes";
 import { buttonClasses, cx, layout } from "@/components/ui";
 import { Footer } from "./Sections";
+import { LoginLink } from "@/components/LoginModal";
 
 const NAV: { key: "guide" | "pricing" | "features"; label: string }[] = [
   { key: "features", label: "Нима бор" },
@@ -115,12 +116,18 @@ export default function PublicShell({ children }: { children: React.ReactNode })
           <div className="ml-auto flex shrink-0 items-center gap-2">
             <LanguageToggle />
             <ThemeToggle />
-            <NextLink
-              href={signedIn ? path("clients", locale) : path("login", locale)}
-              className={buttonClasses("primary", "sm")}
-            >
-              {signedIn ? t("Иш столи") : t("Кириш")}
-            </NextLink>
+            {signedIn ? (
+              <NextLink
+                href={path("clients", locale)}
+                className={buttonClasses("primary", "sm")}
+              >
+                {t("Иш столи")}
+              </NextLink>
+            ) : (
+              <LoginLink className={buttonClasses("primary", "sm")}>
+                {t("Кириш")}
+              </LoginLink>
+            )}
           </div>
         </div>
 
