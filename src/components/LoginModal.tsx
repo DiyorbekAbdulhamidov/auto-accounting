@@ -71,7 +71,11 @@ function LoginModal({ open, onClose }: { open: boolean; onClose: () => void }) {
       onClose={onClose}
       title={t("Кириш ёки рўйхатдан ўтиш")}
       hint={t("Бухгалтер учун автоматик текширув тизими")}
-      width="26rem"
+      /* `width` — TAILWIND SINFI, CSS o'lchovi EMAS. `"26rem"` berilsa
+         sinf topilmaydi, kenglik cheklanmaydi va oyna butun ekranga
+         cho'ziladi (2026-09-30 da shunday bo'lgan). `/login`
+         sahifasidagi karta ham `max-w-sm` — ikkalasi bir xil enlikda. */
+      width="max-w-sm"
     >
       <LoginFields onDone={onClose} />
     </Modal>
