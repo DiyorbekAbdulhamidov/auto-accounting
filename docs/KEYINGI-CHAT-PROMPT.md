@@ -7,7 +7,7 @@ Men o'zbekcha (lotin) yozaman. UI matnlari va `t()` kalitlari — kirill o'zbekc
 ## 0. BOSHLASH
 
 ```
-node scripts/verify-parsers.cjs   →  248/248
+node scripts/verify-parsers.cjs   →  168/168 (etalon fayllar yo’qolgan — 2-C ga qara)
 node scripts/check-contrast.cjs   →  70/70 (35 yorug' + 35 tungi)
 npx tsc --noEmit                  →  toza
 npx eslint src --max-warnings=0   →  toza
@@ -147,6 +147,64 @@ Hakamlarga berilgan MVP havolasi: **`https://test-project.webleaders.uz/en`**
   `NEXT_PUBLIC_DEMO_EMAIL` ga tushadi. Sabab: hakamlarning demo
   hisobi email bilan ochilgan — Vercel o'zgaruvchisi almashtirilmasa
   ham kirish UZILMAYDI.
+
+## 2-C. 2026-09-30 — KIRISH MODAL, DEMO OLIB TASHLANDI, BOT TUZATILDI
+
+### Kirish endi MODAL
+* «Кириш» bosilganda `/login` ga O'TILMAYDI — oyna joyida ochiladi.
+* `LoginFields` — forma BITTA manba: modal ham, `/login` sahifasi ham
+  shundan chiziladi. Ikki nusxa bo'lsa biri eskirardi.
+* `LoginModal` + `LoginModalProvider` ildizda (`[locale]/layout.tsx`).
+  Holat HOSILA: oyna qaysi sahifada ochilgani saqlanadi, shuning uchun
+  sahifa almashsa yoki odam kirsa o'zi yopiladi. Effekt ichida
+  `setState` YO'Q — eslint `react-hooks/set-state-in-effect` uni
+  o'tkazmaydi.
+* `LoginLink` ataylab `<a href="/login">` bo'lib qoladi: JS yiqilsa
+  yoki provayder bo'lmasa oddiy havola sifatida ishlaydi.
+* **`/login` marshruti O'CHIRILMAYDI** — `AuthContext` va `AppShell`
+  kirmagan odamni o'sha yerga yo'naltiradi.
+* Matn: «Кириш ёки рўйхатдан ўтиш» + «Ҳисобингиз бўлмаса —
+  рақамингизни ёзинг, ўзи очилади». Amal bitta, lekin yangi odam
+  hisob qayerda ochilishini biladi.
+
+### Demo to'ldirish YO'Q
+`NEXT_PUBLIC_DEMO_EMAIL` / `NEXT_PUBLIC_DEMO_PASSWORD` **koddan**
+olib tashlandi, Vercel'dan emas. Sabab: muhit o'zgaruvchisi koddagi
+qarorni jimgina bekor qiladi — bu loyihada `NEXT_PUBLIC_SITE_URL`
+(saytni ikkiga bo'lgan) va o'sha demo paroli aynan shunday qaytgan.
+Env ATAYLAB qo'yib qurildi — sahifada `value=""` chiqdi.
+
+ESLATMA: Chrome o'z parol menejeri bilan formani to'ldirishi mumkin —
+bu KOD emas. Inkognito oynada tekshiriladi.
+
+### Demo hisobi tozalandi
+`webleaders.uz@gmail.com` ish maydonida **haqiqiy mijoz ma'lumoti**
+turgan edi: `das` korxonasi ichida 35 ta haqiqiy o'zbek kompaniyasi,
+STIRlari va 3,88 mlrd so'mlik aylanma. Paroli esa sahifa manbasida
+ochiq edi. O'chirildi, o'rniga `NAVBAHOR SAVDO` demo ma'lumoti
+yuklandi (ikkala sverka, mahsulotning o'z oqimi orqali).
+**Zaxira:** `.backup/demo-workspace-2026-09-27.json` (gitignore'da,
+hech qachon kommit qilinmaydi).
+
+### Kirim sverkasi ro'yxatda 0,00 ko'rsatardi
+`/api/reports/summary` `totals.facturaSent`, `totals.bankCredit` va
+`diffCount` ni o'qiydi, `IncomingReconciliation` esa ularni umuman
+yozmasdi. Tuzatildi (`3845741`), hisob-kitob o'zgarmadi.
+
+### Telegram bot — BOSHQA LOYIHADA
+`@webleaderscontactbot` kodi `webleaders/company-site` da
+(`src/app/api/telegram/route.ts`). Admin bo'lmagan chatdan kelgan
+xabar JIMGINA tashlanardi — ofertadagi aloqa kanali ishlamasdi.
+Tuzatildi, jonli sinovdan o'tdi. Batafsil xotirada.
+
+### ETALON FAYLLAR YO'QOLGAN
+`C:\Users\hp\Downloads\Telegram Desktop` papkasi o'chgan.
+`verify-parsers` **248 -> 168** ga tushdi: hech narsa yiqilmadi,
+lekin **80 ta tekshiruv o'tkazib yuborilmoqda** — aynan haqiqiy bank
+fayllariga qarshi ishlaydiganlari. Fayllarni qayta yuklab, Downloads
+DAN TASHQARIGA qo'yish kerak:
+
+    node scripts/verify-parsers.cjs "C:/Users/hp/Desktop/moslik-etalon"
 
 ## 3. NAVBATDAGI ISH
 
