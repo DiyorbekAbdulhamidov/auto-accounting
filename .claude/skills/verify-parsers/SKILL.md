@@ -1,6 +1,6 @@
 ---
 name: verify-parsers
-description: Sverka parserlarini haqiqiy bank fayllariga qarshi tekshirish. Har qanday o'zgarish `src/lib/statementAudit.ts`, `bankStatements.ts`, `incomeParser.ts`, `universalParser.ts`, `excelWorkbook.ts`, `formatMemory.ts`, `counterpartyCategory.ts`, `aging.ts`, `counterpartyMerge.ts` yoki
+description: Sverka parserlarini haqiqiy bank fayllariga qarshi tekshirish. Har qanday o'zgarish `src/lib/statementAudit.ts`, `bankStatements.ts`, `incomeParser.ts`, `universalParser.ts`, `excelWorkbook.ts`, `formatMemory.ts`, `counterpartyCategory.ts`, `aging.ts`, `counterpartyMerge.ts`, `bankStatements.ts` yoki
 `reconciliationAct.ts` ga tegsa — SHU skill ishga tushirilsin. Yangi bank fayli kelganda ham shu.
 ---
 

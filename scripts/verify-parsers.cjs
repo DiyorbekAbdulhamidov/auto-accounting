@@ -74,6 +74,12 @@ const {
   numberToWordsRu,
   amountInWords,
 } = jiti(path.join(PROJ, 'src/lib/reconciliationAct.ts'));
+const {
+  parseTwoSidedTurnover,
+  parseThreeRowAccountReport,
+  parseColumnarStatement,
+  parseNewBankFormats,
+} = jiti(path.join(PROJ, 'src/lib/bankStatements.ts'));
 
 const DIR = process.argv[2] || 'C:/Users/hp/Downloads/Telegram Desktop';
 
@@ -1601,6 +1607,246 @@ function runActTest() {
     `тийин иккита рақам билан тўлдирилади: «${amountInWords(100)}»`);
 }
 
+/* ============================================================
+ * BANK KO'CHIRMA SHAKLLARI — har bir parser alohida
+ * ------------------------------------------------------------
+ * NEGA BU FAYL BOR: `bankStatements.ts` dagi uchala parser ham
+ * harnessda 0 marta uchrardi. Ular faqat `Downloads/Telegram
+ * Desktop` dagi HAQIQIY fayllar orqali ishga tushardi — o'sha
+ * papka o'chirilgach (2026-09-30 da o'lchangan) uch format
+ * BUTUNLAY qoplanmay qoldi.
+ *
+ * MUHIM CHEKLOV, ochiq aytiladi: bu sinovlar haqiqiy fayllarning
+ * O'RNINI BOSMAYDI. Sun'iy fayl parser kutgan shaklga qarab
+ * quriladi, ya'ni u faqat BIZ BILGAN narsani tekshiradi. Haqiqiy
+ * bank eksportidagi kutilmagan injiqlik (qo'shimcha varaq,
+ * siljigan ustun, bo'sh qator) bu yerda yo'q. Haqiqiy fayllar
+ * qaytarilishi SHART.
+ *
+ * Shunga qaramay bu sinovlar uchta narsani ushlaydi:
+ *   1) parser format imzosini tanimay qolsa;
+ *   2) ustun SURILGANDA indeksga tayanib qolsa — loyihaning
+ *      asosiy qoidasi: ustun SHAPKA NOMI bilan topiladi;
+ *   3) o'qilgan qatorlar yig'indisi «Итого» bilan to'qnashsa.
+ * ============================================================ */
+
+const OWN_INN = '300000001';
+const OWN_NAME = 'ООО "SINOV KORXONA"';
+const OWN_ACCOUNT = '20208000300000001001';
+
+const PARTNERS = [
+  { name: 'ООО "BIRINCHI TAMINOT"', inn: '300000002', acc: '20208000300000002001', mfo: '00450' },
+  { name: 'ООО "IKKINCHI SAVDO"', inn: '300000003', acc: '20208000300000003001', mfo: '00451' },
+  { name: 'ООО "UCHINCHI LOGISTIKA"', inn: '300000004', acc: '20208000300000004001', mfo: '00452' },
+];
+
+const sheetOf = (aoa) => XLSX.utils.sheet_to_json(
+  XLSX.utils.aoa_to_sheet(aoa), { header: 1, raw: true, defval: null }
+);
+
+/* ------------------------------------------------------------
+ * 1) TWO_SIDED — ASBT 3 «Справка о дебетовых оборотах»
+ *    Har qator ikki tomonli: to'lovchi va oluvchi, summa BITTA
+ *    ustunda. Ustunlar soni bankdan bankka farq qiladi.
+ * ---------------------------------------------------------- */
+function twoSidedRows(amounts, { shuffled = false } = {}) {
+  // Ikki xil ustun tartibi. Parser ikkalasini ham BIR XIL o'qishi
+  // shart — aks holda u indeksga tayangan bo'ladi.
+  const header = shuffled
+    ? ['Дата платежа', 'Сумма платежа', 'Наименование плательщика', 'ИНН', 'Расчетный счет',
+       'Наименование получателя', 'ИНН', 'Расчетный счет', 'Назначение платежа', '№док']
+    : ['№', '№док', 'Наименование плательщика', 'ИНН', 'Расчетный счет',
+       'Дата платежа', 'Назначение платежа', 'Сумма платежа',
+       'Наименование получателя', 'ИНН', 'Расчетный счет'];
+
+  const rows = [
+    ['Банковская система ASBT 3'],
+    [`Справка о дебетовых оборотах по счету ${OWN_ACCOUNT} за период c 01.07.2026 по 31.07.2026`],
+    [`${OWN_NAME}  ИНН : ${OWN_INN}`],
+    [],
+    header,
+  ];
+
+  amounts.forEach((amount, i) => {
+    const p = PARTNERS[i % PARTNERS.length];
+    const date = `${String((i % 28) + 1).padStart(2, '0')}.07.2026`;
+    rows.push(shuffled
+      ? [date, amount, OWN_NAME, OWN_INN, OWN_ACCOUNT, p.name, p.inn, p.acc, 'товар учун тўлов', String(900 + i)]
+      : [i + 1, String(900 + i), OWN_NAME, OWN_INN, OWN_ACCOUNT, date, 'товар учун тўлов', amount, p.name, p.inn, p.acc]);
+  });
+
+  const total = amounts.reduce((a, b) => a + b, 0);
+  rows.push(shuffled
+    ? ['Итого за период:', total]
+    : ['Итого за период:', '', '', '', '', '', '', total]);
+
+  return { rows: sheetOf(rows), total };
+}
+
+/* ------------------------------------------------------------
+ * 2) THREE_ROW — «Справка о работе счета»
+ *    Bitta o'tkazma UCH qatorga yoyilgan:
+ *      1: «МФО:.. Счет:.. ИНН:..» + debet/kredit
+ *      2: kontragent NOMI
+ *      3: to'lov maqsadi
+ * ---------------------------------------------------------- */
+function threeRowRows(entries) {
+  const rows = [
+    ['Справка о работе счета'],
+    [`Лицевой счет ${OWN_ACCOUNT}   ${OWN_NAME}   ИНН: ${OWN_INN}`],
+    ['Период: 01.07.2026 - 31.07.2026'],
+    [],
+    ['Дата', 'Документ', 'ВО', 'Корреспондент', 'Дебет', 'Кредит'],
+  ];
+
+  let debit = 0, credit = 0;
+  entries.forEach((e, i) => {
+    const p = PARTNERS[i % PARTNERS.length];
+    const date = `${String((i % 28) + 1).padStart(2, '0')}.07.2026`;
+    rows.push([date, String(700 + i), '21',
+      `МФО:${p.mfo} Счет:${p.acc} ИНН:${p.inn}`,
+      e.debit || '', e.credit || '']);
+    rows.push(['12:30', '', '', p.name, '', '']);
+    rows.push(['', '', '', 'товар учун тўлов', '', '']);
+    debit += e.debit || 0;
+    credit += e.credit || 0;
+  });
+
+  rows.push(['ИТОГО', '', '', '', debit, credit]);
+  return { rows: sheetOf(rows), debit, credit };
+}
+
+/* ------------------------------------------------------------
+ * 3) COLUMNAR — «СПРАВКА ПО РАБОТЕ СЧЕТА»
+ *    Har o'tkazma bitta qator, debet va kredit ALOHIDA ustunda.
+ * ---------------------------------------------------------- */
+function columnarRows(entries) {
+  const rows = [
+    ['СПРАВКА ПО РАБОТЕ СЧЕТА'],
+    [`Счет: ${OWN_ACCOUNT}  ${OWN_NAME}  ИНН : ${OWN_INN}`],
+    ['Период: 01.07.2026 - 31.07.2026'],
+    [],
+    ['Дата', 'Номер док.', 'Наименование', 'ИНН', 'Расчетный счет', 'Дебет', 'Кредит', 'Назначение платежа'],
+  ];
+
+  let debit = 0, credit = 0;
+  entries.forEach((e, i) => {
+    const p = PARTNERS[i % PARTNERS.length];
+    rows.push([
+      `${String((i % 28) + 1).padStart(2, '0')}.07.2026`, String(500 + i),
+      p.name, p.inn, p.acc, e.debit || '', e.credit || '', 'товар учун тўлов',
+    ]);
+    debit += e.debit || 0;
+    credit += e.credit || 0;
+  });
+
+  rows.push(['ИТОГО', '', '', '', '', debit, credit, '']);
+  return { rows: sheetOf(rows), debit, credit };
+}
+
+function runBankFormatTest() {
+  console.log(`\n============================================================`);
+  console.log("BANK KO'CHIRMA SHAKLLARI: TWO_SIDED · THREE_ROW · COLUMNAR");
+
+  /* ---------- TWO_SIDED ---------- */
+  const DEB = [12_000_000, 7_500_000, 30_250_000, 1_000_000.55];
+  const two = twoSidedRows(DEB);
+  const r2 = parseTwoSidedTurnover(two.rows);
+
+  ok(!!r2, 'TWO_SIDED: shakl TANILDI');
+  if (r2) {
+    ok(r2.format === 'TWO_SIDED', `TWO_SIDED: format = ${r2.format}`);
+    ok(r2.txs.length === DEB.length, `TWO_SIDED: ${DEB.length} ta o'tkazma o'qildi (${r2.txs.length})`);
+    ok(Math.abs(r2.totalDebit - two.total) < 0.005,
+      `TWO_SIDED: debet ${M(r2.totalDebit)} = kutilgan ${M(two.total)}`);
+    ok(r2.footerDebit !== undefined && Math.abs(r2.footerDebit - two.total) < 0.005,
+      `TWO_SIDED: «Итого» ${M(r2.footerDebit)} qatorlar yig'indisiga TENG`);
+    ok(r2.ownInn === OWN_INN, `TWO_SIDED: hisob egasining STIRi ${r2.ownInn}`);
+    ok(r2.txs.every((t) => t.inn !== OWN_INN && t.inn !== ''),
+      "TWO_SIDED: kontragent STIRi o'qildi va hisob egasiniki EMAS");
+    ok(r2.txs.some((t) => t.name.includes('BIRINCHI')),
+      `TWO_SIDED: kontragent nomi o'qildi («${r2.txs[0].name}»)`);
+  }
+
+  /* ---------- USTUN SURILISHI — loyihaning asosiy qoidasi ----------
+     «Ustunni INDEKS emas, SHAPKA NOMI bilan top». Agar parser
+     indeksga tayanib qolsa, bu yerda yiqiladi. */
+  const shuffled = twoSidedRows(DEB, { shuffled: true });
+  const rs = parseTwoSidedTurnover(shuffled.rows);
+  ok(!!rs, 'USTUN SURILDI: shakl baribir TANILDI');
+  if (rs && r2) {
+    ok(Math.abs(rs.totalDebit - r2.totalDebit) < 0.005,
+      `USTUN SURILDI: debet O'ZGARMADI (${M(rs.totalDebit)})`);
+    ok(rs.txs.length === r2.txs.length,
+      `USTUN SURILDI: o'tkazma soni o'zgarmadi (${rs.txs.length})`);
+    const a = r2.txs.map((t) => t.inn).sort().join(',');
+    const b = rs.txs.map((t) => t.inn).sort().join(',');
+    ok(a === b, 'USTUN SURILDI: AYNI kontragentlar topildi');
+  }
+
+  /* ---------- THREE_ROW ---------- */
+  const ENTRIES = [
+    { debit: 5_000_000 }, { credit: 2_500_000 }, { debit: 18_400_000 },
+    { credit: 9_999_999.99 }, { debit: 750_000 },
+  ];
+  const three = threeRowRows(ENTRIES);
+  const r3 = parseThreeRowAccountReport(three.rows);
+
+  ok(!!r3, 'THREE_ROW: shakl TANILDI');
+  if (r3) {
+    ok(r3.format === 'THREE_ROW', `THREE_ROW: format = ${r3.format}`);
+    ok(r3.txs.length === ENTRIES.length,
+      `THREE_ROW: ${ENTRIES.length} ta o'tkazma (${r3.txs.length}) — uch qator BITTA o'tkazmaga yig'ildi`);
+    ok(Math.abs(r3.totalDebit - three.debit) < 0.005,
+      `THREE_ROW: debet ${M(r3.totalDebit)} = ${M(three.debit)}`);
+    ok(Math.abs(r3.totalCredit - three.credit) < 0.005,
+      `THREE_ROW: kredit ${M(r3.totalCredit)} = ${M(three.credit)}`);
+    ok(r3.ownInn === OWN_INN, `THREE_ROW: hisob egasi STIRi ${r3.ownInn}`);
+    ok(r3.txs.every((t) => t.inn && t.inn !== OWN_INN),
+      "THREE_ROW: kontragent STIRi «МФО:.. ИНН:..» katagidan ajratildi");
+    ok(r3.txs.every((t) => t.name && !/МФО/.test(t.name)),
+      `THREE_ROW: nom KEYINGI qatordan olindi («${r3.txs[0].name}»)`);
+  }
+
+  /* ---------- COLUMNAR ---------- */
+  const COL = [
+    { debit: 3_000_000 }, { credit: 11_250_000 }, { debit: 640_000.25 }, { credit: 1_000_000 },
+  ];
+  const col = columnarRows(COL);
+  const rc = parseColumnarStatement(col.rows);
+
+  ok(!!rc, 'COLUMNAR: shakl TANILDI');
+  if (rc) {
+    ok(rc.format === 'COLUMNAR', `COLUMNAR: format = ${rc.format}`);
+    ok(rc.txs.length === COL.length, `COLUMNAR: ${COL.length} ta o'tkazma (${rc.txs.length})`);
+    ok(Math.abs(rc.totalDebit - col.debit) < 0.005,
+      `COLUMNAR: debet ${M(rc.totalDebit)} = ${M(col.debit)}`);
+    ok(Math.abs(rc.totalCredit - col.credit) < 0.005,
+      `COLUMNAR: kredit ${M(rc.totalCredit)} = ${M(col.credit)}`);
+    ok(rc.footerDebit !== undefined && Math.abs(rc.footerDebit - col.debit) < 0.005,
+      `COLUMNAR: «ИТОГО» debet qatorlar yig'indisiga TENG`);
+  }
+
+  /* ---------- SHAKLLAR BIR-BIRINI O'G'IRLAMASIN ----------
+     Har parser O'Z imzosiga qarab ishlashi va begona shaklda
+     `null` qaytarishi shart. Aks holda bitta fayl ikki xil
+     o'qilib, raqam jimgina o'zgarardi. */
+  ok(parseThreeRowAccountReport(two.rows) === null,
+    "THREE_ROW parseri TWO_SIDED faylni O'QIMADI (null)");
+  ok(parseThreeRowAccountReport(col.rows) === null,
+    "THREE_ROW parseri COLUMNAR faylni O'QIMADI (null)");
+  ok(parseColumnarStatement(three.rows) === null,
+    "COLUMNAR parseri THREE_ROW faylni O'QIMADI (null)");
+
+  /* ---------- DISPETCHER ---------- */
+  const d2 = parseNewBankFormats(two.rows);
+  const d3 = parseNewBankFormats(three.rows);
+  ok(d2 && d2.format === 'TWO_SIDED', `dispetcher TWO_SIDED ni topdi (${d2 && d2.format})`);
+  ok(d3 && d3.format === 'THREE_ROW', `dispetcher THREE_ROW ni topdi (${d3 && d3.format})`);
+  ok(parseNewBankFormats([[1, 2, 3], ['a', 'b', 'c']]) === null,
+    "dispetcher begona jadvalni rad etdi (null)");
+}
+
 for (const name of Object.keys(ETALON)) run(name, [name]);
 run('IMANMAX 7 oylik (oborotka + faktura)', [
   'IMANMAX 7 oylik OBOROTKA.xlsx',
@@ -1616,6 +1862,7 @@ runFailureLogTest();
 runPhoneTest();
 runIncomePeriodTest();
 runActTest();
+runBankFormatTest();
 
 // Eksportni qayta o'qish sinovi ExcelJS tufayli asinxron — shuning
 // uchun yakuniy hisob shu yerda chiqariladi.
