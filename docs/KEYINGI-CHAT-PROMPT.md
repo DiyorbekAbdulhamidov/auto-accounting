@@ -7,7 +7,7 @@ Men o'zbekcha (lotin) yozaman. UI matnlari va `t()` kalitlari — kirill o'zbekc
 ## 0. BOSHLASH
 
 ```
-node scripts/verify-parsers.cjs   →  168/168 (etalon fayllar yo’qolgan — 2-C ga qara)
+node scripts/verify-parsers.cjs   →  280/280
 node scripts/check-contrast.cjs   →  70/70 (35 yorug' + 35 tungi)
 npx tsc --noEmit                  →  toza
 npx eslint src --max-warnings=0   →  toza
@@ -205,6 +205,62 @@ fayllariga qarshi ishlaydiganlari. Fayllarni qayta yuklab, Downloads
 DAN TASHQARIGA qo'yish kerak:
 
     node scripts/verify-parsers.cjs "C:/Users/hp/Desktop/moslik-etalon"
+
+## 2-D. 2026-10-02/03 — HARNESS 280 GA CHIQDI
+
+### Etalon juftligi TIKLANDI
+`IMANMAX 7 oylik OBOROTKA/FAKTURA.xlsx` yo'qolgan edi. Papkadagi 51 ta
+Excel fayl parser bilan skanerlandi — ular yo'q. Lekin harnessning
+O'Z `KNOWN_GAP` ro'yxati yo'lni ko'rsatdi:
+
+    '01-06 yanvar-iyun': 3 651 343,89
+    '07 iyul'          :   513 361,23
+
+Papkada qolgan fayllar AYNAN shu kamchiliklarni beradi:
+`IMANMAX   Июн.xls / D` va `IMANMAX   Июл.xls / Д`. Tiyinigacha mos —
+ya'ni eski fayl shu ikki varaqdan yig'ilgan bo'lgan.
+
+**`scripts/rebuild-etalon.cjs`** ularni qayta yig'adi. Fayllar yana
+yo'qolsa shu skript ishga tushiriladi. Hech narsa o'ylab topilmaydi:
+varaqlar o'z holicha ko'chiriladi, faqat nomi `KNOWN_GAP` dagi nomga
+qaytariladi.
+
+ISBOT: harnessdagi QATTIQ YOZILGAN kutilmalar (davr 2026-01 … 2026-07
+va ikkala KNOWN_GAP) o'zgartirilmasdan mos keldi.
+
+### Bank shakllari qoplandi
+`bankStatements.ts` dagi uchala parser ham harnessda 0 marta uchrardi —
+ular faqat haqiqiy fayllar orqali ishlardi. Endi `runBankFormatTest()`:
+TWO_SIDED, THREE_ROW, COLUMNAR; har biri o'z imzosi bilan tanilishi va
+begona shaklda `null` qaytarishi; «Итого» = qatorlar yig'indisi; va eng
+muhimi — **USTUN SURILGANDA natija o'zgarmasligi** (loyihaning asosiy
+qoidasi: ustun indeks emas, SHAPKA NOMI bilan topiladi).
+
+Mutatsiya bilan isbotlandi: summa ustuni qattiq indeks bilan
+topiladigan qilinsa 7 ta tekshiruv yiqiladi.
+
+CHEKLOV: bu sun'iy fayllar haqiqiy bank eksportlarining O'RNINI
+BOSMAYDI — ular faqat biz bilgan narsani tekshiradi.
+
+### Kirish modali kengligi
+`ui/Modal` ning `width` xossasi TAILWIND SINFI kutadi (`max-w-md`),
+CSS o'lchovi EMAS. `"26rem"` berilgan edi — sinf topilmay, oyna butun
+ekranga cho'zilgandi. Endi `max-w-sm`. 1440 px da o'lchandi: 376 px.
+
+### HAQIQIY HIT-RATE o'lchandi
+Papkadagi 53 ta haqiqiy fayl mahsulotning o'z parseridan o'tkazildi:
+
+    O'QILDI   : 40  (75%)
+    TANILMADI : 13  (25%)
+    YIQILDI   :  0  ( 0%)   <- birorta fayl dasturni yiqitmadi
+
+Tanilmaganlarning 7 tasi — dasturning O'Z `Akt_sverki_*.xlsx`
+eksporti, ya'ni o'qilmasligi TO'G'RI. Haqiqiy tanimaslik 6 ta:
+`AURUM.xlsx`, `SHOX MAGNUS.xlsx`, `report.xlsx`, `reportT{,2,3}.xlsx`.
+Ular yangi bank yoki yangi eksport shakli — tekshirilmagan.
+
+**«Istalgan formatni o'qiydi» deb REKLAMA QILINMAYDI.** To'g'ri gap:
+asosiy banklar o'qiladi, yangi shakl kelsa qo'shiladi.
 
 ## 3. NAVBATDAGI ISH
 
